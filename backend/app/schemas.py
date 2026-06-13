@@ -21,6 +21,15 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    sizes: Optional[str] = None
+    brand_prefs: Optional[str] = None
+    budget_min: Optional[int] = None
+    budget_max: Optional[int] = None
+    interests: Optional[str] = None
+
+
 # ── Products ───────────────────────────────────────────────────────────
 
 class ProductOut(BaseModel):

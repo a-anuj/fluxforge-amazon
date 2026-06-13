@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, GreenCreditTx
-from app.schemas import UserOut, GreenCreditsResponse, GreenCreditTxOut
+from app.schemas import UserOut, UserUpdate, GreenCreditsResponse, GreenCreditTxOut
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -18,6 +18,21 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.put("/{user_id}", response_model=UserOut)
+def update_user(user_id: int, update_data: UserUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    update_dict = update_data.model_dump(exclude_unset=True)
+    for key, value in update_dict.items():
+        setattr(user, key, value)
+
+    db.commit()
+    db.refresh(user)
     return user
 
 
