@@ -1,0 +1,211 @@
+@font-face {
+  font-family: "Amazon Ember";
+  src: url("https://cdn.jsdelivr.net/npm/amazon-fonts@1.0.1/fonts/AmazonEmber_W_Rg.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Amazon Ember";
+  src: url("https://cdn.jsdelivr.net/npm/amazon-fonts@1.0.1/fonts/AmazonEmber_W_Bd.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Amazon Ember";
+  src: url("https://cdn.jsdelivr.net/npm/amazon-fonts@1.0.1/fonts/AmazonEmber_W_Lt.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+
+@import "tailwindcss";
+
+/* ── Amazon Theme ──────────────────────────────────────────────────── */
+@theme {
+  /* Amazon core palette */
+  --color-amazon-navy: #131921;
+  --color-amazon-navy-light: #232f3e;
+  --color-amazon-navy-mid: #37475a;
+  --color-amazon-orange: #ff9900;
+  --color-amazon-orange-hover: #e88b00;
+  --color-amazon-yellow: #ffd814;
+  --color-amazon-yellow-hover: #f7ca00;
+  --color-amazon-bg: #eaeded;
+  --color-amazon-bg-alt: #f5f5f5;
+  --color-amazon-link: #007185;
+  --color-amazon-link-hover: #c7511f;
+  --color-amazon-star: #de7921;
+  --color-amazon-price: #0f1111;
+  --color-amazon-green: #067d62;
+  --color-amazon-success: #007600;
+  --color-amazon-red: #b12704;
+  --color-amazon-border: #ddd;
+  --color-amazon-border-dark: #bbb;
+  --color-amazon-text: #0f1111;
+  --color-amazon-text-secondary: #565959;
+  --color-amazon-white: #ffffff;
+
+  --font-sans: "Amazon Ember", Arial, sans-serif;
+  --font-amazon: "Amazon Ember", Arial, sans-serif;
+}
+
+/* ── Global Styles ─────────────────────────────────────────────────── */
+@layer base {
+  body {
+    @apply bg-amazon-bg text-amazon-text antialiased;
+    font-family: "Amazon Ember", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  a {
+    color: var(--color-amazon-link);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-amazon-link-hover);
+    text-decoration: underline;
+  }
+}
+
+/* ── Amazon Button Styles ──────────────────────────────────────────── */
+.btn-amazon {
+  background: linear-gradient(to bottom, #f7dea0, #f0c14b);
+  border: 1px solid #a88734;
+  border-radius: 3px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #111;
+  cursor: pointer;
+  text-align: center;
+  font-weight: 400;
+}
+.btn-amazon:hover {
+  background: linear-gradient(to bottom, #f5d78e, #eeb933);
+  text-decoration: none;
+}
+
+.btn-amazon-primary {
+  background: #ffd814;
+  border: 1px solid #fcd200;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: #0f1111;
+  cursor: pointer;
+  font-weight: 400;
+}
+.btn-amazon-primary:hover {
+  background: #f7ca00;
+  text-decoration: none;
+}
+
+.btn-amazon-orange {
+  background: #ffa41c;
+  border: 1px solid #ff8f00;
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: #0f1111;
+  cursor: pointer;
+  font-weight: 700;
+}
+.btn-amazon-orange:hover {
+  background: #fa8900;
+  text-decoration: none;
+}
+
+/* ── Amazon Card ───────────────────────────────────────────────────── */
+.amazon-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  transition: box-shadow 0.15s ease;
+}
+.amazon-card:hover {
+  box-shadow: 0 2px 5px rgba(15,17,17,0.15);
+  text-decoration: none;
+}
+
+/* ── Product Card Hover ────────────────────────────────────────────── */
+.product-card {
+  background: #fff;
+  border-radius: 0;
+  border: none;
+  padding: 12px;
+  transition: box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.product-card:hover {
+  box-shadow: 0 2px 8px rgba(15,17,17,0.2);
+}
+
+/* ── Amazon Badge ──────────────────────────────────────────────────── */
+.badge-choice {
+  background: #002f36;
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-choice::before {
+  content: "✓";
+  color: #f69931;
+}
+
+/* ── Amazon Price ──────────────────────────────────────────────────── */
+.amazon-price {
+  color: #0f1111;
+  font-size: 21px;
+  font-weight: 400;
+}
+.amazon-price .symbol {
+  font-size: 13px;
+  vertical-align: top;
+  position: relative;
+  top: 2px;
+}
+.amazon-price .fraction {
+  font-size: 13px;
+  vertical-align: top;
+  position: relative;
+  top: 2px;
+}
+
+/* ── Sustainability accent (subtle green on Amazon dark) ───────────── */
+.eco-badge {
+  background: #067d62;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Animations ────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* ── Rating Stars ──────────────────────────────────────────────────── */
+.star-rating {
+  color: #de7921;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
