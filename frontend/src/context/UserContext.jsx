@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { getUsers, getUser } from "../api/client";
+import { getUsers, getUser, updateUser } from "../api/client";
 
 const UserContext = createContext(null);
 
@@ -32,9 +32,17 @@ export function UserProvider({ children }) {
     }
   };
 
+  const updateUserProfile = async (userId, data) => {
+    const updated = await updateUser(userId, data);
+    setCurrentUser(updated);
+    setUsers((prevUsers) =>
+      prevUsers.map((u) => (u.id === userId ? updated : u))
+    );
+  };
+
   return (
     <UserContext.Provider
-      value={{ users, currentUser, switchUser, refreshUser, loading }}
+      value={{ users, currentUser, switchUser, refreshUser, updateUserProfile, loading }}
     >
       {children}
     </UserContext.Provider>

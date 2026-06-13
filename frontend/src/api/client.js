@@ -24,6 +24,11 @@ async function request(path, options = {}) {
 // ── Users ─────────────────────────────────────────────────────
 export const getUsers = () => request("/users/");
 export const getUser = (id) => request(`/users/${id}`);
+export const updateUser = (id, data) =>
+  request(`/users/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
 export const getGreenCredits = (id) => request(`/users/${id}/green-credits`);
 
 // ── Products ──────────────────────────────────────────────────
