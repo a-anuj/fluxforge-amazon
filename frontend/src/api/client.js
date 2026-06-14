@@ -62,10 +62,15 @@ export const getDeliveryOptions = (category = "electronics") =>
   request(`/orders/delivery-options?category=${category}`);
 
 // ── Returns ───────────────────────────────────────────────────
-export const createReturn = (orderId, imageUrls = []) =>
+export const createReturn = (orderId, imageUrls = [], conditionScore = null, recommendedAction = null) =>
   request("/returns/", {
     method: "POST",
-    body: JSON.stringify({ order_id: orderId, image_urls: imageUrls }),
+    body: JSON.stringify({
+      order_id: orderId,
+      image_urls: imageUrls,
+      condition_score: conditionScore,
+      recommended_action: recommendedAction
+    }),
   });
 
 // ── Listings ──────────────────────────────────────────────────

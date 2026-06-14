@@ -135,6 +135,10 @@ class DeliveryOptionOut(BaseModel):
 class ReturnCreate(BaseModel):
     order_id: int
     image_urls: list[str] = []
+    condition_score: Optional[float] = None
+    defects: Optional[str] = None
+    remaining_life_pct: Optional[int] = None
+    recommended_action: Optional[str] = None
 
 
 class AssessmentResult(BaseModel):
