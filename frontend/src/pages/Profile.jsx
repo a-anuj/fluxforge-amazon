@@ -147,7 +147,7 @@ export default function Profile() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-amazon-border sticky top-[99px] z-40">
+      <div className="bg-white border-b border-amazon-border">
         <div className="max-w-[1100px] mx-auto px-4 flex gap-0">
           {["dashboard", "wallet", "redeem", "profile"].map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
