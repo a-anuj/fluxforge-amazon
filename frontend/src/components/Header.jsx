@@ -1,141 +1,174 @@
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { getUsers } from "../api/client";
 import { useUser } from "../context/UserContext";
 
-export default function Header() {
-  const { users, currentUser, switchUser } = useUser();
-  const location = useLocation();
+const LEVEL_EMOJIS = {
+  "Seed 🌱": "🌱",
+  "Sapling 🌿": "🌿",
+  "Green Hero 🌎": "🌎",
+  "Planet Protector 🌍": "🌍",
+  "Circular Champion ♻️": "♻️",
+};
 
-  const navLinks = [
-    { to: "/", label: "Catalog" },
-    { to: "/orders", label: "Returns & Orders" },
-    { to: "/returns/new", label: "Start Return" },
-  ];
+export default function Header() {
+  const navigate = useNavigate();
+  const { currentUser, switchUser } = useUser();
+  const [users, setUsers] = useState([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    getUsers().then(setUsers).catch(console.error);
+  }, []);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (search.trim()) {
+      // In a real app, this would route to a search page
+      navigate("/");
+    }
+  };
+
+  const levelEmoji = currentUser ? (LEVEL_EMOJIS[currentUser.level] || "🌱") : "🌱";
 
   return (
-    <header className="sticky top-0 z-50">
-      {/* Main Header Bar — Amazon navy */}
-      <div className="bg-amazon-navy">
-        <div className="max-w-[1500px] mx-auto px-4 flex items-center h-[60px] gap-4">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-1 px-2 py-1.5 border border-transparent hover:border-white rounded-sm flex-shrink-0">
-            <img
-              src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg"
-              alt="Amazon"
-              className="h-[26px] brightness-0 invert"
-            />
-            <span className="text-[10px] text-amazon-orange font-bold tracking-wide">.ci</span>
-          </Link>
+    <header className="bg-amazon-navy text-white">
+      {/* Top Nav */}
+      <div className="flex items-center justify-between px-4 py-2 gap-4">
+        {/* Logo */}
+        <Link to="/" className="flex items-center pt-2 pb-1 px-2 border border-transparent hover:border-white rounded-sm">
+          <span className="text-[24px] font-bold tracking-tight">amazon</span>
+          <span className="text-amazon-orange text-[14px] font-bold ml-1 relative -top-2">.in</span>
+        </Link>
 
-          {/* Deliver to */}
-          {currentUser && (
-            <div className="hidden lg:flex items-center gap-1 px-2 py-1.5 border border-transparent hover:border-white rounded-sm cursor-pointer text-white">
-              <span className="text-lg">📍</span>
-              <div className="leading-tight">
-                <span className="text-[#ccc] text-[11px] block">Deliver to {currentUser.name.split(" ")[0]}</span>
-                <span className="text-white text-[13px] font-bold">India</span>
+        {/* Location (Desktop) */}
+        <div className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
+          <span className="text-[12px] text-[#ccc] leading-tight ml-4">Delivering to Mumbai 400001</span>
+          <span className="text-[14px] font-bold flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Update location
+          </span>
+        </div>
+
+        {/* Search */}
+        <form onSubmit={handleSearch} className="flex-1 hidden sm:flex rounded-md overflow-hidden bg-white">
+          <select className="bg-[#f3f3f3] text-[#0f1111] text-[12px] px-3 border-r border-[#cdcdcd] outline-none hover:bg-[#d4d4d4] cursor-pointer">
+            <option>All</option>
+            <option>Electronics</option>
+            <option>Sports & Outdoors</option>
+          </select>
+          <input 
+            type="text" 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search Amazon.in"
+            className="flex-1 px-3 py-2 text-amazon-text text-[15px] outline-none"
+          />
+          <button type="submit" className="bg-[#febd69] hover:bg-[#f3a847] px-4 flex items-center justify-center transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amazon-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
+        </form>
+
+        {/* Right Nav Items */}
+        <div className="flex items-center gap-1">
+          {/* User Switcher (Hackathon feature) */}
+          <div className="group relative px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
+            <div className="flex flex-col">
+              <span className="text-[12px] text-white">Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}</span>
+              <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
+            </div>
+            
+            {/* Dropdown menu */}
+            <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[240px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
+              <div className="p-3 border-b border-amazon-border bg-[#f0f2f2]">
+                <p className="font-bold text-[14px]">Demo Profiles</p>
+                <p className="text-[11px] text-amazon-text-secondary">Switch user to test different states</p>
+              </div>
+              <div className="py-2">
+                {users.map(u => (
+                  <button 
+                    key={u.id} 
+                    onClick={() => switchUser(u.id)}
+                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
+                  >
+                    <span>{u.name}</span>
+                    {currentUser?.id === u.id && <span>✓</span>}
+                  </button>
+                ))}
               </div>
             </div>
-          )}
-
-          {/* Search Bar */}
-          <div className="flex-1 flex h-[40px] rounded-md overflow-hidden">
-            <select className="bg-[#e6e6e6] border-none text-[#555] text-[12px] px-2 rounded-l-md focus:outline-none cursor-pointer">
-              <option>All</option>
-              <option>Running</option>
-              <option>Electronics</option>
-              <option>Backpacking</option>
-              <option>Yoga</option>
-              <option>Fitness</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Search Amazon Circular Intelligence"
-              className="flex-1 px-3 text-[14px] text-amazon-text border-none focus:outline-none"
-            />
-            <button className="bg-amazon-orange hover:bg-amazon-orange-hover px-4 flex items-center justify-center rounded-r-md">
-              <svg className="w-5 h-5 text-amazon-navy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </button>
           </div>
 
-          {/* Account & User Switcher */}
-          <div className="hidden md:flex items-center">
-            <div className="relative px-2 py-1.5 border border-transparent hover:border-white rounded-sm cursor-pointer">
-              <span className="text-[#ccc] text-[11px] block leading-tight">Hello, switch user</span>
-              <select
-                value={currentUser?.id || ""}
-                onChange={(e) => switchUser(Number(e.target.value))}
-                className="bg-transparent text-white text-[13px] font-bold appearance-none cursor-pointer focus:outline-none pr-3 w-full"
-              >
-                {users.map((u) => (
-                  <option key={u.id} value={u.id} className="text-black">
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-              <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[#ccc] text-[10px] pointer-events-none">▾</span>
-            </div>
-          </div>
+          <Link to="/orders" className="hidden lg:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
+            <span className="text-[12px] text-white leading-tight">Returns</span>
+            <span className="text-[14px] font-bold">& Orders</span>
+          </Link>
 
-          {/* Green Credits */}
+          {/* Green Credits Wallet Icon */}
           {currentUser && (
-            <Link
-              to="/profile"
-              className="flex items-center gap-1.5 px-2 py-1.5 border border-transparent hover:border-white rounded-sm text-white"
-            >
-              <div className="leading-tight">
-                <span className="text-[#ccc] text-[11px] block">Green Credits</span>
-                <span className="text-amazon-orange text-[13px] font-bold flex items-center gap-1">
-                  🌱 {currentUser.green_credits}
-                </span>
+            <Link to="/profile" className="flex items-center gap-2 px-2 py-1 border border-transparent hover:border-white rounded-sm transition-colors">
+              <div className="flex flex-col items-center">
+                <span className="text-[18px] leading-none mb-[1px]">{levelEmoji}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[12px] text-white font-bold leading-tight">Green Credits</span>
+                <span className="text-[14px] font-bold text-amazon-orange leading-none">{currentUser.green_credits}</span>
               </div>
             </Link>
           )}
 
-          {/* Second Life */}
-          <Link
-            to="/feed"
-            className="flex items-center gap-1 px-2 py-1.5 border border-transparent hover:border-white rounded-sm text-white"
-          >
-            <span className="text-xl relative">♻️</span>
-            <span className="text-[13px] font-bold hidden lg:inline">Second Life</span>
-          </Link>
-
-          {/* Account icon — far right */}
-          <Link
-            to="/profile"
-            className="ml-auto flex items-center gap-1 px-2 py-1.5 border border-transparent hover:border-white rounded-sm text-white"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-            </svg>
-            <span className="text-[13px] font-bold hidden lg:inline">Account</span>
+          <Link to="/orders" className="flex items-center px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer relative">
+            <span className="text-[32px] leading-none mt-1">🛒</span>
+            <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">0</span>
+            <span className="hidden sm:block text-[14px] font-bold mt-3">Cart</span>
           </Link>
         </div>
       </div>
 
-      {/* Sub-nav bar — Amazon dark blue */}
-      <div className="bg-amazon-navy-light">
-        <div className="max-w-[1500px] mx-auto px-4 flex items-center h-[39px] gap-0 overflow-x-auto">
-          {navLinks.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`px-[9px] py-[6px] text-[13px] border border-transparent rounded-sm whitespace-nowrap transition-colors ${
-                location.pathname === link.to
-                  ? "text-white font-bold border-white"
-                  : "text-[#ddd] hover:text-white hover:border-white"
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-          <span className="px-[9px] py-[6px] text-[13px] text-[#ddd]">|</span>
-          <span className="px-[9px] py-[6px] text-[13px] text-white font-bold whitespace-nowrap">
-            ♻️ Circular Intelligence — Sustainability Platform
-          </span>
-        </div>
+      {/* Mobile Search */}
+      <div className="sm:hidden px-4 pb-3">
+        <form onSubmit={handleSearch} className="flex rounded-md overflow-hidden bg-white h-10">
+          <input 
+            type="text" 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search Amazon.in"
+            className="flex-1 px-3 py-2 text-amazon-text text-[15px] outline-none"
+          />
+          <button type="submit" className="bg-[#febd69] px-4 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amazon-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </button>
+        </form>
+      </div>
+
+      {/* Sub Nav */}
+      <div className="bg-amazon-navy-light px-4 py-1.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap text-[14px]">
+        <button className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          All
+        </button>
+        <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white flex items-center gap-1">
+          <span className="text-[#00FF00]">🌱</span> Second Life
+        </Link>
+        <Link to="/profile" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
+          Dashboard
+        </Link>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Fresh</a>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Amazon miniTV</a>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Sell</a>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Best Sellers</a>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Mobiles</a>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Today's Deals</a>
+        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white hidden sm:block">Customer Service</a>
       </div>
     </header>
   );

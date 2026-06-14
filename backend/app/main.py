@@ -1,20 +1,20 @@
 """
-Amazon Circular Intelligence — FastAPI entry point.
+Amazon Green Credits Ecosystem — FastAPI entry point.
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routers import users, products, orders, returns, listings
+from app.routers import users, products, orders, returns, listings, redemptions
 
 # Create tables on startup (idempotent)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Amazon Circular Intelligence",
-    description="Sustainability-focused e-commerce API — return prediction, AI grading, shopping twins, and trust reports.",
-    version="0.1.0",
+    title="Amazon Green Credits Ecosystem",
+    description="Sustainability reward ecosystem — AI-powered assessment, green credits, impact tracking, and circular commerce.",
+    version="0.2.0",
 )
 
 # CORS — allow the Vite dev server
@@ -32,8 +32,9 @@ app.include_router(products.router, prefix="/api")
 app.include_router(orders.router, prefix="/api")
 app.include_router(returns.router, prefix="/api")
 app.include_router(listings.router, prefix="/api")
+app.include_router(redemptions.router, prefix="/api")
 
 
 @app.get("/")
 def root():
-    return {"message": "Amazon Circular Intelligence API — visit /docs for Swagger UI"}
+    return {"message": "Amazon Green Credits Ecosystem API — visit /docs for Swagger UI"}

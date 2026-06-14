@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Product, Order, Return
-from app.schemas import ProductOut, ProductConfidenceOut
+from app.models import Product, Order, Return, Listing
+from app.schemas import ProductOut, ProductConfidenceOut, ProductImpactOut, SustainabilityAdvisorOut
+from app.services.impact_calculator import get_product_impact
+from app.services.sustainability_advisor import get_purchase_advice
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -56,6 +58,93 @@ def get_product_confidence(product_id: int, db: Session = Depends(get_db)):
         return_frequency_score=return_frequency_score,
         return_label=return_label,
     )
+
+
+@router.get("/{product_id}/impact", response_model=ProductImpactOut)
+def get_product_impact_endpoint(product_id: int, db: Session = Depends(get_db)):
+    """Product Impact Calculator — environmental metrics for a product."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    impact = get_product_impact(product)
+
+    return ProductImpactOut(
+        product_id=product.id,
+        product_name=product.name,
+        co2_footprint=impact["co2_footprint"],
+        ewaste_potential=impact["ewaste_potential"],
+        water_footprint=impact["water_footprint"],
+        repair_cost_estimate=impact["repair_cost_estimate"],
+        avg_lifespan_months=impact["avg_lifespan_months"],
+        circular_savings=impact["circular_savings"],
+    )
+
+
+@router.get("/{product_id}/refurbished-alternative")
+def get_refurbished_alternative(product_id: int, db: Session = Depends(get_db)):
+    """
+    Check if a refurbished/second-life listing exists for this product.
+    Returns the listing details for the 'Buy Circular' banner.
+    """
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Look for available listings of the same product
+    listing = (
+        db.query(Listing)
+        .filter(
+            Listing.product_id == product_id,
+            Listing.status.in_(["available", "matched"]),
+        )
+        .first()
+    )
+
+    if not listing:
+        # Also check for listings of similar products (same category + brand)
+        similar = (
+            db.query(Listing)
+            .join(Product, Listing.product_id == Product.id)
+            .filter(
+                Product.category == product.category,
+                Product.id != product_id,
+                Listing.status.in_(["available", "matched"]),
+            )
+            .first()
+        )
+        if not similar:
+            return {"available": False}
+        listing = similar
+
+    # Get the listing's product for accurate savings
+    listing_product = db.query(Product).filter(Product.id == listing.product_id).first()
+    impact = get_product_impact(product)
+
+    savings = round(product.price - listing.price)
+    return {
+        "available": True,
+        "listing_id": listing.id,
+        "listing_price": listing.price,
+        "original_price": product.price,
+        "savings": savings,
+        "discount_pct": round((1 - listing.price / product.price) * 100),
+        "product_name": listing_product.name if listing_product else product.name,
+        "co2_saved": impact["circular_savings"]["co2_saved_kg"],
+        "ewaste_prevented": impact["circular_savings"]["ewaste_prevented_kg"],
+        "green_credits_potential": 50,  # base refurbished credits
+    }
+
+
+@router.get("/{product_id}/sustainability-advice", response_model=SustainabilityAdvisorOut)
+def get_sustainability_advice(product_id: int, db: Session = Depends(get_db)):
+    """AI Sustainability Advisor — pre-purchase tips."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    advice = get_purchase_advice(product)
+    return SustainabilityAdvisorOut(**advice)
 
 
 @router.get("/{product_id}", response_model=ProductOut)
