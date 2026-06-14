@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getProducts, getImpactStats } from "../api/client";
 import { useUser } from "../context/UserContext";
 
@@ -9,6 +9,8 @@ export default function Home() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [impact, setImpact] = useState(null);
   const { currentUser } = useUser();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchQuery = searchParams.get("q") || "";
 
   useEffect(() => {
     getProducts().then(setProducts).catch(console.error).finally(() => setLoading(false));
@@ -19,7 +21,14 @@ export default function Home() {
   }, [currentUser]);
 
   const categories = ["all", ...new Set(products.map((p) => p.category))];
-  const filtered = products.filter((p) => categoryFilter === "all" || p.category === categoryFilter);
+  const filtered = products.filter((p) => {
+    const matchesCategory = categoryFilter === "all" || p.category === categoryFilter;
+    const matchesSearch = !searchQuery.trim() || 
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      p.brand.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      p.category.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   return (
     <div className="animate-fade-in">
@@ -73,6 +82,24 @@ export default function Home() {
       </div>
 
       <div className="max-w-[1500px] mx-auto px-4 pb-8">
+        {searchQuery && (
+          <div className="flex items-center justify-between bg-white border border-[#d5d9d9] rounded-lg p-3.5 mb-4 shadow-sm">
+            <div className="text-[14px] text-amazon-text">
+              Results for <span className="font-bold text-[#c45500]">"{searchQuery}"</span>
+            </div>
+            <button 
+              onClick={() => {
+                const newParams = new URLSearchParams(searchParams);
+                newParams.delete("q");
+                setSearchParams(newParams);
+              }}
+              className="text-[13px] text-amazon-link hover:underline font-medium hover:text-amazon-link-hover"
+            >
+              Clear Search
+            </button>
+          </div>
+        )}
+
         {/* Category filters */}
         <div className="flex items-center gap-2 py-4 border-b border-amazon-border mb-4 overflow-x-auto">
           <span className="text-[13px] text-amazon-text-secondary font-bold flex-shrink-0">Department:</span>
@@ -88,7 +115,13 @@ export default function Home() {
         <div className="flex items-center justify-between mb-3">
           <p className="text-[14px] text-amazon-text">
             <span className="text-amazon-text-secondary">
-              {filtered.length === products.length ? `Showing 1-${filtered.length} of ${filtered.length} results` : `${filtered.length} results for "${categoryFilter}"`}
+              {searchQuery ? (
+                `Found ${filtered.length} result${filtered.length === 1 ? '' : 's'} matching "${searchQuery}"`
+              ) : filtered.length === products.length ? (
+                `Showing 1-${filtered.length} of ${filtered.length} results`
+              ) : (
+                `${filtered.length} results for "${categoryFilter}"`
+              )}
             </span>
           </p>
           <select className="text-[13px] bg-[#f0f2f2] border border-[#d5d9d9] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#e77600]">
