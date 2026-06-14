@@ -30,20 +30,36 @@ export const updateUser = (id, data) =>
     body: JSON.stringify(data),
   });
 export const getGreenCredits = (id) => request(`/users/${id}/green-credits`);
+export const getImpactStats = (id) => request(`/users/${id}/impact-stats`);
+export const getChallenges = (id) => request(`/users/${id}/challenges`);
+export const completeChallenge = (userId, challengeId) =>
+  request(`/users/${userId}/challenges/${challengeId}/complete`, {
+    method: "POST",
+  });
 
 // ── Products ──────────────────────────────────────────────────
 export const getProducts = () => request("/products/");
 export const getProduct = (id) => request(`/products/${id}`);
 export const getAlternatives = (id) => request(`/products/${id}/alternatives`);
 export const getProductConfidence = (id) => request(`/products/${id}/confidence`);
+export const getProductImpact = (id) => request(`/products/${id}/impact`);
+export const getRefurbishedAlt = (id) => request(`/products/${id}/refurbished-alternative`);
+export const getSustainabilityAdvice = (id) => request(`/products/${id}/sustainability-advice`);
 
 // ── Orders ────────────────────────────────────────────────────
-export const createOrder = (userId, productId) =>
+export const createOrder = (userId, productId, isRefurbished = false, deliveryType = "standard") =>
   request("/orders/", {
     method: "POST",
-    body: JSON.stringify({ user_id: userId, product_id: productId }),
+    body: JSON.stringify({
+      user_id: userId,
+      product_id: productId,
+      is_refurbished: isRefurbished,
+      delivery_type: deliveryType,
+    }),
   });
 export const getOrders = (userId) => request(`/orders/?user_id=${userId}`);
+export const getDeliveryOptions = (category = "electronics") =>
+  request(`/orders/delivery-options?category=${category}`);
 
 // ── Returns ───────────────────────────────────────────────────
 export const createReturn = (orderId, imageUrls = []) =>
@@ -61,3 +77,12 @@ export const purchaseListing = (listingId, userId) =>
     method: "POST",
     body: JSON.stringify({ user_id: userId }),
   });
+
+// ── Redemptions ───────────────────────────────────────────────
+export const getRedemptionOptions = () => request("/redemptions/options");
+export const redeemCredits = (userId, type, credits) =>
+  request("/redemptions/redeem", {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId, type, credits }),
+  });
+export const getRedemptions = (userId) => request(`/redemptions/history?user_id=${userId}`);

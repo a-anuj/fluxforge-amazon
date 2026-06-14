@@ -1,9 +1,10 @@
 """
-SQLAlchemy ORM models for Amazon Circular Intelligence.
+SQLAlchemy ORM models for Amazon Green Credits Ecosystem.
 All tables are defined here for hackathon simplicity.
 """
 
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from datetime import datetime, timezone
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -20,8 +21,20 @@ class User(Base):
     interests = Column(String, nullable=True)          # comma-separated
     green_credits = Column(Integer, default=0)
 
+    # ── Green Credits Ecosystem fields ──
+    lifetime_credits = Column(Integer, default=0)
+    level = Column(String, default="Seed 🌱")
+    co2_saved = Column(Float, default=0.0)             # kg
+    ewaste_prevented = Column(Float, default=0.0)      # kg
+    water_saved = Column(Float, default=0.0)            # liters
+    products_reused = Column(Integer, default=0)
+    products_repaired = Column(Integer, default=0)
+    products_resold = Column(Integer, default=0)
+
     orders = relationship("Order", back_populates="user")
     green_credit_txs = relationship("GreenCreditTx", back_populates="user")
+    challenges = relationship("GreenChallenge", back_populates="user")
+    redemptions = relationship("Redemption", back_populates="user")
 
 
 class Product(Base):
@@ -36,6 +49,13 @@ class Product(Base):
     description = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
 
+    # ── Environmental Impact metrics ──
+    co2_impact = Column(Float, default=0.0)            # kg CO₂ footprint
+    ewaste_impact = Column(Float, default=0.0)         # kg e-waste potential
+    water_impact = Column(Float, default=0.0)           # liters water footprint
+    repair_cost_estimate = Column(Float, nullable=True) # ₹ estimated repair cost
+    avg_lifespan_months = Column(Integer, default=24)   # average product lifespan
+
     orders = relationship("Order", back_populates="product")
 
 
@@ -48,6 +68,11 @@ class Order(Base):
     status = Column(String, default="placed")
     fit_score = Column(Float, nullable=True)
     return_risk = Column(String, nullable=True)        # "low" | "medium" | "high"
+
+    # ── Green Credits Ecosystem fields ──
+    is_refurbished = Column(Boolean, default=False)
+    delivery_type = Column(String, default="standard")  # "express" | "standard" | "eco"
+    green_credits_earned = Column(Integer, default=0)
 
     user = relationship("User", back_populates="orders")
     product = relationship("Product", back_populates="orders")
@@ -65,6 +90,9 @@ class Return(Base):
     remaining_life_pct = Column(Integer, nullable=True)
     recommended_action = Column(String, nullable=True)  # "resell" | "refurbish" | "exchange" | "donate" | "recycle"
     status = Column(String, default="submitted")
+
+    # ── Green Credits earned for this return action ──
+    green_credits_earned = Column(Integer, default=0)
 
     order = relationship("Order", back_populates="returns")
     listing = relationship("Listing", back_populates="return_item", uselist=False)
@@ -93,4 +121,37 @@ class GreenCreditTx(Base):
     amount = Column(Integer, nullable=False)
     type = Column(String, nullable=False)               # "earned" | "redeemed"
 
+    # ── Enhanced tracking ──
+    action_type = Column(String, nullable=True)         # "purchase_refurbished" | "resell" | "repair" | "donate" | "recycle" | "eco_delivery" | "challenge" | "redeem"
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
     user = relationship("User", back_populates="green_credit_txs")
+
+
+class GreenChallenge(Base):
+    __tablename__ = "green_challenges"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    reward_credits = Column(Integer, nullable=False)
+    status = Column(String, default="active")           # "active" | "completed" | "expired"
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="challenges")
+
+
+class Redemption(Base):
+    __tablename__ = "redemptions"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    type = Column(String, nullable=False)               # "discount" | "prime" | "donation"
+    credits_spent = Column(Integer, nullable=False)
+    description = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="redemptions")
