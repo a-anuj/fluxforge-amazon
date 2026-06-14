@@ -214,9 +214,11 @@ async def assess_return(
 ):
     """
     Accept a product image and return an AI sustainability assessment.
+    - Runs quality guardrail checks (blur, brightness, resolution) before Bedrock.
     - Optionally verifies the image matches the claimed product before assessing.
     - Supported formats: JPEG, PNG, WebP, GIF (≤ 5 MB).
     """
+    from app.services.media_validator import validate_image as quality_check
 
     # ── Validate image ────────────────────────────────────────────────────────
     content_type = (image.content_type or "").lower()
@@ -234,6 +236,22 @@ async def assess_return(
         )
     if not raw:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+
+    # ── Quality Guardrail — validate before expensive Bedrock call ────────────
+    quality_result = quality_check(raw, filename=image.filename or "image.jpg")
+    if not quality_result.passed:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "quality_check_failed",
+                "message": "Image quality is insufficient for AI analysis.",
+                "issues": [
+                    {"code": i.code, "message": i.message, "suggestion": i.suggestion}
+                    for i in quality_result.issues
+                ],
+                "metadata": quality_result.metadata,
+            },
+        )
 
     fmt_map = {
         "image/jpeg": "jpeg",
