@@ -72,7 +72,7 @@ Return ONLY valid JSON with no markdown fences or extra text:
 
 {
   "product_type": "",
-  "condition_score": 0,
+  "condition_score": 0, // A score out of 100
   "damage_assessment": "",
   "packaging_condition": "",
   "estimated_recovery_value": "",
@@ -407,7 +407,25 @@ async def assess_return(
     credits = calculate_credits(action, category)
     impact = calculate_action_impact(action, category)
     
-    condition_score = result.get("condition_score", 85)
+    try:
+        condition_score = int(str(result.get("condition_score", 85)).replace("%", "").split("/")[0].strip())
+    except ValueError:
+        condition_score = 85
+        
+    # Normalize out-of-10 scores to out-of-100
+    if condition_score > 0 and condition_score <= 10:
+        condition_score *= 10
+
+    # Ensure condition score makes logical sense given the classification
+    if action == "recycle" and condition_score > 40:
+        condition_score = max(10, 40 - (100 - condition_score) // 2)  # Cap around 20-40
+    elif action == "dispose" and condition_score > 15:
+        condition_score = max(0, 15 - (100 - condition_score) // 5)   # Cap around 0-15
+    elif action == "refurbish" and condition_score > 75:
+        condition_score = 70  # Refurbished items shouldn't be pristine
+        
+    result["condition_score"] = condition_score
+    result["remaining_life_pct"] = int(condition_score * 0.9)
     advice = get_return_advice(product, condition_score, return_period_over=False) if product else None
 
     result["green_credits_earned"] = credits

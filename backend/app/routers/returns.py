@@ -105,8 +105,8 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
 
     # If resellable, auto-create a listing and match to a shopping twin
     listing_id = None
-    if assessment["recommended_action"] in ("resell", "refurbish"):
-        discount = 0.7 if assessment["recommended_action"] == "resell" else 0.5
+    if action in ("resell", "refurbish"):
+        discount = 0.7 if action == "resell" else 0.5
         listing = Listing(
             return_id=return_item.id,
             product_id=order.product_id,
@@ -128,7 +128,7 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     # Get sustainability advice for response
     # NOTE: Order model has no created_at column yet — return_period_over defaults False
     # (ReLife listing hidden) until a timestamp migration is added to the orders table.
-    advice = get_return_advice(product, assessment["condition_score"], return_period_over=False) if product else None
+    advice = get_return_advice(product, condition_score, return_period_over=False) if product else None
 
     return {
         "id": return_item.id,
