@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getUsers } from "../api/client";
 import { useUser } from "../context/UserContext";
 
@@ -15,16 +15,22 @@ export default function Header() {
   const navigate = useNavigate();
   const { currentUser, switchUser } = useUser();
   const [users, setUsers] = useState([]);
-  const [search, setSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("q") || "");
 
   useEffect(() => {
     getUsers().then(setUsers).catch(console.error);
   }, []);
 
+  useEffect(() => {
+    setSearch(searchParams.get("q") || "");
+  }, [searchParams]);
+
   const handleSearch = (e) => {
     e.preventDefault();
     if (search.trim()) {
-      // In a real app, this would route to a search page
+      navigate(`/?q=${encodeURIComponent(search.trim())}`);
+    } else {
       navigate("/");
     }
   };
@@ -36,9 +42,13 @@ export default function Header() {
       {/* Top Nav */}
       <div className="flex items-center justify-between px-4 py-2 gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center pt-2 pb-1 px-2 border border-transparent hover:border-white rounded-sm">
-          <span className="text-[24px] font-bold tracking-tight">amazon</span>
-          <span className="text-amazon-orange text-[14px] font-bold ml-1 relative -top-2">.in</span>
+        <Link to="/" className="flex items-center pt-1 pb-1 px-2 border border-transparent hover:border-white rounded-sm gap-1">
+          <svg viewBox="0 0 76 22" className="h-6 text-white fill-current" xmlns="http://www.w3.org/2000/svg">
+            <text x="0" y="15" fill="currentColor" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15" letterSpacing="-0.03em">amazon</text>
+            <path d="M 6 17 C 14 20, 29 20, 39 17" fill="none" stroke="#febd69" strokeWidth="1.5" strokeLinecap="round" />
+            <path d="M 36 15.5 L 39.5 17 L 38 20.5" fill="none" stroke="#febd69" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="text-[#febd69] text-[13px] font-bold relative -top-1">.in</span>
         </Link>
 
         {/* Location (Desktop) */}
@@ -150,25 +160,18 @@ export default function Header() {
 
       {/* Sub Nav */}
       <div className="bg-amazon-navy-light px-4 py-1.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap text-[14px]">
-        <button className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
+        <Link to="/" className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
           All
-        </button>
+        </Link>
         <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white flex items-center gap-1">
-          <span className="text-[#00FF00]">🌱</span> Second Life
+          Second Life
         </Link>
         <Link to="/profile" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
           Dashboard
         </Link>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Fresh</a>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Amazon miniTV</a>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Sell</a>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Best Sellers</a>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Mobiles</a>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">Today's Deals</a>
-        <a href="#" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white hidden sm:block">Customer Service</a>
       </div>
     </header>
   );
