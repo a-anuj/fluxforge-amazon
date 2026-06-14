@@ -170,53 +170,108 @@ def seed():
     db.commit()
 
     # ── Sample Orders ─────────────────────────────────────────────
-    # Aarav buys Nike Pegasus (size match → high fit)
-    order1 = Order(
-        user_id=1, product_id=1, status="delivered",
-        fit_score=95.2, return_risk="low",
-    )
-    # Priya buys Wildcraft Backpack (one-size → medium fit)
-    order2 = Order(
-        user_id=2, product_id=3, status="delivered",
-        fit_score=75.0, return_risk="medium",
-    )
-    # Rohan buys boAt earbuds (one-size → good fit)
-    order3 = Order(
-        user_id=3, product_id=4, status="delivered",
-        fit_score=88.5, return_risk="low",
-    )
-    db.add_all([order1, order2, order3])
+    # Product 1 (Nike Pegasus)   — 4 orders, 1 return  → score 7.5
+    order1  = Order(user_id=1, product_id=1, status="delivered", fit_score=95.2, return_risk="low")
+    order2  = Order(user_id=2, product_id=1, status="delivered", fit_score=60.0, return_risk="medium")
+    order3  = Order(user_id=3, product_id=1, status="delivered", fit_score=88.0, return_risk="low")
+    order4  = Order(user_id=4, product_id=1, status="delivered", fit_score=55.0, return_risk="high")
+
+    # Product 2 (Adidas Ultraboost) — 3 orders, 2 returns → score 3.3 (frequently returned)
+    order5  = Order(user_id=1, product_id=2, status="delivered", fit_score=70.0, return_risk="medium")
+    order6  = Order(user_id=3, product_id=2, status="delivered", fit_score=52.0, return_risk="high")
+    order7  = Order(user_id=5, product_id=2, status="delivered", fit_score=65.0, return_risk="medium")
+
+    # Product 3 (Wildcraft Backpack) — 3 orders, 1 return → score 6.7
+    order8  = Order(user_id=2, product_id=3, status="delivered", fit_score=75.0, return_risk="medium")
+    order9  = Order(user_id=4, product_id=3, status="delivered", fit_score=80.0, return_risk="low")
+    order10 = Order(user_id=5, product_id=3, status="delivered", fit_score=78.0, return_risk="low")
+
+    # Product 4 (boAt Airdopes)  — 4 orders, 1 return → score 7.5
+    order11 = Order(user_id=1, product_id=4, status="delivered", fit_score=90.0, return_risk="low")
+    order12 = Order(user_id=3, product_id=4, status="delivered", fit_score=88.5, return_risk="low")
+    order13 = Order(user_id=4, product_id=4, status="delivered", fit_score=85.0, return_risk="low")
+    order14 = Order(user_id=5, product_id=4, status="delivered", fit_score=82.0, return_risk="low")
+
+    # Product 5 (Decathlon Yoga Mat) — 3 orders, 0 returns → score 10.0
+    order15 = Order(user_id=2, product_id=5, status="delivered", fit_score=92.0, return_risk="low")
+    order16 = Order(user_id=4, product_id=5, status="delivered", fit_score=95.0, return_risk="low")
+    order17 = Order(user_id=1, product_id=5, status="delivered", fit_score=88.0, return_risk="low")
+
+    # Product 6 (Noise Smartwatch) — 2 orders, 0 returns → score 10.0
+    order18 = Order(user_id=2, product_id=6, status="delivered", fit_score=80.0, return_risk="low")
+    order19 = Order(user_id=4, product_id=6, status="delivered", fit_score=84.0, return_risk="low")
+
+    # Product 7 (Puma Shoes) — 3 orders, 2 returns → score 3.3 (frequently returned)
+    order20 = Order(user_id=1, product_id=7, status="delivered", fit_score=55.0, return_risk="high")
+    order21 = Order(user_id=3, product_id=7, status="delivered", fit_score=50.0, return_risk="high")
+    order22 = Order(user_id=5, product_id=7, status="delivered", fit_score=72.0, return_risk="medium")
+
+    all_orders = [
+        order1, order2, order3, order4, order5, order6, order7,
+        order8, order9, order10, order11, order12, order13, order14,
+        order15, order16, order17, order18, order19, order20, order21, order22,
+    ]
+    db.add_all(all_orders)
     db.commit()
 
     # ── Sample Returns ────────────────────────────────────────────
-    # Priya returns the backpack
-    return1 = Return(
-        order_id=2,
+    # Product 1: order4 returned (size mismatch)
+    ret1 = Return(
+        order_id=order4.id,
+        image_urls="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400",
+        condition_score=88.0, defects="None — wrong size ordered",
+        remaining_life_pct=95, recommended_action="resell", status="assessed",
+    )
+    # Product 2: order6 + order7 returned (sizing runs small)
+    ret2 = Return(
+        order_id=order6.id,
+        image_urls="https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=400",
+        condition_score=91.0, defects="Worn once — size too narrow",
+        remaining_life_pct=92, recommended_action="resell", status="assessed",
+    )
+    ret3 = Return(
+        order_id=order7.id,
+        image_urls="https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=400",
+        condition_score=85.0, defects="Minor sole scuff",
+        remaining_life_pct=80, recommended_action="resell", status="assessed",
+    )
+    # Product 3: order8 returned
+    ret4 = Return(
+        order_id=order8.id,
         image_urls="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400",
-        condition_score=82.5,
-        defects="Minor surface scratches on the left side",
-        remaining_life_pct=78,
-        recommended_action="resell",
-        status="assessed",
+        condition_score=82.5, defects="Minor surface scratches on the left side",
+        remaining_life_pct=78, recommended_action="resell", status="assessed",
     )
-    # Rohan returns the earbuds
-    return2 = Return(
-        order_id=3,
+    # Product 4: order12 returned
+    ret5 = Return(
+        order_id=order12.id,
         image_urls="https://images.unsplash.com/photo-1590658268037-6bf12f032f55?w=400",
-        condition_score=71.0,
-        defects="Slight color fading on the exterior",
-        remaining_life_pct=65,
-        recommended_action="refurbish",
-        status="assessed",
+        condition_score=71.0, defects="Slight color fading on the exterior",
+        remaining_life_pct=65, recommended_action="refurbish", status="assessed",
     )
-    db.add_all([return1, return2])
+    # Product 7 (Puma): order20 + order21 returned
+    ret6 = Return(
+        order_id=order20.id,
+        image_urls="https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400",
+        condition_score=80.0, defects="Sizing inconsistency — too tight",
+        remaining_life_pct=88, recommended_action="resell", status="assessed",
+    )
+    ret7 = Return(
+        order_id=order21.id,
+        image_urls="https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400",
+        condition_score=75.0, defects="Sole separation on right shoe",
+        remaining_life_pct=60, recommended_action="refurbish", status="assessed",
+    )
+
+    all_returns = [ret1, ret2, ret3, ret4, ret5, ret6, ret7]
+    db.add_all(all_returns)
     db.commit()
 
     # ── Sample Listings (auto-matched) ────────────────────────────
     listing1 = Listing(
-        return_id=1,
+        return_id=ret4.id,
         product_id=3,  # Wildcraft Backpack
-        price=round(2499 * 0.7, 2),  # 30% off for resell
+        price=round(2499 * 0.7, 2),
         status="available",
     )
     db.add(listing1)
@@ -228,9 +283,9 @@ def seed():
         listing1.status = "matched"
 
     listing2 = Listing(
-        return_id=2,
+        return_id=ret5.id,
         product_id=4,  # boAt earbuds
-        price=round(1299 * 0.5, 2),  # 50% off for refurbish
+        price=round(1299 * 0.5, 2),
         status="available",
     )
     db.add(listing2)
@@ -244,7 +299,6 @@ def seed():
     db.commit()
 
     # ── Sample Green Credit Transactions ──────────────────────────
-    # Give Aarav some starter credits for demo
     tx = GreenCreditTx(user_id=1, amount=20, type="earned")
     db.add(tx)
     users[0].green_credits = 20
@@ -254,7 +308,7 @@ def seed():
     print("✅ Database seeded successfully!")
     print(f"   • {len(users)} users")
     print(f"   • {len(products)} products")
-    print(f"   • 3 orders, 2 returns, 2 listings")
+    print(f"   • {len(all_orders)} orders, {len(all_returns)} returns, 2 listings")
 
 
 if __name__ == "__main__":

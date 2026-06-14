@@ -45,6 +45,16 @@ class ProductOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Product Confidence ─────────────────────────────────────────────────
+
+class ProductConfidenceOut(BaseModel):
+    total_orders: int
+    total_returns: int
+    return_rate: float                 # 0-100 percentage
+    return_frequency_score: float      # /10  (10 = never returned)
+    return_label: str                  # "Rarely returned" | "Sometimes returned" | "Frequently returned"
+
+
 # ── Orders ─────────────────────────────────────────────────────────────
 
 class OrderCreate(BaseModel):
