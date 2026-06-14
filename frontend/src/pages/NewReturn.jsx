@@ -85,6 +85,7 @@ export default function NewReturn() {
   const preselectedOrderId = searchParams.get("orderId") || "";
 
   const [orders, setOrders] = useState([]);
+  const [products, setProducts] = useState({});
   const [selectedOrder, setSelectedOrder] = useState(preselectedOrderId);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reason, setReason] = useState("size_mismatch");
@@ -108,11 +109,20 @@ export default function NewReturn() {
   useEffect(() => {
     if (!currentUser) return;
     getOrders(currentUser.id)
-      .then((data) => {
+      .then(async (data) => {
         const returnable = data.filter((o) => o.status !== "returned");
         setOrders(returnable);
         if (preselectedOrderId && !returnable.find((o) => String(o.id) === preselectedOrderId))
           setSelectedOrder("");
+          
+        const prods = {};
+        const uniqueProductIds = [...new Set(returnable.map(o => o.product_id))];
+        await Promise.all(
+          uniqueProductIds.map(async (pid) => {
+            try { prods[pid] = await getProduct(pid); } catch {}
+          })
+        );
+        setProducts(prods);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -263,7 +273,8 @@ export default function NewReturn() {
         Number(selectedOrder),
         [],
         sustainResult.condition_score,
-        sustainResult.classification
+        sustainResult.classification,
+        sustainResult.remaining_life_pct
       );
       setReturnResult(res);
       refreshUser();
@@ -540,7 +551,11 @@ export default function NewReturn() {
                 <label className="text-[12px] font-semibold text-[#0f1923] block mb-1">Which order are you returning?</label>
                 <select value={selectedOrder} onChange={(e) => setSelectedOrder(e.target.value)} required className="w-full px-3 py-2 border border-[#c8cdd3] rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-[#0f1923] bg-white">
                   <option value="">Select an order</option>
-                  {orders.map((o) => (<option key={o.id} value={o.id}>Order #{o.id} \u2014 Product #{o.product_id} ({o.status})</option>))}
+                  {orders.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      Order #{o.id} &mdash; {products[o.product_id]?.name || `Product #${o.product_id}`}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
