@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routers import users, products, orders, returns, listings, redemptions
+from app.routers import users, products, orders, returns, listings, redemptions, media
 
 # Create tables on startup (idempotent)
 Base.metadata.create_all(bind=engine)
@@ -33,6 +33,7 @@ app.include_router(orders.router, prefix="/api")
 app.include_router(returns.router, prefix="/api")
 app.include_router(listings.router, prefix="/api")
 app.include_router(redemptions.router, prefix="/api")
+app.include_router(media.router, prefix="/api")
 
 
 @app.get("/")
