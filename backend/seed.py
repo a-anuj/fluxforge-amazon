@@ -10,6 +10,9 @@ from datetime import datetime, timezone, timedelta
 # Ensure app package is importable
 sys.path.insert(0, os.path.dirname(__file__))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from app.database import engine, SessionLocal, Base
 from app.models import User, Product, Order, Return, Listing, GreenCreditTx, GreenChallenge, Redemption
 from app.services.ai_assessment import assess_condition

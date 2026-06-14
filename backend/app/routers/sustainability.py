@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import uuid
 
 import boto3
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
@@ -89,6 +90,30 @@ def _get_bedrock_client():
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
     )
+
+def _upload_to_s3(file_bytes: bytes, filename: str, content_type: str) -> str:
+    s3_client = boto3.client(
+        "s3",
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+    bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
+    if not bucket_name:
+        return "local_storage"
+        
+    unique_filename = f"{uuid.uuid4()}-{filename}"
+    try:
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=unique_filename,
+            Body=file_bytes,
+            ContentType=content_type
+        )
+        return unique_filename
+    except Exception as e:
+        logger.error(f"S3 upload failed: {e}")
+        return "upload_failed"
 
 
 def _extract_text(response: dict) -> str:
@@ -319,6 +344,10 @@ async def assess_return(
         "image/gif": "gif",
     }
     img_format = fmt_map[content_type]
+
+    # Upload to S3
+    s3_key = _upload_to_s3(raw, image.filename or "image.jpg", content_type)
+    logger.info(f"Image securely stored in S3 at: {s3_key}")
 
     # ── Step 1: Verify the image matches the ordered product ──────────────────
     if product_name.strip():
