@@ -40,10 +40,11 @@ export default function Home() {
               <div className="relative z-10 max-w-xl">
                 <p className="text-amazon-orange text-[13px] font-bold tracking-wide uppercase mb-2">🌱 Amazon Green Credits Ecosystem</p>
                 <h1 className="text-[28px] md:text-[36px] font-bold text-white leading-tight mb-3">Sustainability that rewards you</h1>
-                <p className="text-[#ccc] text-[14px] mb-5 leading-relaxed">
-                  Earn Green Credits for every sustainable action — buy refurbished, repair, resell, or donate.
+                <p className="text-[#ccc] text-[14px] mb-4 leading-relaxed">
+                  Earn Green Credits for every sustainable action &mdash; buy refurbished, repair, resell, or donate.
                   Every choice makes an impact.
                 </p>
+                <p className="text-amazon-orange text-[14px] italic tracking-wide mb-5">AI-powered circular commerce &mdash; every return finds its next life</p>
                 <div className="flex flex-wrap gap-3">
                   <Link to="/feed" className="btn-amazon-primary text-[14px] px-6 py-2.5 font-bold inline-block">Shop Second Life</Link>
                   <Link to="/profile" className="btn-amazon-orange text-[14px] px-6 py-2.5 inline-block">View Dashboard</Link>
