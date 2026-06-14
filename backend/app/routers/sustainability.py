@@ -10,8 +10,14 @@ import os
 import re
 
 import boto3
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models import Order, Product
+from app.services.credit_engine import calculate_credits
+from app.services.impact_calculator import calculate_action_impact
+from app.services.sustainability_advisor import get_return_advice
 
 router = APIRouter(prefix="/sustainability", tags=["sustainability"])
 
@@ -243,8 +249,10 @@ async def verify_product(
 @router.post("/assess")
 async def assess_return(
     image: UploadFile = File(...),
+    order_id: int = Form(...),
     product_name: str = Form(""),
     product_category: str = Form(""),
+    db: Session = Depends(get_db),
 ):
     """
     Accept a product image and return an AI sustainability assessment.
@@ -378,6 +386,33 @@ async def assess_return(
 
     # Normalise classification to uppercase for consistent badge rendering
     result["classification"] = str(result.get("classification", "")).upper()
+
+    # Calculate circularity/sustainability metadata preview
+    order = db.query(Order).filter(Order.id == order_id).first()
+    product = order.product if order else None
+    category = product.category.lower() if product and product.category else product_category.lower()
+    
+    act_lower = result["classification"].lower()
+    if "resale" in act_lower or "resell" in act_lower:
+        action = "resell"
+    elif "refurbish" in act_lower:
+        action = "refurbish"
+    elif "recycle" in act_lower:
+        action = "recycle"
+    elif "dispose" in act_lower:
+        action = "dispose"
+    else:
+        action = act_lower
+
+    credits = calculate_credits(action, category)
+    impact = calculate_action_impact(action, category)
+    
+    condition_score = result.get("condition_score", 85)
+    advice = get_return_advice(product, condition_score, return_period_over=False) if product else None
+
+    result["green_credits_earned"] = credits
+    result["environmental_impact"] = impact
+    result["sustainability_advice"] = advice
 
     logger.info(f"✅ Assessment complete — classification: {result['classification']}, score: {result.get('condition_score')}, confidence: {result.get('confidence')}")
 

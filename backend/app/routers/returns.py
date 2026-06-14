@@ -18,16 +18,37 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # 🔌 STUB — calls mock assessment; swap assess_condition() for real AI later
-    assessment = assess_condition(body.image_urls)
+    # If AI assessment details are passed, use them; otherwise fall back to stub
+    if body.recommended_action:
+        condition_score = body.condition_score if body.condition_score is not None else 85.0
+        defects = body.defects if body.defects is not None else "None detected"
+        remaining_life_pct = body.remaining_life_pct if body.remaining_life_pct is not None else 90
+        
+        act_lower = body.recommended_action.lower()
+        if "resale" in act_lower or "resell" in act_lower:
+            action = "resell"
+        elif "refurbish" in act_lower:
+            action = "refurbish"
+        elif "recycle" in act_lower:
+            action = "recycle"
+        elif "dispose" in act_lower:
+            action = "dispose"
+        else:
+            action = act_lower
+    else:
+        assessment = assess_condition(body.image_urls)
+        condition_score = assessment["condition_score"]
+        defects = assessment["defects"]
+        remaining_life_pct = assessment["remaining_life_pct"]
+        action = assessment["recommended_action"]
 
     return_item = Return(
         order_id=body.order_id,
         image_urls=",".join(body.image_urls) if body.image_urls else None,
-        condition_score=assessment["condition_score"],
-        defects=assessment["defects"],
-        remaining_life_pct=assessment["remaining_life_pct"],
-        recommended_action=assessment["recommended_action"],
+        condition_score=condition_score,
+        defects=defects,
+        remaining_life_pct=remaining_life_pct,
+        recommended_action=action,
         status="assessed",
     )
     db.add(return_item)
@@ -41,7 +62,7 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     # ── Award Green Credits for the return action ──
     product = order.product
     category = product.category.lower() if product and product.category else "electronics"
-    action = assessment["recommended_action"]
+    # action is already defined above
 
     credits = calculate_credits(action, category)
     impact = calculate_action_impact(action, category)

@@ -99,6 +99,8 @@ export default function NewReturn() {
   const [sustainError, setSustainError] = useState("");
   const [mismatchError, setMismatchError] = useState(null);
   const [showResults, setShowResults] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const [verifyingImage, setVerifyingImage] = useState(false);
   const [verifiedImage, setVerifiedImage] = useState(null);
@@ -187,65 +189,104 @@ export default function NewReturn() {
     e.preventDefault();
     if (!selectedOrder) return;
     setSubmitting(true);
-    setProgress(5);
-    let returnRes = null;
-    try {
-      setProgressLabel("Submitting return request\u2026");
+    setSustainError("");
+    setMismatchError(null);
+
+    if (!imageFile) {
+      // Standard return without AI assessment. Create return immediately.
       setProgress(20);
-      returnRes = await createReturn(Number(selectedOrder), []);
-      setReturnResult(returnRes);
-      refreshUser();
-      setProgress(50);
-    } catch (err) {
-      alert(`Return failed: ${err.message}`);
-      setSubmitting(false);
+      setProgressLabel("Submitting return request\u2026");
+      try {
+        const res = await createReturn(Number(selectedOrder), []);
+        setReturnResult(res);
+        refreshUser();
+        setProgress(100);
+        setProgressLabel("Done!");
+        setSubmitting(false);
+        setConfirmed(true);
+        setShowResults(true);
+      } catch (err) {
+        alert(`Failed to complete return: ${err.message}`);
+        setSubmitting(false);
+      }
       return;
     }
-    if (imageFile) {
-      setSustainError("");
-      setMismatchError(null);
-      setProgressLabel("Running AI sustainability assessment\u2026");
-      setProgress(60);
-      const form = new FormData();
-      form.append("image", imageFile);
-      if (selectedProduct) {
-        form.append("product_name", selectedProduct.name || "");
-        form.append("product_category", selectedProduct.category || "");
-      }
-      const ticker = setInterval(() => setProgress((p) => (p < 92 ? p + 2 : p)), 250);
-      try {
-        const res = await fetch(`${BASE_URL}/sustainability/assess`, { method: "POST", body: form });
-        clearInterval(ticker);
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({ detail: res.statusText }));
-          const detail = errBody.detail;
-          if (typeof detail === "object" && detail?.type === "product_mismatch") {
-            setMismatchError(detail);
-            setProgress(100); setProgressLabel("Done!"); setSubmitting(false);
-            setShowResults(true);
-            return;
-          }
-          throw new Error(typeof detail === "string" ? detail : detail?.message || `Error ${res.status}`);
-        }
-        setSustainResult(await res.json());
-      } catch (err) {
-        clearInterval(ticker);
-        setSustainError(err.message);
-      }
+
+    setProgress(10);
+    setProgressLabel("Initializing AI scanner\u2026");
+
+    const form = new FormData();
+    form.append("image", imageFile);
+    form.append("order_id", selectedOrder);
+    if (selectedProduct) {
+      form.append("product_name", selectedProduct.name || "");
+      form.append("product_category", selectedProduct.category || "");
     }
-    setProgress(100);
-    setProgressLabel("Done!");
-    setSubmitting(false);
-    setShowResults(true);
+
+    setProgressLabel("Running AI sustainability assessment\u2026");
+    setProgress(40);
+    const ticker = setInterval(() => setProgress((p) => (p < 92 ? p + 2 : p)), 250);
+    try {
+      const res = await fetch(`${BASE_URL}/sustainability/assess`, { method: "POST", body: form });
+      clearInterval(ticker);
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+        const detail = errBody.detail;
+        if (typeof detail === "object" && detail?.type === "product_mismatch") {
+          setMismatchError(detail);
+          setProgress(100); setProgressLabel("Done!"); setSubmitting(false);
+          setShowResults(true);
+          return;
+        }
+        throw new Error(typeof detail === "string" ? detail : detail?.message || `Error ${res.status}`);
+      }
+      const data = await res.json();
+      setSustainResult(data);
+      setProgress(100);
+      setProgressLabel("Assessment Complete!");
+      setSubmitting(false);
+      setShowResults(true);
+    } catch (err) {
+      clearInterval(ticker);
+      setSustainError(err.message);
+      setProgress(100);
+      setProgressLabel("Error running assessment");
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmReturn = async () => {
+    if (!selectedOrder || !sustainResult) return;
+    setConfirming(true);
+    try {
+      const res = await createReturn(
+        Number(selectedOrder),
+        [],
+        sustainResult.condition_score,
+        sustainResult.classification
+      );
+      setReturnResult(res);
+      refreshUser();
+      setConfirmed(true);
+    } catch (err) {
+      alert(`Failed to complete return: ${err.message}`);
+    } finally {
+      setConfirming(false);
+    }
   };
 
   // Results screen
-  if (showResults && returnResult) {
-    const impact = returnResult.environmental_impact;
-    const advice = returnResult.sustainability_advice;
+  if (showResults && (sustainResult || mismatchError)) {
     const s = sustainResult;
+    const impact = s?.environmental_impact || returnResult?.environmental_impact;
+    const advice = s?.sustainability_advice || returnResult?.sustainability_advice;
     const badge = s ? (SUSTAINABILITY_BADGE[s.classification] || { bg: "bg-[#6c7480]", label: s.classification, sub: "" }) : null;
     const condColor = (v) => v >= 75 ? "#067d62" : v >= 50 ? "#c7511f" : "#b12704";
+    const conditionScore = s?.condition_score ?? returnResult?.condition_score ?? 85;
+    const remainingLife = s?.remaining_life_pct ?? returnResult?.remaining_life_pct ?? Math.round(conditionScore * 0.9);
+    const defects = s?.damage_assessment || returnResult?.defects || "No defects detected";
+    const greenCredits = s?.green_credits_earned ?? returnResult?.green_credits_earned ?? 0;
+
     return (
       <div className="bg-white min-h-screen animate-fade-in">
         <div className="max-w-[800px] mx-auto px-4 py-6">
@@ -266,7 +307,7 @@ export default function NewReturn() {
                   <p className="text-[11px] text-[#c45500]/70">The uploaded image does not match your ordered item</p>
                 </div>
               </div>
-              <div className="p-4 bg-white space-y-2">
+              <div className="p-4 bg-white space-y-4">
                 <p className="text-[13px] text-[#1a1f27]">{mismatchError.message}</p>
                 {mismatchError.reason && (
                   <div className="bg-[#fafbfc] border border-[#e3e6ea] rounded-lg px-4 py-3">
@@ -274,9 +315,23 @@ export default function NewReturn() {
                     <p className="text-[13px] text-[#1a1f27] italic">{mismatchError.reason}</p>
                   </div>
                 )}
+                <div className="pt-2">
+                  <button 
+                    onClick={() => {
+                      setShowResults(false);
+                      setMismatchError(null);
+                      setImageFile(null);
+                      setImagePreview("");
+                    }} 
+                    className="btn-amazon-primary text-[13px] px-5 py-2"
+                  >
+                    Go Back &amp; Upload Different Photo
+                  </button>
+                </div>
               </div>
             </div>
           )}
+
           {sustainError && (
             <div className="mb-4 bg-[#fff5f5] border border-[#ffd0d0] rounded-xl px-4 py-3">
               <p className="text-[13px] font-semibold text-[#b12704]">AI assessment failed</p>
@@ -284,116 +339,177 @@ export default function NewReturn() {
             </div>
           )}
 
-          <div className="border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
-            <div className="bg-[#0f1923] px-5 py-4 flex items-center justify-between">
-              <div>
-                <p className="text-white font-semibold text-[15px] tracking-tight">AI Return Assessment</p>
-                <p className="text-[#8a9bb0] text-[11px] mt-0.5 uppercase tracking-wide">Return #{returnResult.id} &middot; Circular Intelligence</p>
+          {!mismatchError && (
+            <div className="border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-[#0f1923] px-5 py-4 flex items-center justify-between">
+                <div>
+                  <p className="text-white font-semibold text-[15px] tracking-tight">AI Return Assessment</p>
+                  <p className="text-[#8a9bb0] text-[11px] mt-0.5 uppercase tracking-wide">
+                    {returnResult ? `Return #${returnResult.id}` : "Return Preview"} &middot; Circular Intelligence
+                  </p>
+                </div>
+                {badge && <div className={`${badge.bg} px-3 py-1.5 rounded-md`}><p className="text-white text-[11px] font-bold tracking-widest">{badge.label}</p></div>}
               </div>
-              {badge && <div className={`${badge.bg} px-3 py-1.5 rounded-md`}><p className="text-white text-[11px] font-bold tracking-widest">{badge.label}</p></div>}
-            </div>
-            <div className="p-5 space-y-4">
-              {s && (
-                <div className={`${badge.bg} rounded-xl px-5 py-4 flex items-center justify-between`}>
-                  <div>
-                    <p className="text-white/60 text-[10px] uppercase tracking-widest font-semibold mb-1">Disposition</p>
-                    <p className="text-white text-[24px] font-bold tracking-tight leading-none">{s.classification}</p>
-                    <p className="text-white/70 text-[12px] mt-1">{badge.sub}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-white/50 text-[10px] uppercase tracking-widest">Confidence</p>
-                    <p className="text-white text-[32px] font-bold leading-none mt-0.5">{s.confidence}<span className="text-[16px] font-normal opacity-70">%</span></p>
-                  </div>
-                </div>
-              )}
-
-              <div className={`grid gap-3 ${s ? "grid-cols-3" : "grid-cols-2"}`}>
-                <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
-                  <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Condition Score</p>
-                  <div className="flex items-end gap-1 mt-1"><span className="text-[28px] font-bold text-[#0f1923] leading-none">{returnResult.condition_score}</span><span className="text-[12px] text-[#9aa0aa] mb-0.5">/100</span></div>
-                  <ScoreBar value={returnResult.condition_score} color={condColor(returnResult.condition_score)} />
-                </div>
-                <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
-                  <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Remaining Life</p>
-                  <div className="flex items-end gap-1 mt-1"><span className="text-[28px] font-bold text-[#0f1923] leading-none">{returnResult.remaining_life_pct}</span><span className="text-[12px] text-[#9aa0aa] mb-0.5">%</span></div>
-                  <ScoreBar value={returnResult.remaining_life_pct} color="#1a6bb5" />
-                </div>
+              <div className="p-5 space-y-4">
                 {s && (
+                  <div className={`${badge.bg} rounded-xl px-5 py-4 flex items-center justify-between`}>
+                    <div>
+                      <p className="text-white/60 text-[10px] uppercase tracking-widest font-semibold mb-1">Disposition</p>
+                      <p className="text-white text-[24px] font-bold tracking-tight leading-none">{s.classification}</p>
+                      <p className="text-white/70 text-[12px] mt-1">{badge.sub}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white/50 text-[10px] uppercase tracking-widest">Confidence</p>
+                      <p className="text-white text-[32px] font-bold leading-none mt-0.5">{s.confidence}<span className="text-[16px] font-normal opacity-70">%</span></p>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`grid gap-3 ${s ? "grid-cols-3" : "grid-cols-2"}`}>
                   <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
-                    <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Product Type</p>
-                    <p className="text-[13px] font-semibold text-[#0f1923] mt-1 leading-snug">{s.product_type || "\u2014"}</p>
-                    <p className="text-[11px] text-[#9aa0aa] mt-1">Est. recovery: {s.estimated_recovery_value || "\u2014"}</p>
+                    <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Condition Score</p>
+                    <div className="flex items-end gap-1 mt-1"><span className="text-[28px] font-bold text-[#0f1923] leading-none">{conditionScore}</span><span className="text-[12px] text-[#9aa0aa] mb-0.5">/100</span></div>
+                    <ScoreBar value={conditionScore} color={condColor(conditionScore)} />
+                  </div>
+                  <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
+                    <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Remaining Life</p>
+                    <div className="flex items-end gap-1 mt-1"><span className="text-[28px] font-bold text-[#0f1923] leading-none">{remainingLife}</span><span className="text-[12px] text-[#9aa0aa] mb-0.5">%</span></div>
+                    <ScoreBar value={remainingLife} color="#1a6bb5" />
+                  </div>
+                  {s && (
+                    <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
+                      <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Product Type</p>
+                      <p className="text-[13px] font-semibold text-[#0f1923] mt-1 leading-snug">{s.product_type || "\u2014"}</p>
+                      <p className="text-[11px] text-[#9aa0aa] mt-1">Est. recovery: {s.estimated_recovery_value || "\u2014"}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border border-[#e3e6ea] rounded-xl p-4 space-y-3 bg-[#fafbfc]">
+                  <div>
+                    <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-1">Defects Found</p>
+                    <p className="text-[13px] text-[#1a1f27] leading-relaxed">{defects}</p>
+                  </div>
+                  {s?.damage_assessment && (<div className="border-t border-[#eaecef] pt-3"><p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-1">Damage Assessment</p><p className="text-[13px] text-[#1a1f27] leading-relaxed">{s.damage_assessment}</p></div>)}
+                  {s?.packaging_condition && (<div className="border-t border-[#eaecef] pt-3"><p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-1">Packaging</p><p className="text-[13px] text-[#1a1f27] leading-relaxed">{s.packaging_condition}</p></div>)}
+                </div>
+
+                {greenCredits > 0 && (
+                  <div className="border border-[#067d62]/30 rounded-xl p-4 bg-[#f2fbf7] flex items-center justify-between">
+                    <div><p className="text-[10px] text-[#067d62] uppercase font-semibold tracking-wider">Green Credits Potential</p><p className="text-[13px] text-[#1a4a35] mt-0.5">Awarded for choosing the sustainable option</p></div>
+                    <span className="text-[28px] font-bold text-[#067d62]">+{greenCredits}</span>
+                  </div>
+                )}
+
+                {impact && (
+                  <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
+                    <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-3">Environmental Impact</p>
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div><p className="text-[20px] font-bold text-[#067d62]">{impact.co2_saved}</p><p className="text-[10px] text-[#6c7480] mt-0.5">kg CO\u2082 saved</p></div>
+                      <div><p className="text-[20px] font-bold text-[#1a6bb5]">{impact.ewaste_prevented}</p><p className="text-[10px] text-[#6c7480] mt-0.5">kg e-waste prevented</p></div>
+                      <div><p className="text-[20px] font-bold text-[#0097a7]">{impact.water_saved}</p><p className="text-[10px] text-[#6c7480] mt-0.5">L water saved</p></div>
+                    </div>
+                  </div>
+                )}
+
+                {s?.sustainability_reasoning && (
+                  <div className="border-l-[3px] border-[#067d62] bg-[#f2fbf7] rounded-r-xl px-4 py-3">
+                    <p className="text-[10px] text-[#067d62] uppercase font-semibold tracking-wider mb-1">Sustainability Reasoning</p>
+                    <p className="text-[13px] text-[#1a1f27] leading-relaxed">{s.sustainability_reasoning}</p>
+                  </div>
+                )}
+
+                {advice?.suggestions?.length > 0 && (
+                  <div className="border border-[#e3e6ea] rounded-xl overflow-hidden">
+                    <div className="p-4 bg-[#fafbfc] border-b border-[#e3e6ea] flex items-center gap-2">
+                      <p className="text-[13px] font-semibold text-[#0f1923]">Second Chance Options</p>
+                      <span className="text-[10px] font-semibold text-[#1a6bb5] bg-[#ebf2fb] px-1.5 py-0.5 rounded tracking-wide">AI</span>
+                    </div>
+                    <div className="divide-y divide-[#eaecef]">
+                      {advice.suggestions.map((sug, i) => (
+                        <div key={i} className="px-4 py-3 flex items-center justify-between">
+                          <div><p className="text-[13px] font-semibold text-[#0f1923]">{sug.title}</p><p className="text-[11px] text-[#6c7480] mt-0.5">{sug.message}</p></div>
+                          <span className="text-[13px] font-bold text-[#067d62] ml-4">+{sug.credits}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {s && (
+                  <div className="border border-[#d0d4d9] rounded-xl overflow-hidden">
+                    <div className="bg-[#f5f6f8] px-5 py-2.5 border-b border-[#d0d4d9]">
+                      <span className="text-[10px] font-semibold text-[#6c7480] uppercase tracking-widest">Raw Bedrock Response &middot; Debug</span>
+                    </div>
+                    <pre className="p-5 text-[11px] text-[#2d3748] font-mono bg-[#fafbfc] overflow-x-auto whitespace-pre-wrap leading-relaxed">{JSON.stringify(s, null, 2)}</pre>
                   </div>
                 )}
               </div>
+            </div>
+          )}
 
-              <div className="border border-[#e3e6ea] rounded-xl p-4 space-y-3 bg-[#fafbfc]">
-                <div>
-                  <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-1">Defects Found</p>
-                  <p className="text-[13px] text-[#1a1f27] leading-relaxed">{returnResult.defects || "No defects detected"}</p>
-                </div>
-                {s?.damage_assessment && (<div className="border-t border-[#eaecef] pt-3"><p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-1">Damage Assessment</p><p className="text-[13px] text-[#1a1f27] leading-relaxed">{s.damage_assessment}</p></div>)}
-                {s?.packaging_condition && (<div className="border-t border-[#eaecef] pt-3"><p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-1">Packaging</p><p className="text-[13px] text-[#1a1f27] leading-relaxed">{s.packaging_condition}</p></div>)}
-              </div>
-
-              {returnResult.green_credits_earned > 0 && (
-                <div className="border border-[#067d62]/30 rounded-xl p-4 bg-[#f2fbf7] flex items-center justify-between">
-                  <div><p className="text-[10px] text-[#067d62] uppercase font-semibold tracking-wider">Green Credits Earned</p><p className="text-[13px] text-[#1a4a35] mt-0.5">Awarded for choosing the sustainable option</p></div>
-                  <span className="text-[28px] font-bold text-[#067d62]">+{returnResult.green_credits_earned}</span>
-                </div>
-              )}
-
-              {impact && (
-                <div className="border border-[#e3e6ea] rounded-xl p-4 bg-[#fafbfc]">
-                  <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-3">Environmental Impact</p>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div><p className="text-[20px] font-bold text-[#067d62]">{impact.co2_saved}</p><p className="text-[10px] text-[#6c7480] mt-0.5">kg CO\u2082 saved</p></div>
-                    <div><p className="text-[20px] font-bold text-[#1a6bb5]">{impact.ewaste_prevented}</p><p className="text-[10px] text-[#6c7480] mt-0.5">kg e-waste prevented</p></div>
-                    <div><p className="text-[20px] font-bold text-[#0097a7]">{impact.water_saved}</p><p className="text-[10px] text-[#6c7480] mt-0.5">L water saved</p></div>
+          {!mismatchError && (
+            <div className="mt-6 border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
+              {!confirmed ? (
+                <div className="bg-[#fffcf3] px-5 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#fcf8e3] flex items-center justify-center text-[#c09853] flex-shrink-0">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[14px] font-semibold text-[#8a6d3b]">Are you sure you want to return this item?</p>
+                      <p className="text-[12px] text-[#8a6d3b]/90">Please confirm if you accept the circular intelligence disposition strategy and the credits to be rewarded.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleConfirmReturn} 
+                      disabled={confirming}
+                      className="bg-[#e47911] hover:bg-[#d56e0c] disabled:opacity-50 text-white font-semibold text-[13px] px-5 py-2 rounded-lg shadow-sm"
+                    >
+                      {confirming ? "Confirming..." : "Confirm Return"}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setShowResults(false);
+                        setSustainResult(null);
+                        setImageFile(null);
+                        setImagePreview("");
+                      }}
+                      className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2 rounded-lg"
+                    >
+                      Keep Item &amp; Cancel
+                    </button>
                   </div>
                 </div>
-              )}
-
-              {s?.sustainability_reasoning && (
-                <div className="border-l-[3px] border-[#067d62] bg-[#f2fbf7] rounded-r-xl px-4 py-3">
-                  <p className="text-[10px] text-[#067d62] uppercase font-semibold tracking-wider mb-1">Sustainability Reasoning</p>
-                  <p className="text-[13px] text-[#1a1f27] leading-relaxed">{s.sustainability_reasoning}</p>
-                </div>
-              )}
-
-              {advice?.suggestions?.length > 0 && (
-                <div className="border border-[#e3e6ea] rounded-xl overflow-hidden">
-                  <div className="p-4 bg-[#fafbfc] border-b border-[#e3e6ea] flex items-center gap-2">
-                    <p className="text-[13px] font-semibold text-[#0f1923]">Second Chance Options</p>
-                    <span className="text-[10px] font-semibold text-[#1a6bb5] bg-[#ebf2fb] px-1.5 py-0.5 rounded tracking-wide">AI</span>
+              ) : (
+                <div className="bg-[#f2fbf7] px-5 py-5 flex flex-col items-center text-center gap-2 animate-fade-in">
+                  <div className="w-12 h-12 rounded-full bg-[#e6f4ea] flex items-center justify-center text-[#137333] mb-1">
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
                   </div>
-                  <div className="divide-y divide-[#eaecef]">
-                    {advice.suggestions.map((sug, i) => (
-                      <div key={i} className="px-4 py-3 flex items-center justify-between">
-                        <div><p className="text-[13px] font-semibold text-[#0f1923]">{sug.title}</p><p className="text-[11px] text-[#6c7480] mt-0.5">{sug.message}</p></div>
-                        <span className="text-[13px] font-bold text-[#067d62] ml-4">+{sug.credits}</span>
-                      </div>
-                    ))}
+                  <p className="text-[18px] font-bold text-[#137333]">Return Successfully Confirmed!</p>
+                  <p className="text-[13px] text-[#137333]/90 max-w-[550px] leading-relaxed">
+                    Your return request has been submitted. The AI circularity classification has been registered, and your <b>+{greenCredits} Green Credits</b> have been added to your account balance.
+                  </p>
+                  <div className="flex gap-2 mt-4">
+                    <Link to="/orders" className="bg-[#0f1923] hover:bg-[#1a2b3c] text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg shadow-sm">
+                      Go to Your Orders
+                    </Link>
+                    <Link to="/feed" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
+                      Browse Second Life
+                    </Link>
+                    <Link to="/profile" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
+                      View Green Dashboard
+                    </Link>
                   </div>
-                </div>
-              )}
-
-              {s && (
-                <div className="border border-[#d0d4d9] rounded-xl overflow-hidden">
-                  <div className="bg-[#f5f6f8] px-5 py-2.5 border-b border-[#d0d4d9]">
-                    <span className="text-[10px] font-semibold text-[#6c7480] uppercase tracking-widest">Raw Bedrock Response \u00b7 Debug</span>
-                  </div>
-                  <pre className="p-5 text-[11px] text-[#2d3748] font-mono bg-[#fafbfc] overflow-x-auto whitespace-pre-wrap leading-relaxed">{JSON.stringify(s, null, 2)}</pre>
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="flex gap-2 pt-4">
-            <Link to="/orders" className="btn-amazon-primary text-[13px] px-5 py-2">View Orders</Link>
-            <Link to="/feed" className="btn-amazon text-[13px] px-5 py-2">Browse Second Life</Link>
-            <Link to="/profile" className="btn-amazon text-[13px] px-5 py-2">View Dashboard</Link>
-          </div>
+          )}
         </div>
       </div>
     );
