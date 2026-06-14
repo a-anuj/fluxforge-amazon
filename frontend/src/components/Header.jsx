@@ -42,13 +42,13 @@ export default function Header() {
       {/* Top Nav */}
       <div className="flex items-center justify-between px-4 py-2 gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center pt-1 pb-1 px-2 border border-transparent hover:border-white rounded-sm gap-1">
-          <svg viewBox="0 0 76 22" className="h-6 text-white fill-current" xmlns="http://www.w3.org/2000/svg">
-            <text x="0" y="15" fill="currentColor" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15" letterSpacing="-0.03em">amazon</text>
+        <Link to="/" className="flex items-center pt-1 pb-1 px-2 border border-transparent hover:border-white rounded-sm">
+          <svg viewBox="0 0 90 22" className="h-6" xmlns="http://www.w3.org/2000/svg">
+            <text x="0" y="15" fill="white" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15" letterSpacing="-0.03em">amazon</text>
+            <text x="55" y="15" fill="#febd69" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="14">.in</text>
             <path d="M 6 17 C 14 20, 29 20, 39 17" fill="none" stroke="#febd69" strokeWidth="1.5" strokeLinecap="round" />
             <path d="M 36 15.5 L 39.5 17 L 38 20.5" fill="none" stroke="#febd69" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span className="text-[#febd69] text-[13px] font-bold relative -top-1">.in</span>
         </Link>
 
         {/* Location (Desktop) */}
