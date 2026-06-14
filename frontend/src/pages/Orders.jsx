@@ -14,7 +14,8 @@ export default function Orders() {
     setLoading(true);
     getOrders(currentUser.id)
       .then(async (data) => {
-        setOrders(data);
+        const sorted = [...data].sort((a, b) => b.id - a.id);
+        setOrders(sorted);
         const prods = {};
         await Promise.all(
           data.map(async (o) => {
@@ -30,8 +31,8 @@ export default function Orders() {
   }, [currentUser]);
 
   const statusStyles = {
-    placed: { color: "text-[#c7511f]", label: "Order Placed" },
-    delivered: { color: "text-[#067d62]", label: "Delivered" },
+    placed:   { color: "text-[#c7511f]", label: "Order Placed" },
+    delivered:{ color: "text-[#067d62]", label: "Delivered" },
     returned: { color: "text-amazon-red", label: "Returned" },
   };
 
@@ -123,14 +124,14 @@ export default function Orders() {
                       </div>
 
                       {/* Action buttons */}
-                      <div className="flex gap-2 mt-3">
+                      <div className="flex flex-wrap gap-2 mt-3">
                         {prod && (
                           <Link to={`/products/${prod.id}`} className="btn-amazon text-[12px] px-3 py-1">
                             Buy it again
                           </Link>
                         )}
                         {order.status !== "returned" && (
-                          <Link to="/returns/new" className="btn-amazon text-[12px] px-3 py-1">
+                          <Link to={`/returns/new?orderId=${order.id}`} className="btn-amazon text-[12px] px-3 py-1">
                             Return or Replace
                           </Link>
                         )}
