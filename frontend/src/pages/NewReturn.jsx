@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getOrders, createReturn } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 export default function NewReturn() {
   const { currentUser, refreshUser } = useUser();
+  const [searchParams] = useSearchParams();
+  const preselectedOrderId = searchParams.get("orderId") || "";
   const [orders, setOrders] = useState([]);
-  const [selectedOrder, setSelectedOrder] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(preselectedOrderId);
   const [reason, setReason] = useState("size_mismatch");
   const [imageUrls, setImageUrls] = useState(["", ""]);
   const [loading, setLoading] = useState(true);
@@ -16,7 +18,15 @@ export default function NewReturn() {
   useEffect(() => {
     if (!currentUser) return;
     getOrders(currentUser.id)
-      .then((data) => setOrders(data.filter((o) => o.status !== "returned")))
+      .then((data) => {
+        const returnable = data.filter((o) => o.status !== "returned");
+        setOrders(returnable);
+        // If a preselected order ID came from the URL, ensure it stays selected
+        // (it may not be in the returnable list if already returned, so clear it)
+        if (preselectedOrderId && !returnable.find((o) => String(o.id) === preselectedOrderId)) {
+          setSelectedOrder("");
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [currentUser]);

@@ -130,7 +130,7 @@ export default function Orders() {
                           </Link>
                         )}
                         {order.status !== "returned" && (
-                          <Link to="/returns/new" className="btn-amazon text-[12px] px-3 py-1">
+                          <Link to={`/returns/new?orderId=${order.id}`} className="btn-amazon text-[12px] px-3 py-1">
                             Return or Replace
                           </Link>
                         )}
