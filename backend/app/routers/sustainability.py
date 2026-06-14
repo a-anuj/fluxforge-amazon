@@ -5,6 +5,7 @@ then returns a structured disposition recommendation (RESALE / REFURBISH / RECYC
 """
 
 import json
+import logging
 import os
 import re
 
@@ -13,6 +14,21 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/sustainability", tags=["sustainability"])
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logger = logging.getLogger("sustainability")
+logger.setLevel(logging.DEBUG)
+
+# Console handler with rich formatting
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        "\n🔬 [%(levelname)s] %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 # ── Bedrock configuration ─────────────────────────────────────────────────────
 
@@ -96,19 +112,27 @@ def _verify_product_match(
     """
     Ask Nova Lite whether the uploaded image actually shows the claimed product.
     Returns (is_match: bool, reason: str).
+
+    IMPORTANT: The verification is intentionally lenient — we only reject
+    completely unrelated images (e.g., a shoe when returning headphones).
+    Same-category products from the same brand always pass.
     """
-    prompt = f"""You are a product identity verifier for Amazon Returns.
+    prompt = f"""You are a lenient product identity verifier for Amazon Returns.
 
 The customer claims they are returning:
   Product: "{product_name}"
   Category: "{product_category or 'unknown'}"
 
-Examine the image carefully and decide whether it plausibly shows this product.
+Examine the image and decide whether it PLAUSIBLY shows this type of product.
 
-Rules:
-- Answer YES if the image shows the same product or the same category/type as claimed.
-- Answer NO if the image shows a completely different product, a person, a blank wall, random objects, or anything clearly unrelated.
-- Be lenient — the photo may be from a different angle, without packaging, or slightly worn.
+CRITICAL RULES — BE VERY LENIENT:
+- Answer YES if the image shows ANY product from the same general category (e.g., any running shoe for a running shoe claim, any earbuds for earbuds claim, any backpack for a backpack claim).
+- Answer YES if the image shows the same brand, even if it's a different model.
+- Answer YES if the image shows the product from an unusual angle, without packaging, used, worn, or in different lighting.
+- Answer YES if you're not 100% sure — give the customer the benefit of the doubt.
+- ONLY answer NO if the image shows something COMPLETELY DIFFERENT from the claimed category (e.g., a food item when claiming to return electronics, a person selfie, a blank wall, a screenshot, or random unrelated objects).
+
+The goal is to catch obvious fraud (wrong category entirely), NOT to verify exact model numbers.
 
 Reply in this exact format (two lines, nothing else):
 MATCH: YES
@@ -124,14 +148,17 @@ REASON: One concise sentence explaining your decision."""
 
     try:
         client = _get_bedrock_client()
+        logger.info(f"Product verification — calling Bedrock for '{product_name}' (category: {product_category})")
         response = client.converse(
             modelId=MODEL_ID,
             messages=[message],
-            inferenceConfig={"maxTokens": 120, "temperature": 0.0},
+            inferenceConfig={"maxTokens": 120, "temperature": 0.1},
         )
         text = _extract_text(response)
+        logger.info(f"Product verification — raw response:\n  {text}")
     except Exception as exc:
         # If verification itself fails, skip the check (don't block the user)
+        logger.warning(f"Product verification — Bedrock call failed, skipping: {exc}")
         return True, f"Verification skipped due to error: {exc}"
 
     # Parse MATCH: YES/NO
@@ -144,6 +171,8 @@ REASON: One concise sentence explaining your decision."""
 
     is_match = "YES" in match_line.upper()
     reason = reason_line.split(":", 1)[-1].strip() if reason_line else text
+
+    logger.info(f"Product verification — result: {'✅ MATCH' if is_match else '❌ NO MATCH'} | Reason: {reason}")
 
     return is_match, reason
 
@@ -163,19 +192,21 @@ async def verify_product(
     """
     Accept a product image and verify it matches the claimed product name.
     """
+    logger.info(f"=== /verify — product_name='{product_name}', category='{product_category}', file='{image.filename}' ===")
+
     content_type = (image.content_type or "").lower()
     if content_type not in ALLOWED_MIME:
+        logger.warning(f"Rejected — unsupported MIME type: {content_type}")
         raise HTTPException(
             status_code=422,
             detail=f"Unsupported image type '{content_type}'. Use JPEG, PNG, WebP, or GIF.",
         )
 
     raw = await image.read()
+    logger.info(f"File received — size: {len(raw)} bytes, content_type: {content_type}")
+
     if len(raw) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="Image exceeds the 5 MB size limit.",
-        )
+        raise HTTPException(status_code=413, detail="Image exceeds the 5 MB size limit.")
     if not raw:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
 
@@ -188,10 +219,12 @@ async def verify_product(
     img_format = fmt_map[content_type]
 
     if not product_name.strip():
+        logger.info("No product name provided — skipping verification")
         return {"matched": True, "reason": "No product name provided for verification."}
 
     is_match, reason = _verify_product_match(raw, img_format, product_name, product_category)
     if not is_match:
+        logger.warning(f"❌ Product mismatch — rejecting upload. Reason: {reason}")
         raise HTTPException(
             status_code=409,
             detail={
@@ -203,6 +236,7 @@ async def verify_product(
             },
         )
 
+    logger.info(f"✅ Product verified successfully")
     return {"matched": True, "reason": reason}
 
 
@@ -220,38 +254,55 @@ async def assess_return(
     """
     from app.services.media_validator import validate_image as quality_check
 
+    logger.info(f"=== /assess — product_name='{product_name}', category='{product_category}', file='{image.filename}' ===")
+
     # ── Validate image ────────────────────────────────────────────────────────
     content_type = (image.content_type or "").lower()
     if content_type not in ALLOWED_MIME:
+        logger.warning(f"Rejected — unsupported MIME type: {content_type}")
         raise HTTPException(
             status_code=422,
             detail=f"Unsupported image type '{content_type}'. Use JPEG, PNG, WebP, or GIF.",
         )
 
     raw = await image.read()
+    logger.info(f"File received — size: {len(raw)} bytes, content_type: {content_type}")
+
     if len(raw) > MAX_IMAGE_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="Image exceeds the 5 MB size limit.",
-        )
+        raise HTTPException(status_code=413, detail="Image exceeds the 5 MB size limit.")
     if not raw:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
 
     # ── Quality Guardrail — validate before expensive Bedrock call ────────────
+    logger.info("Running quality guardrail checks...")
     quality_result = quality_check(raw, filename=image.filename or "image.jpg")
+    logger.info(f"Quality guardrail — status: {quality_result.status.value} | metadata: {quality_result.metadata}")
+
     if not quality_result.passed:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "type": "quality_check_failed",
-                "message": "Image quality is insufficient for AI analysis.",
-                "issues": [
-                    {"code": i.code, "message": i.message, "suggestion": i.suggestion}
-                    for i in quality_result.issues
-                ],
-                "metadata": quality_result.metadata,
-            },
-        )
+        # Log each issue but DON'T reject for file_too_small on web-downloaded images
+        # or minor blur on compressed images — only block on truly bad quality
+        blocking_issues = [
+            i for i in quality_result.issues
+            if i.code not in ("file_too_small",)  # Don't block on small file size alone
+        ]
+
+        if blocking_issues:
+            for issue in blocking_issues:
+                logger.warning(f"  Quality issue [{issue.code}]: {issue.message}")
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "type": "quality_check_failed",
+                    "message": "Image quality is insufficient for AI analysis.",
+                    "issues": [
+                        {"code": i.code, "message": i.message, "suggestion": i.suggestion}
+                        for i in blocking_issues
+                    ],
+                    "metadata": quality_result.metadata,
+                },
+            )
+        else:
+            logger.info("Quality guardrail — minor issues (non-blocking), proceeding to Bedrock")
 
     fmt_map = {
         "image/jpeg": "jpeg",
@@ -263,8 +314,10 @@ async def assess_return(
 
     # ── Step 1: Verify the image matches the ordered product ──────────────────
     if product_name.strip():
+        logger.info(f"Step 1: Verifying product identity...")
         is_match, reason = _verify_product_match(raw, img_format, product_name, product_category)
         if not is_match:
+            logger.warning(f"❌ Product mismatch — rejecting. Reason: {reason}")
             raise HTTPException(
                 status_code=409,
                 detail={
@@ -276,15 +329,19 @@ async def assess_return(
                     "reason": reason,
                 },
             )
+        logger.info(f"✅ Product verified — proceeding to assessment")
+    else:
+        logger.info("No product name provided — skipping verification step")
 
     # ── Step 2: Run full sustainability assessment ────────────────────────────
+    logger.info("Step 2: Running full sustainability assessment via Bedrock...")
     message = {
         "role": "user",
         "content": [
             {
                 "image": {
                     "format": img_format,
-                    "source": {"bytes": raw},   # raw bytes — boto3 handles encoding
+                    "source": {"bytes": raw},
                 }
             },
             {
@@ -304,7 +361,9 @@ async def assess_return(
             messages=[message],
             inferenceConfig={"maxTokens": 1024, "temperature": 0.1},
         )
+        logger.info(f"Bedrock assessment — raw response:\n  {_extract_text(response)[:300]}")
     except Exception as exc:
+        logger.error(f"❌ Bedrock assessment call failed: {exc}")
         raise HTTPException(
             status_code=502,
             detail=f"Bedrock call failed: {exc}",
@@ -314,9 +373,12 @@ async def assess_return(
     try:
         result = _parse_json_response(response)
     except ValueError as exc:
+        logger.error(f"❌ Failed to parse Bedrock response: {exc}")
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     # Normalise classification to uppercase for consistent badge rendering
     result["classification"] = str(result.get("classification", "")).upper()
+
+    logger.info(f"✅ Assessment complete — classification: {result['classification']}, score: {result.get('condition_score')}, confidence: {result.get('confidence')}")
 
     return JSONResponse(content=result)

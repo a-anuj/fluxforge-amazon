@@ -10,6 +10,7 @@ Checks performed:
 """
 
 import io
+import logging
 import struct
 import tempfile
 from dataclasses import dataclass, field
@@ -18,18 +19,28 @@ from pathlib import Path
 
 from PIL import Image, ImageStat, ImageFilter
 
+# ── Logging ────────────────────────────────────────────────────────────
+logger = logging.getLogger("media_validator")
+logger.setLevel(logging.DEBUG)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("📸 [%(levelname)s] %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 # ── Configuration ──────────────────────────────────────────────────────
 
 # Image constraints
 MIN_IMAGE_WIDTH = 640
 MIN_IMAGE_HEIGHT = 480
-MIN_IMAGE_FILE_SIZE = 50 * 1024        # 50 KB
+MIN_IMAGE_FILE_SIZE = 10 * 1024        # 10 KB (lowered — web images can be small but still good quality)
 MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP", "MPO"}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 # Blur detection (Laplacian variance threshold)
-BLUR_THRESHOLD = 100.0  # below this = too blurry
+BLUR_THRESHOLD = 50.0  # below this = too blurry (lowered for web-downloaded images)
 
 # Brightness thresholds (0-255 scale)
 MIN_BRIGHTNESS = 30
@@ -224,6 +235,12 @@ def validate_image(file_bytes: bytes, filename: str = "image.jpg") -> Validation
 
     # Final result
     status = ValidationStatus.FAILED if issues else ValidationStatus.PASSED
+
+    if issues:
+        logger.warning(f"Image validation FAILED — {len(issues)} issue(s): {[i.code for i in issues]}")
+    else:
+        logger.info(f"Image validation PASSED — {metadata.get('resolution', '?')}, blur={metadata.get('blur_score', 0):.0f}, brightness={metadata.get('mean_brightness', 0):.0f}")
+
     return ValidationResult(status=status, issues=issues, metadata=metadata)
 
 
