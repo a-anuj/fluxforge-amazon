@@ -24,7 +24,7 @@ function ScoreBar({ value, max = 100, color = "#067d62" }) {
 }
 
 // ── Upload Zone ────────────────────────────────────────────────────────────────
-function UploadZone({ onFile, preview }) {
+function UploadZone({ onFile, preview, qualityStatus }) {
   const inputRef = useRef();
   const [dragging, setDragging] = useState(false);
 
@@ -35,6 +35,10 @@ function UploadZone({ onFile, preview }) {
     if (file) onFile(file);
   };
 
+  const borderColor = qualityStatus === "passed" ? "border-[#067d62]" :
+    qualityStatus === "failed" ? "border-[#b12704]" :
+    dragging ? "border-amazon-orange" : "border-[#adb1b8]";
+
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
@@ -42,7 +46,7 @@ function UploadZone({ onFile, preview }) {
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
       className={`relative border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200 flex flex-col items-center justify-center text-center
-        ${dragging ? "border-amazon-orange bg-[#fff8f0]" : "border-[#adb1b8] hover:border-amazon-orange hover:bg-[#fffdf9]"}
+        ${borderColor} ${qualityStatus === "passed" ? "bg-[#f0f9f4]" : qualityStatus === "failed" ? "bg-[#fff5f5]" : "hover:border-amazon-orange hover:bg-[#fffdf9]"}
         ${preview ? "h-[180px]" : "h-[140px] py-6"}`}
     >
       <input
@@ -73,6 +77,58 @@ function UploadZone({ onFile, preview }) {
       )}
     </div>
   );
+}
+
+// ── Quality Check Badge ────────────────────────────────────────────────────────
+function QualityBadge({ status, metadata, issues }) {
+  if (status === "checking") {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-[#f0f2f2] rounded-lg animate-pulse">
+        <span className="text-[14px]">🔍</span>
+        <span className="text-[12px] text-amazon-text-secondary">Checking image quality...</span>
+      </div>
+    );
+  }
+
+  if (status === "passed") {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-[#f0f9f4] border border-[#d4edda] rounded-lg">
+        <span className="text-[14px]">✅</span>
+        <div className="flex-1">
+          <span className="text-[12px] font-bold text-[#067d62]">Image quality verified</span>
+          {metadata && (
+            <span className="text-[10px] text-amazon-text-secondary ml-2">
+              {metadata.resolution} · Sharpness: {metadata.blur_score?.toFixed(0)}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <div className="px-3 py-2 bg-[#fff5f5] border border-[#ffd0d0] rounded-lg">
+        <div className="flex items-center gap-2">
+          <span className="text-[14px]">❌</span>
+          <span className="text-[12px] font-bold text-[#b12704]">Image quality insufficient</span>
+        </div>
+        {issues && issues.length > 0 && (
+          <div className="mt-1.5 space-y-1">
+            {issues.map((issue, i) => (
+              <div key={i} className="text-[11px] text-amazon-text">
+                <span className="font-bold">• {issue.message}</span>
+                <br />
+                <span className="text-amazon-text-secondary ml-2">💡 {issue.suggestion}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ── Result Card ────────────────────────────────────────────────────────────────
@@ -169,19 +225,51 @@ function ResultCard({ data }) {
 export default function SustainabilityModal({ order, onClose }) {
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [qualityStatus, setQualityStatus] = useState("idle"); // idle | checking | passed | failed
+  const [qualityMeta, setQualityMeta] = useState(null);
+  const [qualityIssues, setQualityIssues] = useState([]);
   const [status, setStatus] = useState("idle"); // idle | uploading | done | error
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
-  const handleFile = (f) => {
+  const handleFile = async (f) => {
     setFile(f);
     setResult(null);
     setError("");
     setStatus("idle");
+    setQualityStatus("checking");
+    setQualityMeta(null);
+    setQualityIssues([]);
+
+    // Show preview immediately
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target.result);
     reader.readAsDataURL(f);
+
+    // Step 1: Run quality check immediately on file selection
+    try {
+      const form = new FormData();
+      form.append("file", f);
+      const res = await fetch(`${BASE_URL}/media/validate/image`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+
+      if (data.passed) {
+        setQualityStatus("passed");
+        setQualityMeta(data.metadata);
+      } else {
+        setQualityStatus("failed");
+        setQualityIssues(data.issues || []);
+        setQualityMeta(data.metadata);
+      }
+    } catch (err) {
+      // If quality check fails (network etc), don't block — allow assessment
+      console.warn("Quality check failed:", err);
+      setQualityStatus("passed");
+    }
   };
 
   const handleAnalyze = async () => {
@@ -205,7 +293,12 @@ export default function SustainabilityModal({ order, onClose }) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(err.detail || `Error ${res.status}`);
+        // Handle structured error details
+        const detail = err.detail;
+        if (typeof detail === "object" && detail.message) {
+          throw new Error(detail.message);
+        }
+        throw new Error(detail || `Error ${res.status}`);
       }
       const data = await res.json();
       clearInterval(ticker);
@@ -225,7 +318,12 @@ export default function SustainabilityModal({ order, onClose }) {
     setError("");
     setStatus("idle");
     setProgress(0);
+    setQualityStatus("idle");
+    setQualityMeta(null);
+    setQualityIssues([]);
   };
+
+  const canAnalyze = file && qualityStatus === "passed" && status !== "uploading";
 
   return (
     /* Backdrop */
@@ -260,10 +358,24 @@ export default function SustainabilityModal({ order, onClose }) {
             <>
               <div>
                 <p className="text-[12px] font-bold text-amazon-text mb-2">
-                  Upload a photo of the returned item
+                  Step 1: Upload a photo of the returned item
                 </p>
-                <UploadZone onFile={handleFile} preview={preview} />
+                <UploadZone onFile={handleFile} preview={preview} qualityStatus={qualityStatus} />
               </div>
+
+              {/* Quality check result — shown immediately after file selection */}
+              <QualityBadge
+                status={qualityStatus}
+                metadata={qualityMeta}
+                issues={qualityIssues}
+              />
+
+              {/* Step 2 label — only shown after quality passes */}
+              {qualityStatus === "passed" && status === "idle" && (
+                <p className="text-[12px] font-bold text-amazon-text">
+                  Step 2: Submit for AI analysis
+                </p>
+              )}
 
               {/* Progress bar */}
               {status === "uploading" && (
@@ -292,14 +404,24 @@ export default function SustainabilityModal({ order, onClose }) {
                 </div>
               )}
 
-              {/* CTA */}
+              {/* CTA — disabled until quality check passes */}
               <button
                 onClick={handleAnalyze}
-                disabled={!file || status === "uploading"}
+                disabled={!canAnalyze}
                 className="btn-amazon-primary w-full py-2.5 text-[14px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {status === "uploading" ? "Analyzing…" : "🔬 Analyze with AI"}
+                {status === "uploading" ? "Analyzing…" :
+                 qualityStatus === "checking" ? "Checking quality…" :
+                 qualityStatus === "failed" ? "Image quality insufficient — try another photo" :
+                 "🔬 Analyze with AI"}
               </button>
+
+              {/* Tip when quality failed */}
+              {qualityStatus === "failed" && (
+                <p className="text-[11px] text-amazon-text-secondary text-center">
+                  Upload a new image that meets the quality requirements above
+                </p>
+              )}
             </>
           )}
 

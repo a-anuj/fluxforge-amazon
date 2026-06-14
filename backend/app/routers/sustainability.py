@@ -279,16 +279,13 @@ async def assess_return(
     logger.info(f"Quality guardrail — status: {quality_result.status.value} | metadata: {quality_result.metadata}")
 
     if not quality_result.passed:
-        # Log each issue but DON'T reject for file_too_small on web-downloaded images
-        # or minor blur on compressed images — only block on truly bad quality
-        blocking_issues = [
-            i for i in quality_result.issues
-            if i.code not in ("file_too_small",)  # Don't block on small file size alone
-        ]
+        # Only BLOCK on truly fatal issues — corrupt file or no content at all
+        fatal_codes = {"corrupt_file", "no_content_detected", "invalid_format"}
+        fatal_issues = [i for i in quality_result.issues if i.code in fatal_codes]
 
-        if blocking_issues:
-            for issue in blocking_issues:
-                logger.warning(f"  Quality issue [{issue.code}]: {issue.message}")
+        if fatal_issues:
+            for issue in fatal_issues:
+                logger.warning(f"  ❌ FATAL quality issue [{issue.code}]: {issue.message}")
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -296,13 +293,16 @@ async def assess_return(
                     "message": "Image quality is insufficient for AI analysis.",
                     "issues": [
                         {"code": i.code, "message": i.message, "suggestion": i.suggestion}
-                        for i in blocking_issues
+                        for i in fatal_issues
                     ],
                     "metadata": quality_result.metadata,
                 },
             )
         else:
-            logger.info("Quality guardrail — minor issues (non-blocking), proceeding to Bedrock")
+            # Non-fatal issues (blur, brightness, size) — log warning but proceed
+            for issue in quality_result.issues:
+                logger.info(f"  ⚠️ Non-blocking quality warning [{issue.code}]: {issue.message}")
+            logger.info("Quality guardrail — proceeding despite minor issues")
 
     fmt_map = {
         "image/jpeg": "jpeg",

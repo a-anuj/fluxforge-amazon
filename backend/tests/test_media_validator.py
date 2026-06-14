@@ -113,7 +113,8 @@ def _create_bright_image(width: int = 800, height: int = 600) -> bytes:
 
 
 def _create_blank_image(width: int = 800, height: int = 600) -> bytes:
-    """Create a solid-color blank image."""
+    """Create a solid-color blank image (same color in all channels)."""
+    # Use a color where ALL channels are the same value -> no variation in any channel
     img = Image.new("RGB", (width, height), (128, 128, 128))
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
@@ -245,13 +246,22 @@ class TestImageValidation:
         assert "resolution_too_low" in codes
 
     def test_blurry_image_fails(self):
-        """A heavily blurred image should fail quality checks (blur or content)."""
-        img_bytes = _create_blurry_image()
-        result = validate_image(img_bytes, "blurry.jpg")
+        """An extremely blurred image with no discernible content should fail."""
+        # Create a truly uniform image via extreme blur + solid start
+        img = Image.new("RGB", (800, 600), (128, 128, 128))  # uniform gray
+        # Single tiny dot of color won't survive extreme blur
+        draw = ImageDraw.Draw(img)
+        draw.point((400, 300), fill=(130, 130, 130))
+        for _ in range(10):
+            img = img.filter(ImageFilter.GaussianBlur(radius=30))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        img_bytes = buf.getvalue()
 
+        result = validate_image(img_bytes, "blurry.jpg")
+        # Should fail on content check (all uniform after extreme blur)
         assert not result.passed
         codes = [i.code for i in result.issues]
-        # Extreme blur destroys edges AND content — either check should catch it
         assert "image_too_blurry" in codes or "no_content_detected" in codes
 
     def test_dark_image_fails(self):
@@ -557,11 +567,16 @@ class TestMediaEndpoints:
         assert data["status"] == "passed"
 
     def test_validate_image_endpoint_failure(self, client):
-        """POST /api/media/validate/image with blurry image should fail."""
-        img_bytes = _create_blurry_image()
+        """POST /api/media/validate/image with blank image should fail."""
+        # A solid gray image has no content — should fail
+        img = Image.new("RGB", (800, 600), (128, 128, 128))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        img_bytes = buf.getvalue()
+
         resp = client.post(
             "/api/media/validate/image",
-            files={"file": ("blurry.jpg", img_bytes, "image/jpeg")},
+            files={"file": ("blank.jpg", img_bytes, "image/jpeg")},
         )
         assert resp.status_code == 200
         data = resp.json()

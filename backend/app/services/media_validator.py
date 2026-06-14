@@ -223,10 +223,19 @@ def validate_image(file_bytes: bytes, filename: str = "image.jpg") -> Validation
         ))
 
     # 9. Content presence check (is it a blank/solid image?)
-    std_dev = stat.stddev[0]
-    metadata["std_deviation"] = round(std_dev, 2)
+    # Check across RGB channels — grayscale can miss color-on-color images
+    # (e.g., red product on red background looks uniform in grayscale)
+    rgb_stat = ImageStat.Stat(img)
+    # Use max standard deviation across R, G, B channels
+    rgb_std_devs = rgb_stat.stddev  # [R_std, G_std, B_std]
+    max_std_dev = max(rgb_std_devs) if rgb_std_devs else 0
+    # Also keep grayscale stddev as fallback
+    gray_std_dev = stat.stddev[0]
+    effective_std = max(max_std_dev, gray_std_dev)
+    metadata["std_deviation"] = round(effective_std, 2)
+    metadata["rgb_std_devs"] = [round(s, 2) for s in rgb_std_devs]
 
-    if std_dev < MIN_STD_DEVIATION:
+    if effective_std < MIN_STD_DEVIATION:
         issues.append(ValidationIssue(
             code="no_content_detected",
             message="Image appears to be blank or a solid color.",
