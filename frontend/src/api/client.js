@@ -35,6 +35,7 @@ export const getGreenCredits = (id) => request(`/users/${id}/green-credits`);
 export const getProducts = () => request("/products/");
 export const getProduct = (id) => request(`/products/${id}`);
 export const getAlternatives = (id) => request(`/products/${id}/alternatives`);
+export const getProductConfidence = (id) => request(`/products/${id}/confidence`);
 
 // ── Orders ────────────────────────────────────────────────────
 export const createOrder = (userId, productId) =>
