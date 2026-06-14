@@ -61,51 +61,22 @@ def get_purchase_advice(product, user=None) -> dict:
     }
 
 
-def get_return_advice(product, condition_score: float) -> dict:
+def get_return_advice(product, condition_score: float, return_period_over: bool = False) -> dict:
     """
-    Post-return sustainability advice — suggests alternatives to returning.
-    
+    Post-return sustainability advice — only shows 'List on Amazon ReLife'
+    and only when the 7-day return window has elapsed.
+
     🔌 STUB — replace with Bedrock call for context-aware suggestions.
     """
-    category = product.category.lower() if product.category else "general"
-    repair_cost = product.repair_cost_estimate or random.randint(100, 500)
-
     from app.services.credit_engine import calculate_credits
     from app.services.impact_calculator import calculate_action_impact
 
     suggestions = []
 
-    # Repair suggestion (if condition is moderate)
-    if condition_score >= 50:
-        repair_credits = calculate_credits("repair", category)
-        repair_impact = calculate_action_impact("repair", category)
-        suggestions.append({
-            "action": "repair",
-            "title": "🔧 Repair & Keep",
-            "message": f"Repairing this item costs ₹{int(repair_cost)} and prevents "
-                       f"{repair_impact['ewaste_prevented']} kg of e-waste.",
-            "credits": repair_credits,
-            "cost": int(repair_cost),
-            "impact": repair_impact,
-        })
-
-    # Donate suggestion
-    if condition_score >= 40:
-        donate_credits = calculate_credits("donate", category)
-        donate_impact = calculate_action_impact("donate", category)
-        suggestions.append({
-            "action": "donate",
-            "title": "🎁 Donate to a Cause",
-            "message": f"Donate this product to a nearby school or charity and earn "
-                       f"{donate_credits} Green Credits.",
-            "credits": donate_credits,
-            "impact": donate_impact,
-        })
-
-    # Resell suggestion
-    if condition_score >= 60:
-        resell_credits = calculate_credits("resell", category)
-        resell_impact = calculate_action_impact("resell", category)
+    # List on Amazon ReLife — only if return window is over AND condition is good
+    if return_period_over and condition_score >= 60:
+        resell_credits = calculate_credits("resell", "general")
+        resell_impact = calculate_action_impact("resell", "general")
         suggestions.append({
             "action": "resell",
             "title": "🔄 List on Amazon ReLife",
@@ -117,9 +88,9 @@ def get_return_advice(product, condition_score: float) -> dict:
 
     return {
         "advice_type": "return",
-        "title": "♻️ Before You Return",
-        "message": "Consider these greener alternatives to earn Green Credits:",
-        "stats": {"condition_score": condition_score, "repair_cost": int(repair_cost)},
+        "title": "♻️ Second Chance Options",
+        "message": "Your item may qualify for a second life:" if suggestions else "No second-chance options available yet — check back after the 7-day return window.",
+        "stats": {"condition_score": condition_score},
         "suggestions": suggestions,
         "green_credits_potential": max([s["credits"] for s in suggestions]) if suggestions else 0,
     }

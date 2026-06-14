@@ -105,7 +105,9 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
             db.commit()
 
     # Get sustainability advice for response
-    advice = get_return_advice(product, assessment["condition_score"]) if product else None
+    # NOTE: Order model has no created_at column yet — return_period_over defaults False
+    # (ReLife listing hidden) until a timestamp migration is added to the orders table.
+    advice = get_return_advice(product, assessment["condition_score"], return_period_over=False) if product else None
 
     return {
         "id": return_item.id,
