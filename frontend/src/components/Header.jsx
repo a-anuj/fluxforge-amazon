@@ -169,6 +169,9 @@ export default function Header() {
         <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white flex items-center gap-1">
           Second Life
         </Link>
+        <Link to="/community" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
+          ♻️ Community
+        </Link>
         <Link to="/profile" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
           Dashboard
         </Link>

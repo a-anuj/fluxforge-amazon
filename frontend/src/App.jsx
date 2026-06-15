@@ -7,6 +7,7 @@ import Orders from "./pages/Orders";
 import NewReturn from "./pages/NewReturn";
 import Feed from "./pages/Feed";
 import ListingDetail from "./pages/ListingDetail";
+import Community from "./pages/Community";
 import Profile from "./pages/Profile";
 import Cart from "./pages/Cart";
 
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/orders" element={<Orders />} />
             <Route path="/returns/new" element={<NewReturn />} />
             <Route path="/feed" element={<Feed />} />
+            <Route path="/community" element={<Community />} />
             <Route path="/listings/:id" element={<ListingDetail />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/cart" element={<Cart />} />

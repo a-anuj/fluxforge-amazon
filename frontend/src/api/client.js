@@ -92,3 +92,28 @@ export const redeemCredits = (userId, type, credits) =>
     body: JSON.stringify({ user_id: userId, type, credits }),
   });
 export const getRedemptions = (userId) => request(`/redemptions/history?user_id=${userId}`);
+
+// ── Community Marketplace ─────────────────────────────────────
+export const getCommunityListings = (userId) =>
+  request(`/community/listings${userId ? `?user_id=${userId}` : ""}`);
+export const getNearbyListings = (userId) =>
+  request(`/community/listings/nearby?user_id=${userId}`);
+export const getCommunityListing = (id, userId) =>
+  request(`/community/listings/${id}${userId ? `?user_id=${userId}` : ""}`);
+export const createCommunityListing = (data) =>
+  request("/community/listings", { method: "POST", body: JSON.stringify(data) });
+export const buyCommunityListing = (listingId, buyerId) =>
+  request(`/community/listings/${listingId}/buy?buyer_id=${buyerId}`, { method: "PUT" });
+export const suggestPrice = (data) =>
+  request("/community/price-suggest", { method: "POST", body: JSON.stringify(data) });
+export const getNotifications = (userId) =>
+  request(`/community/notifications?user_id=${userId}`);
+export const getUnreadCount = (userId) =>
+  request(`/community/notifications/unread-count?user_id=${userId}`);
+export const markNotificationsRead = (userId) =>
+  request(`/community/notifications/read?user_id=${userId}`, { method: "PUT" });
+export const getLeaderboard = () => request("/community/leaderboard");
+export const createAlert = (userId, category, pincode) =>
+  request(`/community/alerts?user_id=${userId}&category=${encodeURIComponent(category)}${pincode ? `&pincode=${pincode}` : ""}`, { method: "POST" });
+export const getAlerts = (userId) => request(`/community/alerts?user_id=${userId}`);
+

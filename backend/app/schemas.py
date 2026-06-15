@@ -29,6 +29,10 @@ class UserOut(BaseModel):
     products_repaired: int = 0
     products_resold: int = 0
 
+    # Location
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+
     model_config = {"from_attributes": True}
 
 
@@ -39,6 +43,8 @@ class UserUpdate(BaseModel):
     budget_min: Optional[int] = None
     budget_max: Optional[int] = None
     interests: Optional[str] = None
+    city: Optional[str] = None
+    pincode: Optional[str] = None
 
 
 # ── Products ───────────────────────────────────────────────────────────
@@ -265,3 +271,91 @@ class RedemptionOut(BaseModel):
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+
+# ── Community Resale Marketplace ─────────────────────────────
+
+class CommunityListingCreate(BaseModel):
+    seller_id: int
+    title: str
+    description: Optional[str] = None
+    category: str
+    brand: Optional[str] = None
+    asking_price: float
+    condition: str                            # "like_new" | "good" | "fair" | "poor"
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    allows_local_pickup: bool = False
+
+
+class SellerOut(BaseModel):
+    id: int
+    name: str
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    green_credits: int = 0
+    lifetime_credits: int = 0
+    products_resold: int = 0
+    model_config = {"from_attributes": True}
+
+
+class CommunityListingOut(BaseModel):
+    id: int
+    seller_id: int
+    title: str
+    description: Optional[str] = None
+    category: str
+    brand: Optional[str] = None
+    asking_price: float
+    suggested_price: Optional[float] = None
+    condition: str
+    image_urls: Optional[str] = None
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    allows_local_pickup: bool = False
+    status: str
+    ai_condition_summary: Optional[str] = None
+    ai_price_reasoning: Optional[str] = None
+    ewaste_kg_saved: float = 0.0
+    seller_trust_score: float = 0.0
+    seller: Optional[SellerOut] = None
+    is_local: bool = False                   # computed: same pincode as requesting user
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PriceSuggestRequest(BaseModel):
+    category: str
+    brand: Optional[str] = None
+    condition: str                            # "like_new" | "good" | "fair" | "poor"
+    description: Optional[str] = None
+    original_price: Optional[float] = None
+
+
+class PriceSuggestResponse(BaseModel):
+    suggested_price: float
+    price_range_low: float
+    price_range_high: float
+    reasoning: str
+    depreciation_pct: float
+
+
+class CommunityNotificationOut(BaseModel):
+    id: int
+    user_id: int
+    listing_id: Optional[int] = None
+    message: str
+    is_read: bool
+    created_at: Optional[datetime] = None
+    model_config = {"from_attributes": True}
+
+
+class LeaderboardEntry(BaseModel):
+    user_id: int
+    name: str
+    city: Optional[str] = None
+    ewaste_kg_saved: float
+    listings_sold: int
+    green_credits: int
+    level: str
