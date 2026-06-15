@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getProduct, getAlternatives, createOrder, getProductConfidence, getProductImpact, getRefurbishedAlt, getSustainabilityAdvice, getDeliveryOptions } from "../api/client";
 import { useUser } from "../context/UserContext";
@@ -33,7 +33,7 @@ function ScoreRow({ label, score, sublabel, delay = 0 }) {
 
 export default function ProductDetail() {
   const { id } = useParams();
-  const { currentUser, refreshUser } = useUser();
+  const { currentUser, refreshUser, cart, addToCart, removeFromCart, isInCart } = useUser();
   const [product, setProduct] = useState(null);
   const [alternatives, setAlternatives] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +49,9 @@ export default function ProductDetail() {
   const [deliveryOptions, setDeliveryOptions] = useState([]);
   const [selectedDelivery, setSelectedDelivery] = useState("standard");
 
+  const ratingCount = useMemo(() => Math.floor(Math.random() * 500 + 100), [id]);
+  const discountPct = useMemo(() => Math.floor(Math.random() * 20 + 5), [id]);
+
   useEffect(() => {
     setLoading(true); setOrderResult(null); setReturnFreqScore(null); setComfortScore(null);
     Promise.all([getProduct(id), getAlternatives(id), getProductConfidence(id), getProductImpact(id), getRefurbishedAlt(id), getSustainabilityAdvice(id)])
@@ -56,7 +59,7 @@ export default function ProductDetail() {
         setProduct(p); setAlternatives(alts);
         setReturnFreqScore(conf.return_frequency_score); setReturnLabel(conf.return_label);
         setImpact(imp); setRefurbishedAlt(refurb); setAdvice(adv);
-        if (p) getDeliveryOptions(p.category).then(setDeliveryOptions).catch(() => {});
+        if (p) getDeliveryOptions(p.category).then(setDeliveryOptions).catch(() => { });
       })
       .catch(console.error).finally(() => setLoading(false));
   }, [id]);
@@ -65,7 +68,7 @@ export default function ProductDetail() {
     if (!product || !currentUser) return;
     let pts = 0; const reasons = [];
     const userSizes = {};
-    if (currentUser.sizes) currentUser.sizes.split(",").forEach(pair => { const [k,v] = pair.split(":"); if (k&&v) userSizes[k.trim().toLowerCase()] = v.trim().toLowerCase(); });
+    if (currentUser.sizes) currentUser.sizes.split(",").forEach(pair => { const [k, v] = pair.split(":"); if (k && v) userSizes[k.trim().toLowerCase()] = v.trim().toLowerCase(); });
     if (Object.values(userSizes).includes((product.size || "").toLowerCase())) { pts += 5; reasons.push("size fits you"); }
     if ((currentUser.brand_prefs || "").split(",").map(b => b.trim().toLowerCase()).includes(product.brand.toLowerCase())) { pts += 3; reasons.push("preferred brand"); }
     if ((!currentUser.budget_min || product.price >= currentUser.budget_min) && (!currentUser.budget_max || product.price <= currentUser.budget_max)) { pts += 2; reasons.push("within your budget"); }
@@ -130,14 +133,14 @@ export default function ProductDetail() {
             <p className="text-[14px] text-amazon-link mt-1">Visit the {product.brand} Store</p>
             <div className="flex items-center gap-2 mt-2 pb-3 border-b border-amazon-border">
               <span className="star-rating text-[16px]">★★★★☆</span>
-              <span className="text-[14px] text-amazon-link">{Math.floor(Math.random() * 500 + 100)} ratings</span>
+              <span className="text-[14px] text-amazon-link">{ratingCount} ratings</span>
             </div>
             <div className="mt-3 pb-3 border-b border-amazon-border">
               <div className="flex items-baseline gap-2">
-                <span className="text-[13px] text-amazon-red">-{Math.floor(Math.random() * 20 + 5)}%</span>
+                <span className="text-[13px] text-amazon-red">-{discountPct}%</span>
                 <span className="text-[28px] text-amazon-text"><span className="text-[13px] align-top relative top-[4px]">₹</span>{Math.floor(product.price).toLocaleString("en-IN")}</span>
               </div>
-              <p className="text-[12px] text-amazon-text-secondary">M.R.P.: <span className="line-through">₹{Math.floor(product.price * 1.2).toLocaleString("en-IN")}</span></p>
+              <p className="text-[12px] text-amazon-text-secondary">M.R.P.: <span className="line-through">₹{Math.floor(product.price * (1 + discountPct/100)).toLocaleString("en-IN")}</span></p>
             </div>
             {product.size && <div className="mt-3 pb-3 border-b border-amazon-border"><p className="text-[14px] text-amazon-text"><b>Size:</b> {product.size}</p></div>}
             <div className="mt-3"><h3 className="text-[16px] font-bold text-amazon-text mb-2">About this item</h3><p className="text-[14px] text-amazon-text leading-relaxed">{product.description}</p></div>
@@ -213,8 +216,12 @@ export default function ProductDetail() {
               </div>
             ) : (
               <div className="space-y-2">
-                <button onClick={handleOrder} disabled={ordering} className="w-full btn-amazon-primary py-2 text-[13px] disabled:opacity-50">{ordering ? "Placing order..." : "Add to Cart"}</button>
-                <button onClick={handleOrder} disabled={ordering} className="w-full btn-amazon-orange py-2 text-[13px] disabled:opacity-50">{ordering ? "..." : "Buy Now"}</button>
+                {product && isInCart(`product_${product.id}`) ? (
+                  <button onClick={() => removeFromCart(`product_${product.id}`)} disabled={ordering} className="w-full py-2 text-[13px] border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 transition-colors bg-[#f0f2f2] text-amazon-text border-amazon-border hover:bg-[#e3e6e6]">Remove from Cart</button>
+                ) : (
+                  <button onClick={() => addToCart({ ...product, cartId: `product_${product.id}`, cartType: 'product' })} disabled={ordering} className="w-full btn-amazon-primary py-2 text-[13px] disabled:opacity-50">Add to Cart</button>
+                )}
+                <button onClick={handleOrder} disabled={ordering} className="w-full btn-amazon-orange py-2 text-[13px] disabled:opacity-50">{ordering ? "Placing order..." : "Buy Now"}</button>
               </div>
             )}
           </div>

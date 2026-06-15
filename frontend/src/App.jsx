@@ -8,6 +8,7 @@ import NewReturn from "./pages/NewReturn";
 import Feed from "./pages/Feed";
 import ListingDetail from "./pages/ListingDetail";
 import Profile from "./pages/Profile";
+import Cart from "./pages/Cart";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/feed" element={<Feed />} />
             <Route path="/listings/:id" element={<ListingDetail />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/cart" element={<Cart />} />
           </Route>
         </Routes>
       </UserProvider>

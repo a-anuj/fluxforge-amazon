@@ -5,7 +5,7 @@ import { useUser } from "../context/UserContext";
 
 export default function ListingDetail() {
   const { id } = useParams();
-  const { currentUser, refreshUser } = useUser();
+  const { currentUser, refreshUser, cart, addToCart, removeFromCart, isInCart } = useUser();
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -16,7 +16,7 @@ export default function ListingDetail() {
     setLoading(true);
     getListing(id).then(l => {
       setListing(l);
-      if (l?.product_id) getProductImpact(l.product_id).then(setImpact).catch(() => {});
+      if (l?.product_id) getProductImpact(l.product_id).then(setImpact).catch(() => { });
     }).catch(console.error).finally(() => setLoading(false));
   }, [id]);
 
@@ -207,8 +207,12 @@ export default function ListingDetail() {
               </div>
             ) : (
               <div className="space-y-2">
-                <button onClick={handlePurchase} disabled={purchasing} className="w-full btn-amazon-primary py-2 text-[13px] disabled:opacity-50">{purchasing ? "Processing..." : "Add to Cart"}</button>
-                <button onClick={handlePurchase} disabled={purchasing} className="w-full btn-amazon-orange py-2 text-[13px] disabled:opacity-50">{purchasing ? "..." : "Buy Now"}</button>
+                {listing && isInCart(`listing_${listing.id}`) ? (
+                  <button onClick={() => removeFromCart(`listing_${listing.id}`)} disabled={purchasing} className="w-full py-2 text-[13px] border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 transition-colors bg-[#f0f2f2] text-amazon-text border-amazon-border hover:bg-[#e3e6e6]">Remove from Cart</button>
+                ) : (
+                  <button onClick={() => addToCart({ ...listing, cartId: `listing_${listing.id}`, cartType: 'listing' })} disabled={purchasing} className="w-full btn-amazon-primary py-2 text-[13px] disabled:opacity-50">Add to Cart</button>
+                )}
+                <button onClick={handlePurchase} disabled={purchasing} className="w-full btn-amazon-orange py-2 text-[13px] disabled:opacity-50">{purchasing ? "Processing..." : "Buy Now"}</button>
               </div>
             )}
 
