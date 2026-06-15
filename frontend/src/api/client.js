@@ -2,7 +2,8 @@
  * Lightweight API client — fetch wrapper with base URL and JSON helpers.
  */
 
-const BASE_URL = `http://${window.location.hostname}:8000/api`;
+const BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api`;
+
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
