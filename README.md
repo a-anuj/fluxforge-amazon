@@ -28,7 +28,7 @@ Quick-commerce customers expect to discover, decide, and purchase in seconds. We
 │  Services:                                                  │
 │  • Media Validator (quality guardrail)                      │
 │  • AI Assessment (Bedrock Nova Lite — condition scoring)    │
-│  • Wishlist Matcher (radius-based matching+dynamic pricing)│
+│  • Wishlist Matcher (radius-based matching+dynamic pricing) │
 │  • Credit Engine (Green Credits calculation)                │
 │  • Impact Calculator (CO₂, e-waste, water metrics)          │
 │  • Sustainability Advisor (contextual tips)                 │
@@ -95,7 +95,7 @@ App: **http://localhost:5173**
 - **Condition Scoring** — 0-100 score with defect detection and remaining life estimation
 - **Disposition Decision** — RESALE / REFURBISH / RECYCLE / DISPOSE classification
 
-### 2. Wishlist Radius Matching ⭐
+### 2. Wishlist Radius Matching 
 When a product is returned, the system automatically:
 1. Finds nearby users who have that item (or similar) in their wishlist
 2. Calculates a **dynamic discount** based on logistics savings
