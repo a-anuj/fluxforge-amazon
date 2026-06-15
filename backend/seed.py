@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.database import engine, SessionLocal, Base
-from app.models import User, Product, Order, Return, Listing, GreenCreditTx, GreenChallenge, Redemption
+from app.models import User, Product, Order, Return, Listing, GreenCreditTx, GreenChallenge, Redemption, Wishlist
 from app.services.ai_assessment import assess_condition
 from app.services.matching import find_best_match
 from app.services.credit_engine import get_level
@@ -40,6 +40,7 @@ def seed():
             level="Sapling",
             co2_saved=18.0, ewaste_prevented=5.0, water_saved=120.0,
             products_reused=3, products_repaired=1, products_resold=1,
+            city="Mumbai", pincode="400001",
         ),
         User(
             name="Priya Patel",
@@ -51,6 +52,7 @@ def seed():
             level="Sapling",
             co2_saved=8.5, ewaste_prevented=1.2, water_saved=60.0,
             products_reused=1, products_repaired=0, products_resold=1,
+            city="Mumbai", pincode="400015",
         ),
         User(
             name="Rohan Mehta",
@@ -62,6 +64,7 @@ def seed():
             level="Seed",
             co2_saved=4.2, ewaste_prevented=0.8, water_saved=30.0,
             products_reused=1, products_repaired=0, products_resold=0,
+            city="Mumbai", pincode="400053",
         ),
         User(
             name="Ananya Iyer",
@@ -73,6 +76,7 @@ def seed():
             level="Green Hero",
             co2_saved=28.0, ewaste_prevented=3.5, water_saved=200.0,
             products_reused=4, products_repaired=2, products_resold=2,
+            city="Mumbai", pincode="400018",
         ),
         User(
             name="Vikram Desai",
@@ -84,6 +88,7 @@ def seed():
             level="Seed",
             co2_saved=1.5, ewaste_prevented=0.2, water_saved=10.0,
             products_reused=0, products_repaired=0, products_resold=0,
+            city="Pune", pincode="411001",
         ),
     ]
     db.add_all(users)
@@ -295,14 +300,51 @@ def seed():
     db.add_all(redemptions)
     db.commit()
 
+    # ── Wishlist Entries (for radius matching demo) ───────────────
+    wishlists = [
+        # Harish wants running shoes — will match if Priya returns a Nike/Puma shoe nearby
+        Wishlist(user_id=1, product_id=7, category="running", brand="Puma",
+                 max_price=4000, radius_km=15.0,
+                 created_at=now - timedelta(days=14)),
+        # Harish also wants electronics
+        Wishlist(user_id=1, category="electronics", brand="boAt",
+                 keywords="earbuds,headphones,tws",
+                 max_price=2000, radius_km=10.0,
+                 created_at=now - timedelta(days=7)),
+        # Priya wants a backpack — will match if Rohan returns one nearby
+        Wishlist(user_id=2, category="backpacking", brand="Wildcraft",
+                 max_price=2000, radius_km=10.0,
+                 created_at=now - timedelta(days=21)),
+        # Rohan wants Nike running shoes
+        Wishlist(user_id=3, product_id=1, category="running", brand="Nike",
+                 max_price=7000, radius_km=20.0,
+                 created_at=now - timedelta(days=10)),
+        # Ananya wants yoga/fitness gear
+        Wishlist(user_id=4, category="yoga", brand="Decathlon",
+                 max_price=1000, radius_km=10.0,
+                 created_at=now - timedelta(days=5)),
+        # Ananya also wants electronics (smartwatch)
+        Wishlist(user_id=4, category="electronics", brand="Noise",
+                 keywords="smartwatch,fitness tracker",
+                 max_price=3000, radius_km=15.0,
+                 created_at=now - timedelta(days=30)),
+        # Vikram (Pune) wants Nike shoes — won't match Mumbai returns (different pincode zone)
+        Wishlist(user_id=5, category="running", brand="Nike",
+                 max_price=10000, radius_km=10.0,
+                 created_at=now - timedelta(days=3)),
+    ]
+    db.add_all(wishlists)
+    db.commit()
+
     db.close()
-    print("Database seeded successfully!")
-    print(f"   • {len(users)} users (Harish at Sapling with 250 credits)")
+    print("✅ Database seeded successfully!")
+    print(f"   • {len(users)} users with pincodes (Mumbai + Pune)")
     print(f"   • {len(products)} products with environmental impact metrics")
-    print(f"   • {len(orders_data)} orders, {db.query(Return).count()} returns, {db.query(Listing).count()} listings")
+    print(f"   • {len(orders_data)} orders, 2 returns")
     print(f"   • {len(transactions)} credit transactions")
     print(f"   • {len(challenges)} green challenges")
     print(f"   • {len(redemptions)} redemptions")
+    print(f"   • {len(wishlists)} wishlist entries (for radius matching)")
 
 
 if __name__ == "__main__":

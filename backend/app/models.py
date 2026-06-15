@@ -237,3 +237,71 @@ class CommunityNotification(Base):
 
     user    = relationship("User", back_populates="community_notifications")
     listing = relationship("CommunityListing")
+
+
+# ── Wishlist & Radius Matching ─────────────────────────────────────────
+
+class Wishlist(Base):
+    """User wishlist items — products they want, used for radius matching on returns."""
+    __tablename__ = "wishlists"
+
+    id         = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)   # exact product match
+    category   = Column(String, nullable=True)          # category-level interest (e.g., "running")
+    brand      = Column(String, nullable=True)          # brand preference (e.g., "Nike")
+    keywords   = Column(String, nullable=True)          # comma-separated keywords
+    max_price  = Column(Float, nullable=True)           # max price willing to pay
+    radius_km  = Column(Float, default=10.0)            # matching radius in km
+    status     = Column(String, default="active")       # "active" | "fulfilled" | "removed"
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user    = relationship("User")
+    product = relationship("Product")
+
+
+class WishlistMatch(Base):
+    """Records when a return matches a wishlist entry — triggers notification."""
+    __tablename__ = "wishlist_matches"
+
+    id            = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    wishlist_id   = Column(Integer, ForeignKey("wishlists.id"), nullable=False)
+    listing_id    = Column(Integer, ForeignKey("listings.id"), nullable=False)
+    return_id     = Column(Integer, ForeignKey("returns.id"), nullable=False)
+    buyer_id      = Column(Integer, ForeignKey("users.id"), nullable=False)
+    returner_id   = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    # Match quality metrics
+    match_score       = Column(Float, nullable=False)       # 0-100 composite score
+    distance_km       = Column(Float, nullable=True)        # distance between users
+    discount_pct      = Column(Float, nullable=False)       # calculated dynamic discount
+    discounted_price  = Column(Float, nullable=False)       # final price after discount
+    logistics_saved   = Column(Float, default=0.0)          # ₹ saved in logistics
+    co2_saved_delivery = Column(Float, default=0.0)         # kg CO₂ saved via local delivery
+
+    # Status tracking
+    status     = Column(String, default="notified")         # "notified" | "viewed" | "purchased" | "expired"
+    notified_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    purchased_at = Column(DateTime, nullable=True)
+
+    wishlist = relationship("Wishlist")
+    listing  = relationship("Listing")
+    return_item = relationship("Return")
+    buyer    = relationship("User", foreign_keys=[buyer_id])
+    returner = relationship("User", foreign_keys=[returner_id])
+
+
+class WishlistNotification(Base):
+    """Notifications sent to wishlist users when a match is found."""
+    __tablename__ = "wishlist_notifications"
+
+    id         = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    match_id   = Column(Integer, ForeignKey("wishlist_matches.id"), nullable=False)
+    title      = Column(String, nullable=False)
+    message    = Column(String, nullable=False)
+    is_read    = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user  = relationship("User")
+    match = relationship("WishlistMatch")

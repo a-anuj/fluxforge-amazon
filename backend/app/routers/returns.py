@@ -125,6 +125,10 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
             listing.status = "matched"
             db.commit()
 
+        # 🎯 Wishlist radius matching — notify nearby users who want this product
+        from app.services.wishlist_matcher import find_wishlist_matches
+        wishlist_matches = find_wishlist_matches(return_item, listing, db)
+
     # Get sustainability advice for response
     # NOTE: Order model has no created_at column yet — return_period_over defaults False
     # (ReLife listing hidden) until a timestamp migration is added to the orders table.
