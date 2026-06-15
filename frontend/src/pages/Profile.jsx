@@ -4,7 +4,7 @@ import { getGreenCredits, getImpactStats, getChallenges, getRedemptionOptions, r
 import { useUser } from "../context/UserContext";
 import { 
   Leaf, Droplet, RefreshCw, Wrench, Package, BarChart2, 
-  Target, ShoppingBag, Box, ChevronRight, Award, Zap, CheckCircle2, UserCircle, Wallet
+  Target, ShoppingBag, Box, ChevronRight, Award, Zap, CheckCircle2, UserCircle, Wallet, Activity
 } from "lucide-react";
 
 const LEVEL_COLORS = {
@@ -137,7 +137,7 @@ export default function Profile() {
                 <h1 className="text-[32px] font-extrabold tracking-tight">{currentUser.name}</h1>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-[13px] px-3.5 py-1 rounded-full font-bold shadow-sm" style={{ backgroundColor: levelColor, color: '#fff' }}>
-                    {currentUser.level}
+                    Level: {currentUser.level}
                   </span>
                   {credits && credits.next_level && (
                     <span className="text-[12px] text-gray-300 font-medium">{credits.credits_to_next} credits to {credits.next_level}</span>
@@ -204,10 +204,8 @@ export default function Profile() {
                   <BarChart2 className="text-gray-400" size={20} /> Sustainability Activity
                 </h2>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-y md:divide-y-0 divide-gray-100">
+              <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-gray-100">
                 {[
-                  { val: impact.products_reused, label: "Products Reused", icon: <RefreshCw size={24} className="text-emerald-600" /> },
-                  { val: impact.products_repaired, label: "Products Repaired", icon: <Wrench size={24} className="text-blue-600" /> },
                   { val: impact.products_resold, label: "Products Resold", icon: <Package size={24} className="text-purple-600" /> },
                   { val: impact.circular_orders, label: "Circular Orders", icon: <Leaf size={24} className="text-green-600" /> },
                   { val: `${impact.circular_percentage}%`, label: "Circular Rate", icon: <Target size={24} className="text-orange-500" /> },
@@ -268,7 +266,7 @@ export default function Profile() {
               </Link>
               <Link to="/returns/new" className="group bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-[0_4px_15px_rgba(0,0,0,0.08)] transition-all flex items-center gap-4">
                 <div className="p-3 rounded-xl bg-blue-50 text-blue-600 group-hover:scale-110 transition-transform"><RefreshCw size={24} /></div>
-                <div><p className="text-[15px] font-bold text-amazon-text">Start a Return</p><p className="text-[12px] text-gray-500">AI-powered assessment</p></div>
+                <div><p className="text-[15px] font-bold text-amazon-text">Sell on Second Life</p><p className="text-[12px] text-gray-500">Verify & list items with AI</p></div>
               </Link>
               <Link to="/orders" className="group bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-[0_4px_15px_rgba(0,0,0,0.08)] transition-all flex items-center gap-4">
                 <div className="p-3 rounded-xl bg-purple-50 text-purple-600 group-hover:scale-110 transition-transform"><Box size={24} /></div>
@@ -294,7 +292,7 @@ export default function Profile() {
                   <p className="text-[12px] text-gray-400 mt-3 font-medium">Lifetime: {credits.lifetime_credits} credits earned</p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[16px] px-5 py-2 rounded-full font-bold shadow-md inline-block" style={{ backgroundColor: levelColor }}>{currentUser.level}</span>
+                  <span className="text-[16px] px-5 py-2 rounded-full font-bold shadow-md inline-block" style={{ backgroundColor: levelColor }}>Level: {currentUser.level}</span>
                 </div>
               </div>
               <p className="text-[15px] font-bold text-amazon-text mb-4">Transaction History</p>

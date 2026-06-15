@@ -135,7 +135,6 @@ export default function Feed() {
         <div className="max-w-[1500px] mx-auto px-4 py-8">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[#00e5a0] text-[13px] font-semibold uppercase tracking-widest mb-2">Circular Commerce</p>
               <h1 className="text-[32px] md:text-[40px] font-bold text-white leading-tight mb-2">
                 Give Items a Second Life.<br/>
                 <span className="text-[#00e5a0]">Save the Planet.</span>
@@ -151,47 +150,12 @@ export default function Feed() {
                 + Post a Community Listing
               </button>
             </div>
-            {/* Notification Bell */}
-            <div className="relative mt-2">
-              <button
-                onClick={async () => {
-                  setShowNotifs(!showNotifs);
-                  if (!showNotifs && currentUser && unread > 0) {
-                    await markNotificationsRead(currentUser.id);
-                    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-                  }
-                }}
-                className="relative bg-white/10 hover:bg-white/20 text-white p-3 rounded-full transition-colors"
-              >
-                🔔
-                {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                    {unread}
-                  </span>
-                )}
-              </button>
-              {showNotifs && (
-                <div className="absolute right-0 top-14 w-80 bg-white rounded-lg shadow-xl border border-amazon-border z-50 max-h-80 overflow-y-auto">
-                  <p className="font-bold text-[13px] px-4 py-3 border-b">Notifications</p>
-                  {notifications.length === 0 ? (
-                    <p className="text-[13px] text-amazon-text-secondary px-4 py-4">No notifications yet.</p>
-                  ) : notifications.map(n => (
-                    <div key={n.id} className={`px-4 py-3 border-b text-[13px] ${!n.is_read ? "bg-[#f0fff8]" : ""}`}>
-                      {n.message}
-                      <p className="text-[11px] text-amazon-text-secondary mt-0.5">
-                        {new Date(n.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 mt-6">
             {[
               { label: "Community E-waste Saved", val: `${communityAll.reduce((s,l) => s + (l.ewaste_kg_saved||0), 0).toFixed(1)} kg`, icon: "" },
-              { label: "Certified Listings", val: allCertified.length, icon: "" },
+              { label: "Amazon Certified Listings", val: allCertified.length, icon: "" },
               { label: "Near You", val: communityNearby.filter(l => l.is_local).length, icon: "" },
             ].map(s => (
               <div key={s.label} className="bg-white/10 backdrop-blur rounded-lg p-4 text-center">

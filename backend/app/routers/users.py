@@ -15,7 +15,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db)):
     """List all users (for the profile-switcher dropdown)."""
-    return db.query(User).all()
+    return db.query(User).order_by(User.id.asc()).all()
 
 
 @router.get("/{user_id}", response_model=UserOut)
