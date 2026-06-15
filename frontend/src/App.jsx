@@ -9,6 +9,7 @@ import Feed from "./pages/Feed";
 import ListingDetail from "./pages/ListingDetail";
 import Profile from "./pages/Profile";
 import Cart from "./pages/Cart";
+import NearDrop from "./pages/NearDrop";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/feed" element={<Feed />} />
             <Route path="/listings/:id" element={<ListingDetail />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/neardrop" element={<NearDrop />} />
             <Route path="/cart" element={<Cart />} />
           </Route>
         </Routes>

@@ -118,3 +118,23 @@ export const createAlert = (userId, category, pincode) =>
   request(`/community/alerts?user_id=${userId}&category=${encodeURIComponent(category)}${pincode ? `&pincode=${pincode}` : ""}`, { method: "POST" });
 export const getAlerts = (userId) => request(`/community/alerts?user_id=${userId}`);
 
+
+// ── Wishlist & NearDrop ───────────────────────────────────────
+export const getWishlist = (userId) => request(`/wishlist/?user_id=${userId}`);
+export const addToWishlist = (data) =>
+  request("/wishlist/", { method: "POST", body: JSON.stringify(data) });
+export const removeFromWishlist = (id) =>
+  request(`/wishlist/${id}`, { method: "DELETE" });
+export const getWishlistMatches = (userId) =>
+  request(`/wishlist/matches?user_id=${userId}`);
+export const getWishlistNotifications = (userId) =>
+  request(`/wishlist/notifications?user_id=${userId}`);
+export const markWishlistNotificationsRead = (userId) =>
+  request(`/wishlist/notifications/read?user_id=${userId}`, { method: "POST" });
+export const getProductJourney = (listingId) =>
+  request(`/wishlist/journey/${listingId}`);
+export const purchaseWishlistMatch = (matchId, userId) =>
+  request(`/wishlist/matches/${matchId}/purchase`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });

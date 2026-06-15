@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getProduct, getAlternatives, createOrder, getProductConfidence, getProductImpact, getRefurbishedAlt, getSustainabilityAdvice, getDeliveryOptions } from "../api/client";
+import { getProduct, getAlternatives, createOrder, getProductConfidence, getProductImpact, getRefurbishedAlt, getSustainabilityAdvice, getDeliveryOptions, addToWishlist } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 function scoreColor(score) {
@@ -84,6 +84,21 @@ export default function ProductDetail() {
       setOrderResult(result); refreshUser();
     } catch (err) { alert(err.message); }
     setOrdering(false);
+  };
+
+  const handleAddToWishlist = async () => {
+    if (!currentUser || !product) return;
+    try {
+      await addToWishlist({
+        user_id: currentUser.id,
+        product_id: product.id,
+        category: product.category,
+        brand: product.brand,
+        max_price: product.price,
+        radius_km: 15,
+      });
+      alert(`📍 Added "${product.name}" to your NearDrop Wishlist!\nYou'll be notified when this becomes available nearby at a discount.`);
+    } catch (err) { alert(err.message); }
   };
 
   if (loading) return <div className="max-w-[1500px] mx-auto px-4 py-4"><div className="bg-white p-8 animate-pulse"><div className="h-[400px] bg-[#f5f5f5]" /></div></div>;
@@ -222,6 +237,9 @@ export default function ProductDetail() {
                   <button onClick={() => addToCart({ ...product, cartId: `product_${product.id}`, cartType: 'product' })} disabled={ordering} className="w-full btn-amazon-primary py-2 text-[13px] disabled:opacity-50">Add to Cart</button>
                 )}
                 <button onClick={handleOrder} disabled={ordering} className="w-full btn-amazon-orange py-2 text-[13px] disabled:opacity-50">{ordering ? "Placing order..." : "Buy Now"}</button>
+                <button onClick={() => handleAddToWishlist()} className="w-full py-2 text-[12px] border border-[#067d62] text-[#067d62] rounded-full hover:bg-[#f0f9f4] transition-colors mt-1">
+                  📍 Add to NearDrop Wishlist
+                </button>
               </div>
             )}
           </div>

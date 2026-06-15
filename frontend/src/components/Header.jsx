@@ -192,6 +192,9 @@ export default function Header() {
         <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
           Circular Commerce
         </Link>
+        <Link to="/neardrop" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold flex items-center gap-1">
+          <span className="text-[#00e5a0]">📍</span> NearDrop
+        </Link>
         <Link to="/profile" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
           Dashboard
         </Link>
