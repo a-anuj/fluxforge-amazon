@@ -13,7 +13,7 @@ const LEVEL_EMOJIS = {
 
 export default function Header() {
   const navigate = useNavigate();
-  const { currentUser, switchUser } = useUser();
+  const { currentUser, switchUser, cart } = useUser();
   const [users, setUsers] = useState([]);
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("q") || "");
@@ -132,9 +132,9 @@ export default function Header() {
             </Link>
           )}
 
-          <Link to="/orders" className="flex items-center px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer relative">
+          <Link to="/cart" className="flex items-center px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer relative">
             <span className="text-[32px] leading-none mt-1">🛒</span>
-            <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">0</span>
+            <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">{currentUser ? cart.length : 0}</span>
             <span className="hidden sm:block text-[14px] font-bold mt-3">Cart</span>
           </Link>
         </div>

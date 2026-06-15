@@ -7,6 +7,16 @@ export function UserProvider({ children }) {
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [cart, setCart] = useState([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("amazon_cart");
+    if (saved) setCart(JSON.parse(saved));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("amazon_cart", JSON.stringify(cart));
+  }, [cart]);
 
   useEffect(() => {
     getUsers()
@@ -40,9 +50,13 @@ export function UserProvider({ children }) {
     );
   };
 
+  const addToCart = (item) => setCart(prev => [...prev, item]);
+  const removeFromCart = (cartId) => setCart(prev => prev.filter(i => i.cartId !== cartId));
+  const isInCart = (cartId) => cart.some(i => i.cartId === cartId);
+
   return (
     <UserContext.Provider
-      value={{ users, currentUser, switchUser, refreshUser, updateUserProfile, loading }}
+      value={{ users, currentUser, switchUser, refreshUser, updateUserProfile, loading, cart, addToCart, removeFromCart, isInCart }}
     >
       {children}
     </UserContext.Provider>
