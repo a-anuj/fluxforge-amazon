@@ -105,7 +105,7 @@ export default function ProductDetail() {
           <Link to={`/listings/${refurbishedAlt.listing_id}`} className="block mb-4 border-2 border-[#067d62] rounded-lg p-4 bg-[#f0f9f4] hover:bg-[#e0f5ec] transition-colors">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <span className="text-[28px]">♻️</span>
+                <span className="text-[28px]"></span>
                 <div>
                   <p className="text-[14px] font-bold text-[#067d62]">Buy Certified Refurbished — Save ₹{refurbishedAlt.savings?.toLocaleString("en-IN")}</p>
                   <p className="text-[12px] text-amazon-text-secondary">
@@ -156,7 +156,7 @@ export default function ProductDetail() {
             {/* Product Impact */}
             {impact && (
               <div className="mt-4 border border-amazon-border rounded-lg p-3">
-                <p className="text-[13px] font-bold text-amazon-text mb-2">🌍 Environmental Footprint</p>
+                <p className="text-[13px] font-bold text-amazon-text mb-2">Environmental Footprint</p>
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div><p className="text-[18px] font-bold text-amazon-text">{impact.co2_footprint}</p><p className="text-[10px] text-amazon-text-secondary">kg CO₂</p></div>
                   <div><p className="text-[18px] font-bold text-amazon-text">{impact.ewaste_potential}</p><p className="text-[10px] text-amazon-text-secondary">kg E-Waste</p></div>
@@ -166,7 +166,7 @@ export default function ProductDetail() {
             )}
 
             <div className="mt-4 flex items-center gap-2">
-              <span className="eco-badge">♻ Circular Ready</span>
+              <span className="eco-badge">Circular Ready</span>
               <span className="text-[12px] text-amazon-text-secondary">This item participates in Amazon Green Credits</span>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function ProductDetail() {
 
             {scoresReady && (
               <div className="border border-amazon-border rounded-lg p-3 mb-3 bg-[#fafafa]">
-                <p className="text-[13px] font-bold text-amazon-text flex items-center gap-1 mb-3">🎯 Purchase Confidence <span className="text-[10px] text-amazon-orange font-normal bg-[#fff3e0] px-1.5 rounded">AI</span></p>
+                <p className="text-[13px] font-bold text-amazon-text flex items-center gap-1 mb-3"> Purchase Confidence <span className="text-[10px] text-amazon-orange font-normal bg-[#fff3e0] px-1.5 rounded">AI</span></p>
                 <ScoreRow label="Return Frequency" score={returnFreqScore} sublabel={returnLabel} delay={100} />
                 <div className="border-t border-[#e8e8e8] my-2" />
                 <ScoreRow label="Personal Comfort" score={comfortScore} sublabel={comfortSublabel} delay={350} />
@@ -211,7 +211,7 @@ export default function ProductDetail() {
               <div className="border border-[#067d62] rounded-lg p-3 bg-[#f0faf7]">
                 <p className="text-[14px] text-[#067d62] font-bold">✓ Order placed!</p>
                 <p className="text-[12px] text-amazon-text-secondary mt-1">Order #{orderResult.id} • Fit: {orderResult.fit_score}%</p>
-                {orderResult.green_credits_earned > 0 && <p className="text-[12px] text-[#067d62] font-bold mt-1">🌱 +{orderResult.green_credits_earned} Green Credits earned!</p>}
+                {orderResult.green_credits_earned > 0 && <p className="text-[12px] text-[#067d62] font-bold mt-1">+{orderResult.green_credits_earned} Green Credits earned!</p>}
                 <Link to="/orders" className="text-[13px] text-amazon-link mt-1 inline-block hover:underline">View your orders ›</Link>
               </div>
             ) : (
@@ -231,13 +231,17 @@ export default function ProductDetail() {
         {alternatives.length > 0 && (
           <div className="mt-8 border-t border-amazon-border pt-6">
             <h2 className="text-[21px] font-bold text-amazon-text mb-4">Products related to this item</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {alternatives.map(alt => (
-                <Link key={alt.id} to={`/products/${alt.id}`} className="product-card border border-amazon-border rounded-lg p-3">
-                  <div className="flex items-center justify-center h-[120px] mb-2"><img src={alt.image_url} alt={alt.name} className="max-h-full max-w-full object-contain" /></div>
-                  <p className="text-[13px] text-amazon-link line-clamp-2">{alt.name}</p>
-                  <div className="star-rating text-[12px] mt-1">★★★★☆</div>
-                  <p className="mt-1"><span className="text-[13px] align-top relative top-[2px]">₹</span><span className="text-[18px] text-amazon-text">{Math.floor(alt.price).toLocaleString("en-IN")}</span></p>
+                <Link key={alt.id} to={`/products/${alt.id}`} className="product-card border border-amazon-border rounded-lg p-4 hover:shadow-md transition-shadow flex flex-col h-[380px]">
+                  <div className="flex items-center justify-center h-[200px] mb-3"><img src={alt.image_url} alt={alt.name} className="max-h-full max-w-full object-contain mix-blend-multiply" /></div>
+                  <div className="flex flex-col flex-1">
+                    <p className="text-[14px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">{alt.name}</p>
+                    <div className="star-rating text-[13px] mt-1">★★★★☆</div>
+                    <div className="mt-auto pt-2">
+                      <p><span className="text-[14px] font-bold text-amazon-text"><span className="text-[10px] align-top relative top-[3px] mr-0.5">₹</span>{Math.floor(alt.price).toLocaleString("en-IN")}</span></p>
+                    </div>
+                  </div>
                 </Link>
               ))}
             </div>

@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 
-const BASE_URL = "http://localhost:8000/api";
+const BASE_URL = `http://${window.location.hostname}:8000/api`;
 
 // ── Classification badge config ───────────────────────────────────────────────
 const BADGE = {
-  RESALE:   { label: "RESALE",   bg: "bg-[#067d62]", icon: "♻️", sub: "Ready for resale" },
-  REFURBISH:{ label: "REFURBISH",bg: "bg-[#1a73e8]", icon: "🔧", sub: "Needs refurbishment" },
-  RECYCLE:  { label: "RECYCLE",  bg: "bg-[#c7511f]", icon: "🔄", sub: "Recyclable materials" },
+  RESALE:   { label: "RESALE",   bg: "bg-[#067d62]", icon: "", sub: "Ready for resale" },
+  REFURBISH:{ label: "REFURBISH",bg: "bg-[#1a73e8]", icon: "", sub: "Needs refurbishment" },
+  RECYCLE:  { label: "RECYCLE",  bg: "bg-[#c7511f]", icon: "", sub: "Recyclable materials" },
   DISPOSE:  { label: "DISPOSE",  bg: "bg-[#b12704]", icon: "🗑️", sub: "Beyond recovery" },
 };
 
@@ -276,7 +276,7 @@ function ResultCard({ data }) {
 
       {/* Sustainability reasoning */}
       <div className="border-l-4 border-[#067d62] bg-[#f0f9f4] rounded-r-lg p-3">
-        <p className="text-[10px] text-[#067d62] uppercase font-bold mb-1">🌱 Sustainability Reasoning</p>
+        <p className="text-[10px] text-[#067d62] uppercase font-bold mb-1">Sustainability Reasoning</p>
         <p className="text-[12px] text-amazon-text leading-relaxed">{data.sustainability_reasoning || "—"}</p>
       </div>
     </div>
@@ -444,7 +444,7 @@ export default function SustainabilityModal({ order, onClose }) {
         {/* Modal header */}
         <div className="bg-[#232f3e] px-5 py-4 flex items-center justify-between rounded-t-xl sticky top-0 z-10">
           <div className="flex items-center gap-3">
-            <span className="text-[24px]">🔬</span>
+            <span className="text-[24px]"></span>
             <div>
               <p className="text-white font-bold text-[15px]">Sustainability Assessment</p>
               <p className="text-[#adb1b8] text-[11px]">AI-powered reverse logistics · Order #{order.id}</p>

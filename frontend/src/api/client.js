@@ -2,7 +2,7 @@
  * Lightweight API client — fetch wrapper with base URL and JSON helpers.
  */
 
-const BASE_URL = "http://localhost:8000/api";
+const BASE_URL = `http://${window.location.hostname}:8000/api`;
 
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
@@ -113,6 +113,7 @@ export const getUnreadCount = (userId) =>
 export const markNotificationsRead = (userId) =>
   request(`/community/notifications/read?user_id=${userId}`, { method: "PUT" });
 export const getLeaderboard = () => request("/community/leaderboard");
+export const getCommunityPurchases = (userId) => request(`/community/purchases?user_id=${userId}`);
 export const createAlert = (userId, category, pincode) =>
   request(`/community/alerts?user_id=${userId}&category=${encodeURIComponent(category)}${pincode ? `&pincode=${pincode}` : ""}`, { method: "POST" });
 export const getAlerts = (userId) => request(`/community/alerts?user_id=${userId}`);

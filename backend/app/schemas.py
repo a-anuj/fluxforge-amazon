@@ -21,7 +21,7 @@ class UserOut(BaseModel):
 
     # Green Credits Ecosystem fields
     lifetime_credits: int = 0
-    level: str = "Seed 🌱"
+    level: str = "Seed"
     co2_saved: float = 0.0
     ewaste_prevented: float = 0.0
     water_saved: float = 0.0
@@ -205,7 +205,7 @@ class GreenCreditTxOut(BaseModel):
 class GreenCreditsResponse(BaseModel):
     balance: int
     lifetime_credits: int = 0
-    level: str = "Seed 🌱"
+    level: str = "Seed"
     level_progress: float = 0.0        # 0-100 percentage to next level
     next_level: Optional[str] = None
     credits_to_next: int = 0

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useUser } from "../context/UserContext";
+import { CheckCircle } from "lucide-react";
 import {
   getFeed, getAllListings,
   getCommunityListings, getNearbyListings, createCommunityListing,
@@ -33,7 +34,7 @@ function StarRating({ score }) {
 
 export default function Feed() {
   const { currentUser } = useUser();
-  const [tab, setTab] = useState("certified_matched");
+  const [tab, setTab] = useState("all");
   
   // Second Life Data
   const [matched, setMatched] = useState([]);
@@ -97,7 +98,7 @@ export default function Feed() {
     setBuying(listingId);
     try {
       await buyCommunityListing(listingId, currentUser.id);
-      showToast("🎉 Purchase successful! Green Credits awarded.");
+      showToast("Purchase successful! Green Credits awarded.");
       fetchAllData();
     } catch(e) { showToast(e.message, "error"); }
     finally { setBuying(null); }
@@ -134,7 +135,7 @@ export default function Feed() {
         <div className="max-w-[1500px] mx-auto px-4 py-8">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-[#00e5a0] text-[13px] font-semibold uppercase tracking-widest mb-2">♻️ Circular Commerce</p>
+              <p className="text-[#00e5a0] text-[13px] font-semibold uppercase tracking-widest mb-2">Circular Commerce</p>
               <h1 className="text-[32px] md:text-[40px] font-bold text-white leading-tight mb-2">
                 Give Items a Second Life.<br/>
                 <span className="text-[#00e5a0]">Save the Planet.</span>
@@ -189,9 +190,9 @@ export default function Feed() {
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 mt-6">
             {[
-              { label: "Community E-waste Saved", val: `${communityAll.reduce((s,l) => s + (l.ewaste_kg_saved||0), 0).toFixed(1)} kg`, icon: "🌍" },
-              { label: "Certified Listings", val: allCertified.length, icon: "✅" },
-              { label: "Near You", val: communityNearby.filter(l => l.is_local).length, icon: "📍" },
+              { label: "Community E-waste Saved", val: `${communityAll.reduce((s,l) => s + (l.ewaste_kg_saved||0), 0).toFixed(1)} kg`, icon: "" },
+              { label: "Certified Listings", val: allCertified.length, icon: "" },
+              { label: "Near You", val: communityNearby.filter(l => l.is_local).length, icon: "" },
             ].map(s => (
               <div key={s.label} className="bg-white/10 backdrop-blur rounded-lg p-4 text-center">
                 <p className="text-2xl mb-1">{s.icon}</p>
@@ -208,11 +209,9 @@ export default function Feed() {
         {/* Tabs */}
         <div className="flex gap-0 border-b border-amazon-border mb-4 bg-white px-4 rounded-t-lg overflow-x-auto">
           {[
-            { id: "certified_matched", label: "✨ Recommended for You" },
-            { id: "certified_all", label: "✅ Amazon Certified" },
-            { id: "community_nearby", label: "📍 Community: Near You" },
-            { id: "community_all", label: "🌍 Community: All" },
-            { id: "leaderboard", label: "🏆 Leaderboard" },
+            { id: "all", label: "All" },
+            { id: "community", label: "Community" },
+            { id: "leaderboard", label: "Leaderboard" },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={`text-[14px] px-5 py-3 border-b-2 transition-colors whitespace-nowrap ${
@@ -227,7 +226,7 @@ export default function Feed() {
         {tab === "leaderboard" && (
           <div className="bg-white border border-amazon-border rounded-lg overflow-hidden">
             <div className="px-6 py-4 border-b bg-gradient-to-r from-[#0f2027] to-[#203a43]">
-              <h2 className="text-white font-bold text-[18px]">🏆 Circular Commerce Leaderboard</h2>
+              <h2 className="text-white font-bold text-[18px]">Circular Commerce Leaderboard</h2>
               <p className="text-[#aaa] text-[13px]">Top users ranked by e-waste prevented</p>
             </div>
             {leaderboard.length === 0 ? (
@@ -253,192 +252,174 @@ export default function Feed() {
         {/* Listings Grid */}
         {tab !== "leaderboard" && (
           loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="bg-white border border-amazon-border rounded-lg h-[380px] animate-pulse" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-white border border-amazon-border rounded-lg h-[440px] animate-pulse" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               
-              {/* CERTIFIED SECOND LIFE LISTINGS */}
-              {(tab === "certified_matched" || tab === "certified_all") && (
-                (tab === "certified_matched" ? matched : allCertified).length === 0 ? (
+              {/* SECOND LIFE & COMMUNITY LISTINGS */}
+              {(tab === "all" || tab === "community") && (
+                (tab === "all" && allCertified.length === 0 && communityAll.length === 0) ||
+                (tab === "community" && communityAll.length === 0) ? (
                   <div className="col-span-full bg-white border border-amazon-border rounded-lg p-12 text-center">
-                    <p className="text-[16px] text-amazon-text mb-2">
-                      {tab === "certified_matched"
-                        ? "No items matched to your profile yet."
-                        : "No certified pre-owned listings available."}
-                    </p>
-                  </div>
-                ) : (
-                  (tab === "certified_matched" ? matched : allCertified).map(listing => (
-                    <Link
-                      key={`cert-${listing.id}`}
-                      to={`/listings/${listing.id}`}
-                      className="bg-white border border-amazon-border rounded-lg overflow-hidden hover:shadow-md transition-shadow flex flex-col h-[380px]"
-                    >
-                      {listing.product && (
-                        <div className="relative">
-                          <div className="flex items-center justify-center h-[160px] p-3 bg-white border-b border-[#f0f0f0]">
-                            <img
-                              src={listing.product.image_url || "https://via.placeholder.com/300"}
-                              alt={listing.product.name}
-                              className="max-h-full max-w-full object-contain"
-                            />
-                          </div>
-                          {/* Badges */}
-                          <div className="absolute top-2 left-2 flex flex-col gap-1">
-                            <span className="badge-choice text-[11px]">Certified Pre-Owned</span>
-                            {listing.return_item && (
-                              <span className="bg-white border border-amazon-border text-[10px] text-amazon-text px-1.5 py-0.5 rounded shadow-sm font-bold">
-                                {listing.return_item.condition_score}% condition
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="p-3 flex flex-col flex-1">
-                        <p className="text-[13px] text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">
-                          {listing.product?.name}
-                        </p>
-                        <p className="text-[11px] text-amazon-text-secondary mt-0.5">
-                          {listing.product?.brand} · {listing.product?.category}
-                        </p>
-
-                        {/* Price */}
-                        <div className="mt-2 flex items-baseline gap-2">
-                          <span className="text-[18px] text-amazon-text">
-                            <span className="text-[12px] align-top relative top-[2px]">₹</span>
-                            {Math.floor(listing.price).toLocaleString("en-IN")}
-                          </span>
-                          {listing.product && (
-                            <span className="text-[12px] text-amazon-text-secondary line-through">
-                              ₹{Math.floor(listing.product.price).toLocaleString("en-IN")}
-                            </span>
-                          )}
-                        </div>
-
-                        {listing.product && (
-                          <p className="text-[12px] text-amazon-red font-bold mt-0.5">
-                            {Math.round((1 - listing.price / listing.product.price) * 100)}% off
-                          </p>
-                        )}
-
-                        {/* Why matched */}
-                        {tab === "certified_matched" && (
-                          <div className="mt-2 bg-[#f0f9f4] border border-[#d4edda] rounded px-2 py-1 text-[11px] text-[#067d62] line-clamp-2">
-                            <b>Match:</b> {whyMatch(listing)}
-                          </div>
-                        )}
-
-                        <div className="mt-auto pt-2">
-                          <p className="text-[12px] text-amazon-text-secondary">
-                            FREE delivery by <b className="text-amazon-text">Tomorrow</b>
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                )
-              )}
-
-              {/* COMMUNITY LISTINGS */}
-              {(tab === "community_nearby" || tab === "community_all") && (
-                (tab === "community_nearby" ? communityNearby : communityAll).length === 0 ? (
-                  <div className="col-span-full bg-white border border-amazon-border rounded-lg p-12 text-center">
-                    <p className="text-[48px] mb-3">📦</p>
-                    <p className="text-[16px] font-semibold mb-1">No community listings {tab === "community_nearby" ? "near you" : "yet"}</p>
-                    <p className="text-[13px] text-amazon-text-secondary mb-4">
-                      {tab === "community_nearby" ? "Make sure your pincode is set in your profile." : "Be the first to post!"}
-                    </p>
-                    <button onClick={() => setShowModal(true)} className="btn-amazon-primary text-[13px] px-5 py-2">
+                    <p className="text-[48px] mb-3"></p>
+                    <p className="text-[16px] font-semibold mb-1">No listings available</p>
+                    <button onClick={() => setShowModal(true)} className="btn-amazon-primary text-[13px] px-5 py-2 mt-4">
                       Post a Listing
                     </button>
                   </div>
                 ) : (
-                  (tab === "community_nearby" ? communityNearby : communityAll).map(listing => (
-                    <div key={`comm-${listing.id}`} className="bg-white border border-amazon-border rounded-lg overflow-hidden hover:shadow-lg transition-shadow flex flex-col h-[380px]">
-                      {/* Image */}
-                      <div className="h-[160px] bg-[#f5f5f5] flex items-center justify-center relative border-b border-[#f0f0f0]">
-                        {listing.image_urls ? (
-                          <img
-                            src={`https://${import.meta.env.VITE_S3_BUCKET || "fluxforge-returns"}.s3.us-east-1.amazonaws.com/${listing.image_urls.split(",")[0]}`}
-                            alt={listing.title}
-                            className="max-h-full max-w-full object-contain"
-                            onError={e => { e.target.style.display = "none"; }}
-                          />
-                        ) : (
-                          <span className="text-[48px]">
-                            {listing.category === "Laptops" ? "💻" : listing.category === "Mobiles" ? "📱" : listing.category === "Clothing" ? "👕" : listing.category === "Electronics" ? "🖥️" : "📦"}
-                          </span>
+                  <>
+                    {/* Render Amazon Certified (Second Life) only in 'all' */}
+                    {tab === "all" && allCertified.map(listing => (
+                      <Link
+                        key={`cert-${listing.id}`}
+                        to={`/listings/${listing.id}`}
+                        className="bg-white border border-amazon-border rounded-lg overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full"
+                      >
+                        {listing.product && (
+                          <div className="relative">
+                            <div className="flex items-center justify-center h-[220px] p-4 bg-white border-b border-[#f0f0f0]">
+                              <img
+                                src={listing.product.image_url || "https://via.placeholder.com/300"}
+                                alt={listing.product.name}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            </div>
+                            {/* Badges */}
+                            <div className="absolute top-2 left-2 flex flex-col gap-1">
+                              <span className="badge-choice text-[11px]">Certified Pre-Owned</span>
+                              {listing.return_item && (
+                                <span className="bg-white border border-amazon-border text-[10px] text-amazon-text px-1.5 py-0.5 rounded shadow-sm font-bold">
+                                  {listing.return_item.condition_score}% condition
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         )}
-                        {/* Badges */}
-                        <div className="absolute top-2 left-2 flex flex-col gap-1">
-                          {listing.is_local && (
-                            <span className="bg-[#00a86b] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">📍 Near You</span>
-                          )}
-                          {listing.allows_local_pickup && (
-                            <span className="bg-[#232f3e] text-white text-[10px] px-2 py-0.5 rounded-full">🚶 Pickup</span>
-                          )}
-                        </div>
-                      </div>
+                        
+                        <div className="p-3 flex flex-col flex-1">
+                          <p className="text-[14px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">
+                            {listing.product?.name}
+                          </p>
+                          <p className="text-[11px] text-amazon-text-secondary mt-0.5">
+                            {listing.product?.brand} · {listing.product?.category}
+                          </p>
 
-                      <div className="p-3 flex flex-col flex-1">
-                        <p className="text-[13px] font-semibold text-amazon-text line-clamp-2 mb-1">{listing.title}</p>
-                        {listing.brand && <p className="text-[11px] text-amazon-text-secondary mb-1">{listing.brand} · {listing.category}</p>}
-
-                        <div className="flex items-center gap-2 mb-2">
-                          <ConditionBadge condition={listing.condition} />
-                        </div>
-
-                        {/* E-waste badge */}
-                        <div className="bg-[#f0fff8] border border-[#00a86b]/20 rounded px-2 py-1 mb-2 text-[11px] text-[#00a86b] font-medium">
-                          🌍 Saves {listing.ewaste_kg_saved.toFixed(1)} kg e-waste
-                        </div>
-
-                        {/* AI condition summary */}
-                        {listing.ai_condition_summary && (
-                          <p className="text-[11px] text-amazon-text-secondary mb-2 italic line-clamp-2">"{listing.ai_condition_summary}"</p>
-                        )}
-
-                        <div className="mt-auto">
-                          <div className="flex items-baseline gap-2 mb-1">
-                            <span className="text-[18px] font-bold text-amazon-text">
+                          {/* Price */}
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <span className="text-[18px] text-amazon-text">
                               <span className="text-[12px] align-top relative top-[2px]">₹</span>
-                              {Math.floor(listing.asking_price).toLocaleString("en-IN")}
+                              {Math.floor(listing.price).toLocaleString("en-IN")}
                             </span>
-                            {listing.suggested_price && listing.suggested_price !== listing.asking_price && (
-                              <span className="text-[10px] text-amazon-text-secondary">AI: ₹{Math.floor(listing.suggested_price).toLocaleString("en-IN")}</span>
+                            {listing.product && (
+                              <span className="text-[12px] text-amazon-text-secondary line-through">
+                                ₹{Math.floor(listing.product.price).toLocaleString("en-IN")}
+                              </span>
                             )}
                           </div>
 
-                          {/* Seller info */}
-                          {listing.seller && (
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-[11px] text-amazon-text-secondary">by {listing.seller.name}</p>
-                              <StarRating score={listing.seller_trust_score || 1} />
-                            </div>
+                          {listing.product && (
+                            <p className="text-[12px] text-amazon-red font-bold mt-0.5">
+                              {Math.round((1 - listing.price / listing.product.price) * 100)}% off
+                            </p>
                           )}
 
-                          {listing.status === "active" && currentUser && listing.seller_id !== currentUser.id ? (
-                            <button
-                              onClick={() => handleBuyCommunity(listing.id)}
-                              disabled={buying === listing.id}
-                              className="w-full bg-amazon-orange hover:bg-amazon-orange-hover text-amazon-text font-bold text-[12px] py-1.5 rounded transition-colors"
-                            >
-                              {buying === listing.id ? "Processing…" : "Buy Now"}
-                            </button>
-                          ) : listing.status === "sold" ? (
-                            <span className="block w-full text-center text-[12px] text-amazon-text-secondary bg-[#f0f2f2] py-1.5 rounded">Sold</span>
-                          ) : listing.seller_id === currentUser?.id ? (
-                            <span className="block w-full text-center text-[12px] text-[#00a86b] bg-[#f0fff8] py-1.5 rounded font-semibold">Your Listing</span>
-                          ) : null}
+                          <div className="mt-auto pt-2">
+                            <p className="text-[12px] text-amazon-text-secondary">
+                              FREE delivery by <b className="text-amazon-text">Tomorrow</b>
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+
+                    {/* Render Community Listings */}
+                    {communityAll.map(listing => (
+                      <div key={`comm-${listing.id}`} className="bg-white border border-amazon-border rounded-lg overflow-hidden hover:shadow-lg transition-shadow flex flex-col h-full">
+                        {/* Image */}
+                        <div className="h-[220px] bg-[#f5f5f5] flex items-center justify-center relative border-b border-[#f0f0f0] p-4">
+                          {listing.image_urls ? (
+                            <img
+                              src={listing.image_urls.startsWith("http") ? listing.image_urls.split(",")[0] : `http://${window.location.hostname}:8000/api/community/image/${listing.image_urls.split(",")[0]}`}
+                              alt={listing.title}
+                              className="max-h-full max-w-full object-contain"
+                              onError={e => { e.target.style.display = "none"; }}
+                            />
+                          ) : (
+                            <span className="text-[48px]">
+                              {listing.category === "Laptops" ? "" : listing.category === "Mobiles" ? "" : listing.category === "Clothing" ? "" : listing.category === "Electronics" ? "" : ""}
+                            </span>
+                          )}
+                          {/* Badges */}
+                          <div className="absolute top-2 left-2 flex flex-col gap-1">
+                            {listing.is_local && (
+                              <span className="bg-[#00a86b] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">Near You</span>
+                            )}
+                            {listing.allows_local_pickup && (
+                              <span className="bg-[#232f3e] text-white text-[10px] px-2 py-0.5 rounded-full">🚶 Pickup</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="p-3 flex flex-col flex-1">
+                          <p className="text-[14px] font-semibold text-amazon-text line-clamp-2 mb-1">{listing.title}</p>
+                          {listing.brand && <p className="text-[11px] text-amazon-text-secondary mb-1">{listing.brand} · {listing.category}</p>}
+
+                          <div className="flex items-center gap-2 mb-2">
+                            <ConditionBadge condition={listing.condition} />
+                          </div>
+
+                          {/* E-waste badge */}
+                          <div className="bg-[#f0fff8] border border-[#00a86b]/20 rounded px-2 py-1 mb-2 text-[11px] text-[#00a86b] font-medium">
+                            Saves {listing.ewaste_kg_saved.toFixed(1)} kg e-waste
+                          </div>
+
+                          {/* AI condition summary */}
+                          {listing.ai_condition_summary && (
+                            <p className="text-[11px] text-amazon-text-secondary mb-2 italic line-clamp-2">"{listing.ai_condition_summary}"</p>
+                          )}
+
+                          <div className="mt-auto">
+                            <div className="flex items-baseline gap-2 mb-1">
+                              <span className="text-[18px] font-bold text-amazon-text">
+                                <span className="text-[12px] align-top relative top-[2px]">₹</span>
+                                {Math.floor(listing.asking_price).toLocaleString("en-IN")}
+                              </span>
+                              {listing.suggested_price && listing.suggested_price !== listing.asking_price && (
+                                <span className="text-[10px] text-amazon-text-secondary">AI: ₹{Math.floor(listing.suggested_price).toLocaleString("en-IN")}</span>
+                              )}
+                            </div>
+
+                            {/* Seller info */}
+                            {listing.seller && (
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[11px] text-amazon-text-secondary">by {listing.seller.name}</p>
+                                <StarRating score={listing.seller_trust_score || 1} />
+                              </div>
+                            )}
+
+                            {listing.status === "active" && currentUser && listing.seller_id !== currentUser.id ? (
+                              <button
+                                onClick={() => handleBuyCommunity(listing.id)}
+                                disabled={buying === listing.id}
+                                className="w-full bg-amazon-orange hover:bg-amazon-orange-hover text-amazon-text font-bold text-[12px] py-1.5 rounded transition-colors"
+                              >
+                                {buying === listing.id ? "Processing…" : "Buy Now"}
+                              </button>
+                            ) : listing.status === "sold" ? (
+                              <span className="block w-full text-center text-[12px] text-amazon-text-secondary bg-[#f0f2f2] py-1.5 rounded">Sold</span>
+                            ) : listing.seller_id === currentUser?.id ? (
+                              <span className="block w-full text-center text-[12px] text-[#00a86b] bg-[#f0fff8] py-1.5 rounded font-semibold">Your Listing</span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+                  </>
                 )
               )}
 
@@ -448,7 +429,7 @@ export default function Feed() {
       </div>
 
       {/* Post Listing Modal */}
-      {showModal && <PostModal currentUser={currentUser} onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); fetchAllData(); showToast("✅ Listing posted! +5 Green Credits earned."); }} />}
+      {showModal && <PostModal currentUser={currentUser} onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); fetchAllData(); showToast("Listing posted! +5 Green Credits earned."); }} />}
 
       {/* Toast */}
       {toast && (
@@ -470,6 +451,40 @@ function PostModal({ currentUser, onClose, onSuccess }) {
   const [suggesting, setSuggesting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [imageFile, setImageFile] = useState(null);
+  const [aiVerified, setAiVerified] = useState(null);
+  const [aiError, setAiError] = useState(null);
+  const [verifyingImage, setVerifyingImage] = useState(false);
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setVerifyingImage(true);
+    setAiError(null);
+    setAiVerified(null);
+    setImageFile(null);
+    
+    try {
+      const fd = new FormData();
+      fd.append("image", file);
+      fd.append("category", form.category);
+      fd.append("title", form.title);
+      
+      const res = await fetch(`http://${window.location.hostname}:8000/api/community/verify-image`, { method: "POST", body: fd });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Image verification failed");
+      }
+      const data = await res.json();
+      setAiVerified(data.condition_summary || "Condition verified by Bedrock AI.");
+      setImageFile(file);
+    } catch (err) {
+      setAiError(err.message);
+      e.target.value = "";
+    } finally {
+      setVerifyingImage(false);
+    }
+  };
 
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -503,11 +518,13 @@ function PostModal({ currentUser, onClose, onSuccess }) {
       if (imageFile && listing?.id) {
         const fd = new FormData();
         fd.append("image", imageFile);
-        await fetch(`http://localhost:8000/api/community/listings/${listing.id}/image`, { method: "POST", body: fd });
+        await fetch(`http://${window.location.hostname}:8000/api/community/listings/${listing.id}/image`, { method: "POST", body: fd });
       }
       onSuccess();
-    } catch(e) { console.error(e); }
-    finally { setSubmitting(false); }
+    } catch (err) {
+      alert("Error: " + err.message);
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -561,7 +578,7 @@ function PostModal({ currentUser, onClose, onSuccess }) {
               <label className="block text-[12px] font-semibold">Asking Price (₹) *</label>
               <button type="button" onClick={handleAiSuggest} disabled={suggesting}
                 className="text-[11px] text-amazon-link hover:underline flex items-center gap-1">
-                {suggesting ? "⏳ Getting AI price…" : "✨ Get AI Price Suggestion"}
+                {suggesting ? "⏳ Getting AI price…" : "Get AI Price Suggestion"}
               </button>
             </div>
             {aiSuggestion && (
@@ -596,24 +613,81 @@ function PostModal({ currentUser, onClose, onSuccess }) {
             </div>
           </div>
           <div>
-            <label className="block text-[12px] font-semibold mb-1">Photo</label>
-            <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])}
+            <label className="block text-[12px] font-semibold mb-1">Photo *</label>
+            <input required={!imageFile} type="file" accept="image/*" onChange={handleImageUpload}
               className="w-full text-[13px] border border-amazon-border rounded px-3 py-2" />
+            
+            {aiError && (
+              <div className="mt-2 bg-[#fdf3e7] border border-[#c45500]/30 rounded-lg px-3 py-2">
+                <p className="text-[12px] font-bold text-[#c45500]">AI Verification Failed</p>
+                <p className="text-[11px] text-[#1a1f27] mt-0.5">{aiError}</p>
+              </div>
+            )}
+            
+            {aiVerified && (
+              <div className="mt-2 bg-[#f2fbf7] border border-[#067d62]/30 rounded-lg px-3 py-2 flex gap-2 items-start">
+                <CheckCircle size={16} className="text-[#067d62] shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[12px] font-bold text-[#067d62]">Product Qualified for Resale!</p>
+                  <p className="text-[11px] text-amazon-text mt-0.5">{aiVerified}</p>
+                </div>
+              </div>
+            )}
           </div>
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={form.allows_local_pickup} onChange={e => set("allows_local_pickup", e.target.checked)}
               className="w-4 h-4 accent-amazon-orange" />
             <div>
               <p className="text-[13px] font-semibold">Allow Local Pickup</p>
-              <p className="text-[11px] text-amazon-text-secondary">+15 bonus credits for both buyer and seller 🌱</p>
+              <p className="text-[11px] text-amazon-text-secondary">+15 bonus credits for both buyer and seller </p>
             </div>
           </label>
-          <button type="submit" disabled={submitting}
-            className="w-full bg-amazon-orange hover:bg-amazon-orange-hover text-amazon-text font-bold py-2.5 rounded transition-colors text-[14px]">
+          <button type="submit" disabled={submitting || !imageFile}
+            className="w-full bg-amazon-orange hover:bg-amazon-orange-hover text-amazon-text font-bold py-2.5 rounded transition-colors text-[14px] disabled:opacity-50">
             {submitting ? "Posting…" : "Post Listing & Earn Credits"}
           </button>
         </form>
       </div>
+      
+      {/* AI Verification Full Screen Overlay */}
+      {verifyingImage && (
+        <div className="fixed inset-0 bg-[#0f1923]/95 z-[100] flex flex-col items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+          <div className="relative w-32 h-32 mb-8">
+            <div className="absolute inset-0 border-[6px] border-[#00a86b]/20 rounded-full"></div>
+            <div className="absolute inset-0 border-[6px] border-[#00a86b] rounded-full border-t-transparent animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg className="w-12 h-12 text-[#00a86b] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
+            </div>
+            
+            {/* Scanning beam effect */}
+            <div className="absolute inset-0 overflow-hidden rounded-full">
+              <div className="w-full h-1 bg-[#00a86b] absolute top-0 left-0 shadow-[0_0_15px_#00a86b] animate-[scan_2s_ease-in-out_infinite]"></div>
+            </div>
+          </div>
+          
+          <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Amazon <span className="text-[#00a86b]">Circular Intelligence</span></h2>
+          <p className="text-[#8a9bb0] text-lg mb-10 max-w-md text-center">
+            Analyzing your product photo with Bedrock AI...
+          </p>
+          
+          <div className="w-72 space-y-4 bg-white/5 rounded-xl p-6 border border-white/10">
+            <div className="flex items-center gap-4 text-[15px]">
+              <div className="w-2.5 h-2.5 bg-[#00a86b] rounded-full animate-ping shadow-[0_0_8px_#00a86b]"></div>
+              <span className="text-white font-medium">Verifying product identity</span>
+            </div>
+            <div className="flex items-center gap-4 text-[15px] opacity-60">
+              <div className="w-2.5 h-2.5 bg-gray-500 rounded-full"></div>
+              <span className="text-gray-300">Checking physical condition</span>
+            </div>
+            <div className="flex items-center gap-4 text-[15px] opacity-60">
+              <div className="w-2.5 h-2.5 bg-gray-500 rounded-full"></div>
+              <span className="text-gray-300">Evaluating resale potential</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

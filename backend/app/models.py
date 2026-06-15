@@ -24,7 +24,7 @@ class User(Base):
 
     # ── Green Credits Ecosystem fields ──
     lifetime_credits = Column(Integer, default=0)
-    level = Column(String, default="Seed 🌱")
+    level = Column(String, default="Seed")
     co2_saved = Column(Float, default=0.0)             # kg
     ewaste_prevented = Column(Float, default=0.0)      # kg
     water_saved = Column(Float, default=0.0)            # liters
@@ -193,6 +193,7 @@ class CommunityListing(Base):
     asking_price         = Column(Float, nullable=False)
     suggested_price      = Column(Float, nullable=True)          # AI-generated
     condition            = Column(String, nullable=False)        # "like_new" | "good" | "fair" | "poor"
+    ai_condition_summary = Column(Text, nullable=True)           # AI verification output
     image_urls           = Column(String, nullable=True)         # comma-separated S3 keys
     city                 = Column(String, nullable=True)
     pincode              = Column(String, nullable=True)

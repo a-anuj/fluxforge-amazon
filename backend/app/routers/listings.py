@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
-from app.models import Listing, User, GreenCreditTx, Product
+from app.models import Listing, User, GreenCreditTx, Product, Order
 from app.schemas import ListingOut, PurchaseRequest
 from app.services.credit_engine import calculate_credits, get_level
 from app.services.impact_calculator import calculate_action_impact
@@ -81,6 +81,15 @@ def purchase_listing(listing_id: int, body: PurchaseRequest, db: Session = Depen
         description=f"Purchased second-life: {product.name if product else 'Product'}",
     )
     db.add(tx)
+    
+    new_order = Order(
+        user_id=body.user_id,
+        product_id=listing.product_id,
+        status="placed",
+        is_refurbished=True,
+    )
+    db.add(new_order)
+    
     db.commit()
 
     return {

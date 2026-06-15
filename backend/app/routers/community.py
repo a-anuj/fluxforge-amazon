@@ -10,10 +10,10 @@ import re
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 import boto3
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -87,15 +87,15 @@ def _add_credits(db: Session, user: User, amount: int, action_type: str, descrip
 def _update_level(user: User):
     lc = user.lifetime_credits
     if lc >= 500:
-        user.level = "Circular Champion ♻️"
+        user.level = "Circular Champion"
     elif lc >= 300:
-        user.level = "Planet Protector 🌍"
+        user.level = "Planet Protector"
     elif lc >= 150:
-        user.level = "Green Hero 🌎"
+        user.level = "Green Hero"
     elif lc >= 50:
-        user.level = "Sapling 🌿"
+        user.level = "Sapling"
     else:
-        user.level = "Seed 🌱"
+        user.level = "Seed"
 
 
 def _seller_trust_score(db: Session, seller_id: int) -> float:
@@ -121,7 +121,7 @@ def _notify_nearby_users(db: Session, listing: CommunityListing):
         notif = CommunityNotification(
             user_id=alert.user_id,
             listing_id=listing.id,
-            message=f"📍 New {listing.category} listing {locality}: \"{listing.title}\" at ₹{int(listing.asking_price):,}",
+            message=f"New {listing.category} listing {locality}: \"{listing.title}\" at ₹{int(listing.asking_price):,}",
         )
         db.add(notif)
 
@@ -158,6 +158,59 @@ Return ONLY valid JSON (no markdown):
     raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
     return json.loads(raw)
 
+
+def _bedrock_image_check(image_bytes: bytes, content_type: str, category: str, title: str) -> dict:
+    """Call Bedrock Nova Lite to verify image matches listing and check condition."""
+    format_map = {
+        "image/jpeg": "jpeg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif"
+    }
+    img_format = format_map.get(content_type, "jpeg")
+    
+    prompt = f"""You are an AI Quality Verifier for a community resale marketplace.
+The user is listing a '{title}' in the '{category}' category.
+1. Verify if the object in the image matches the category and title.
+2. Assess its physical condition.
+3. Decide if it's in acceptable condition to be resold.
+
+Return ONLY valid JSON:
+{{
+  "is_valid": true,
+  "condition_summary": "Short description of what you see and its condition",
+  "reasoning": "Why it was accepted or rejected"
+}}"""
+
+    client = _get_bedrock_client()
+    try:
+        response = client.converse(
+            modelId=MODEL_ID,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "image": {
+                                "format": img_format,
+                                "source": {"bytes": image_bytes}
+                            }
+                        },
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            inferenceConfig={"maxTokens": 300, "temperature": 0.3},
+        )
+        raw = response["output"]["message"]["content"][0]["text"].strip()
+        raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+        return json.loads(raw)
+    except Exception as e:
+        logger.error(f"Bedrock image check error: {e}")
+        # Default to valid if AI fails so we don't block users due to AI downtime
+        return {"is_valid": True, "condition_summary": "AI check bypassed due to service error", "reasoning": str(e)}
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
@@ -198,7 +251,7 @@ def create_listing(payload: CommunityListingCreate, db: Session = Depends(get_db
     ).scalar() == 1
     if is_first:
         _add_credits(db, seller, CREDITS_FIRST_LISTING, "community_first_listing",
-                     "🎉 First community listing bonus!")
+                     "First community listing bonus!")
     _add_credits(db, seller, CREDITS_LISTING_POST, "community_listing_posted",
                  f"Listed \"{payload.title}\" on Community Marketplace")
 
@@ -288,6 +341,20 @@ def get_listing(listing_id: int, user_id: Optional[int] = Query(None), db: Sessi
     out.is_local = bool(user_pincode and listing.pincode and user_pincode == listing.pincode)
     return out
 
+@router.get("/purchases", response_model=List[CommunityListingOut])
+def get_community_purchases(user_id: int = Query(...), db: Session = Depends(get_db)):
+    """Fetch community listings bought by this user."""
+    listings = db.query(CommunityListing).filter(CommunityListing.buyer_id == user_id).order_by(CommunityListing.sold_at.desc()).all()
+    user = db.query(User).filter(User.id == user_id).first()
+    user_pincode = user.pincode if user else None
+    
+    results = []
+    for l in listings:
+        out = CommunityListingOut.model_validate(l)
+        out.seller = l.seller
+        out.is_local = bool(user_pincode and l.pincode and user_pincode == l.pincode)
+        results.append(out)
+    return results
 
 @router.put("/listings/{listing_id}/buy", response_model=CommunityListingOut)
 def buy_listing(listing_id: int, buyer_id: int = Query(...), db: Session = Depends(get_db)):
@@ -314,14 +381,14 @@ def buy_listing(listing_id: int, buyer_id: int = Query(...), db: Session = Depen
                  f"Bought \"{listing.title}\" {'locally ' if is_local else ''}via Community Marketplace")
     if is_pickup:
         _add_credits(db, buyer, CREDITS_LOCAL_PICKUP_BONUS, "local_pickup_bonus",
-                     "♻️ Local pickup bonus — zero delivery emissions!")
+                     "Local pickup bonus — zero delivery emissions!")
 
     # Award credits — seller
     _add_credits(db, seller, CREDITS_SELLER_SALE, "community_sale",
                  f"Sold \"{listing.title}\" on Community Marketplace")
     if is_pickup:
         _add_credits(db, seller, CREDITS_LOCAL_PICKUP_BONUS, "local_pickup_bonus",
-                     "♻️ Local pickup bonus — zero delivery emissions!")
+                     "Local pickup bonus — zero delivery emissions!")
 
     # Update seller impact stats
     seller.products_resold = (seller.products_resold or 0) + 1
@@ -342,6 +409,23 @@ def buy_listing(listing_id: int, buyer_id: int = Query(...), db: Session = Depen
     return out
 
 
+@router.post("/verify-image")
+async def verify_community_image(
+    image: UploadFile = File(...),
+    category: str = Form(""),
+    title: str = Form("")
+):
+    """Pre-flight AI verification for a community listing image."""
+    content_type = image.content_type or "image/jpeg"
+    raw = await image.read()
+    
+    ai_result = _bedrock_image_check(raw, content_type, category, title)
+    if not ai_result.get("is_valid", True):
+        raise HTTPException(status_code=400, detail=f"{ai_result.get('reasoning', 'Image rejected.')}")
+        
+    return {"condition_summary": ai_result.get("condition_summary", "")}
+
+
 @router.post("/listings/{listing_id}/image")
 async def upload_listing_image(listing_id: int, image: UploadFile = File(...),
                                 db: Session = Depends(get_db)):
@@ -352,6 +436,19 @@ async def upload_listing_image(listing_id: int, image: UploadFile = File(...),
 
     content_type = image.content_type or "image/jpeg"
     raw = await image.read()
+    
+    # 1. AI Image Verification
+    ai_result = _bedrock_image_check(raw, content_type, listing.category, listing.title)
+    if not ai_result.get("is_valid", True):
+        # Image is invalid, delete the pending listing and return error
+        db.delete(listing)
+        db.commit()
+        raise HTTPException(status_code=400, detail=f"AI Verification Failed: {ai_result.get('reasoning', 'Image rejected.')}")
+        
+    # Save the AI condition summary
+    listing.ai_condition_summary = ai_result.get("condition_summary", "")
+
+    # 2. Upload to S3
     bucket = os.getenv("AWS_S3_BUCKET_NAME")
     if not bucket:
         raise HTTPException(status_code=500, detail="S3 not configured")
@@ -372,7 +469,25 @@ async def upload_listing_image(listing_id: int, image: UploadFile = File(...),
 
     region = os.getenv("AWS_REGION", "us-east-1")
     url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
-    return {"key": key, "url": url}
+    return {"key": key, "url": url, "condition_summary": listing.ai_condition_summary}
+
+from fastapi.responses import RedirectResponse
+
+@router.get("/image/{key:path}")
+def get_image(key: str):
+    """Proxy redirect to a signed S3 URL for community images."""
+    s3 = _get_s3_client()
+    bucket = os.getenv("AWS_S3_BUCKET_NAME")
+    try:
+        url = s3.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': key},
+            ExpiresIn=3600
+        )
+        return RedirectResponse(url)
+    except Exception as e:
+        logger.error(f"Failed to generate presigned URL: {e}")
+        raise HTTPException(status_code=404, detail="Image not found")
 
 
 @router.post("/price-suggest", response_model=PriceSuggestResponse)
@@ -448,7 +563,7 @@ def get_leaderboard(db: Session = Depends(get_db)):
             ewaste_kg_saved=r.ewaste_prevented or 0,
             listings_sold=r.products_resold or 0,
             green_credits=r.green_credits or 0,
-            level=r.level or "Seed 🌱",
+            level=r.level or "Seed",
         )
         for r in rows
     ]

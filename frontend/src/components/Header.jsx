@@ -4,11 +4,11 @@ import { getUsers } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 const LEVEL_EMOJIS = {
-  "Seed 🌱": "🌱",
-  "Sapling 🌿": "🌿",
-  "Green Hero 🌎": "🌎",
-  "Planet Protector 🌍": "🌍",
-  "Circular Champion ♻️": "♻️",
+  "Seed": "",
+  "Sapling": "🌿",
+  "Green Hero": "🌎",
+  "Planet Protector": "",
+  "Circular Champion": "",
 };
 
 export default function Header() {
@@ -53,7 +53,7 @@ export default function Header() {
     }
   };
 
-  const levelEmoji = currentUser ? (LEVEL_EMOJIS[currentUser.level] || "🌱") : "🌱";
+  const levelEmoji = currentUser ? (LEVEL_EMOJIS[currentUser.level] || "") : "";
 
   return (
     <header className="bg-amazon-navy text-white">
@@ -190,7 +190,7 @@ export default function Header() {
           All
         </Link>
         <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
-          ♻️ Circular Commerce
+          Circular Commerce
         </Link>
         <Link to="/profile" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
           Dashboard

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getOrders, getProduct } from "../api/client";
+import { getOrders, getProduct, getCommunityPurchases } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 export default function Orders() {
@@ -12,14 +12,38 @@ export default function Orders() {
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
-    getOrders(currentUser.id)
-      .then(async (data) => {
-        const sorted = [...data].sort((a, b) => b.id - a.id);
-        setOrders(sorted);
+    Promise.all([
+      getOrders(currentUser.id),
+      getCommunityPurchases(currentUser.id)
+    ])
+      .then(async ([standardOrders, commPurchases]) => {
+        // Normalize community purchases to look like orders
+        const commOrders = commPurchases.map(c => ({
+          id: `C${c.id}`,
+          is_community: true,
+          status: 'delivered', // Assume delivered for community
+          created_at: c.sold_at || c.created_at,
+          product_id: `C${c.id}`, // Dummy ID to match prod lookup
+          community_data: c
+        }));
+        
+        const allData = [...standardOrders, ...commOrders];
+        // Sort by id roughly, or by date if possible. We'll rely on original logic for now or sort by date.
+        allData.sort((a, b) => b.id.toString().localeCompare(a.id.toString()));
+        setOrders(allData);
+
         const prods = {};
         await Promise.all(
-          data.map(async (o) => {
-            if (!prods[o.product_id]) {
+          allData.map(async (o) => {
+            if (o.is_community) {
+              prods[o.product_id] = {
+                id: o.community_data.id,
+                name: o.community_data.title,
+                image_url: o.community_data.image_urls ? (o.community_data.image_urls.startsWith('http') ? o.community_data.image_urls.split(',')[0] : `http://${window.location.hostname}:8000/api/community/image/${o.community_data.image_urls.split(',')[0]}`) : null,
+                price: o.community_data.asking_price,
+                brand: o.community_data.brand || o.community_data.category
+              };
+            } else if (!prods[o.product_id]) {
               try { prods[o.product_id] = await getProduct(o.product_id); } catch {}
             }
           })
@@ -107,7 +131,6 @@ export default function Orders() {
                       </p>
                       {prod && <p className="text-[12px] text-amazon-text-secondary mt-0.5">{prod.brand}</p>}
 
-                      {/* Circular Intelligence metrics */}
                       <div className="flex items-center gap-3 mt-2">
                         {order.fit_score != null && (
                           <span className="text-[11px] bg-[#f0f2f2] px-2 py-0.5 rounded text-amazon-text">
@@ -121,16 +144,21 @@ export default function Orders() {
                             Risk: {order.return_risk}
                           </span>
                         )}
+                        {order.is_community && (
+                          <span className="text-[11px] bg-[#00a86b] px-2 py-0.5 rounded font-bold text-white">
+                            Community Purchase
+                          </span>
+                        )}
                       </div>
 
                       {/* Action buttons */}
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {prod && (
+                        {prod && !order.is_community && (
                           <Link to={`/products/${prod.id}`} className="btn-amazon text-[12px] px-3 py-1">
                             Buy it again
                           </Link>
                         )}
-                        {order.status !== "returned" && (
+                        {!order.is_community && order.status !== "returned" && (
                           <Link to={`/returns/new?orderId=${order.id}`} className="btn-amazon text-[12px] px-3 py-1">
                             Return or Replace
                           </Link>
