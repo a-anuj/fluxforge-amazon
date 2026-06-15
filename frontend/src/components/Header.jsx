@@ -13,11 +13,29 @@ const LEVEL_EMOJIS = {
 
 export default function Header() {
   const navigate = useNavigate();
-  const { currentUser, switchUser, cart } = useUser();
+  const { currentUser, switchUser, updateUserProfile, cart } = useUser();
   const [users, setUsers] = useState([]);
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [showLocModal, setShowLocModal] = useState(false);
+  const [locForm, setLocForm] = useState({ city: "", pincode: "" });
 
+  useEffect(() => {
+    if (currentUser) {
+      setLocForm({ city: currentUser.city || "", pincode: currentUser.pincode || "" });
+    }
+  }, [currentUser]);
+
+  const handleSaveLoc = async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    try {
+      await updateUserProfile(currentUser.id, locForm);
+      setShowLocModal(false);
+    } catch (err) {
+      console.error("Failed to update location", err);
+    }
+  };
   useEffect(() => {
     getUsers().then(setUsers).catch(console.error);
   }, []);
@@ -52,8 +70,13 @@ export default function Header() {
         </Link>
 
         {/* Location (Desktop) */}
-        <div className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
-          <span className="text-[12px] text-[#ccc] leading-tight ml-4">Delivering to Mumbai 400001</span>
+        <div 
+          onClick={() => setShowLocModal(true)}
+          className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer"
+        >
+          <span className="text-[12px] text-[#ccc] leading-tight ml-4">
+            Delivering to {currentUser?.city || "Select"} {currentUser?.pincode || "Location"}
+          </span>
           <span className="text-[14px] font-bold flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
@@ -88,10 +111,10 @@ export default function Header() {
         <div className="flex items-center gap-1">
           {/* User Switcher (Hackathon feature) */}
           <div className="group relative px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
-            <div className="flex flex-col">
-              <span className="text-[12px] text-white">Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}</span>
+            <Link to="/profile" className="flex flex-col">
+              <span className="text-[12px] text-white hover:underline">Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}</span>
               <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
-            </div>
+            </Link>
             
             {/* Dropdown menu */}
             <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[240px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
@@ -166,16 +189,58 @@ export default function Header() {
           </svg>
           All
         </Link>
-        <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white flex items-center gap-1">
-          Second Life
-        </Link>
-        <Link to="/community" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
-          ♻️ Community
+        <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
+          ♻️ Circular Commerce
         </Link>
         <Link to="/profile" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
           Dashboard
         </Link>
       </div>
+
+      {/* Location Modal */}
+      {showLocModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm text-amazon-text">
+            <div className="bg-[#f0f2f2] border-b border-[#D5D9D9] px-4 py-3 rounded-t-lg flex justify-between items-center">
+              <h3 className="font-bold text-[14px]">Choose your location</h3>
+              <button onClick={() => setShowLocModal(false)} className="text-[20px] leading-none hover:opacity-70">×</button>
+            </div>
+            <div className="p-4">
+              <p className="text-[12px] text-amazon-text-secondary mb-4">
+                Delivery options and delivery speeds may vary for different locations
+              </p>
+              <form onSubmit={handleSaveLoc} className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-[12px] font-bold mb-1">City</label>
+                  <input 
+                    type="text" 
+                    value={locForm.city}
+                    onChange={(e) => setLocForm({...locForm, city: e.target.value})}
+                    placeholder="E.g. Mumbai"
+                    className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] outline-none focus:border-amazon-orange shadow-[0_1px_2px_rgba(15,17,17,0.15)_inset]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-bold mb-1">Pincode</label>
+                  <input 
+                    type="text" 
+                    value={locForm.pincode}
+                    onChange={(e) => setLocForm({...locForm, pincode: e.target.value})}
+                    placeholder="E.g. 400001"
+                    className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] outline-none focus:border-amazon-orange shadow-[0_1px_2px_rgba(15,17,17,0.15)_inset]"
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  className="mt-2 bg-[#FFD814] hover:bg-[#F7CA00] border border-[#FCD200] rounded-lg shadow-sm py-1.5 text-[13px] text-amazon-text cursor-pointer transition-colors"
+                >
+                  Apply
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
