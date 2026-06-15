@@ -2,7 +2,7 @@
 
 > **Amazon HackOn Season 6.0** | Problem Statement: *Reimagining Urgent Shopping*
 
-## 💡 The Idea
+## The Idea
 
 Quick-commerce customers expect to discover, decide, and purchase in seconds. We reimagine this by making **returned products instantly available to nearby buyers** who already want them — eliminating search, reducing decision time, and enabling same-day hyperlocal delivery.
 
@@ -13,38 +13,38 @@ Quick-commerce customers expect to discover, decide, and purchase in seconds. We
 - Rewards every sustainable action with **Green Credits** (gamified progression system)
 - Provides **full product journey transparency** — buyers see the complete provenance before purchasing
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Frontend — React 19 + Vite + TailwindCSS                    │
-│  localhost:5173                                               │
+│  Frontend — React 19 + Vite + TailwindCSS                   │
+│  localhost:5173                                             │
 └──────────────────────────┬──────────────────────────────────┘
                            │ REST API
 ┌──────────────────────────▼──────────────────────────────────┐
-│  Backend — FastAPI + SQLAlchemy + Pydantic v2                │
-│  localhost:8000                                               │
+│  Backend — FastAPI + SQLAlchemy + Pydantic v2               │
+│  localhost:8000                                             │
 ├─────────────────────────────────────────────────────────────┤
-│  Services:                                                   │
-│  • Media Validator (quality guardrail)                       │
-│  • AI Assessment (Bedrock Nova Lite — condition scoring)     │
-│  • Wishlist Matcher (radius-based matching + dynamic pricing)│
-│  • Credit Engine (Green Credits calculation)                 │
-│  • Impact Calculator (CO₂, e-waste, water metrics)           │
-│  • Sustainability Advisor (contextual tips)                  │
-│  • Shopping Twin Matching (buyer-item heuristics)            │
+│  Services:                                                  │
+│  • Media Validator (quality guardrail)                      │
+│  • AI Assessment (Bedrock Nova Lite — condition scoring)    │
+│  • Wishlist Matcher (radius-based matching+dynamic pricing)│
+│  • Credit Engine (Green Credits calculation)                │
+│  • Impact Calculator (CO₂, e-waste, water metrics)          │
+│  • Sustainability Advisor (contextual tips)                 │
+│  • Shopping Twin Matching (buyer-item heuristics)           │
 └──────────────────────────┬──────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
-│  AWS Services                                                │
+│  AWS Services                                               │
 │  • Bedrock (Nova Lite v1) — product verification + grading  │
-│  • S3 — return image storage                                 │
-│  • RDS PostgreSQL — production database                      │
-│  • SQLite — local development fallback                       │
+│  • S3 — return image storage                                │
+│  • RDS PostgreSQL — production database                     │
+│  • SQLite — local development fallback                      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.11+
@@ -87,7 +87,7 @@ npm run dev
 
 App: **http://localhost:5173**
 
-## ✨ Key Features
+## Key Features
 
 ### 1. AI-Powered Return Assessment
 - **Quality Guardrail** — validates image quality (blur, brightness, resolution) before sending to AI
@@ -141,7 +141,7 @@ Full product lifecycle visualization on every second-life listing:
 - Condition score, remaining lifespan, defect analysis
 - Environmental savings (CO₂, e-waste prevented)
 
-## 📄 Pages
+## Pages
 
 | Route | Page | Description |
 |-------|------|-------------|
@@ -153,7 +153,7 @@ Full product lifecycle visualization on every second-life listing:
 | `/listings/:id` | Listing Detail | Trust report + product lifecycle journey |
 | `/profile` | Dashboard | Impact stats, wallet, challenges, redeem, profile editor |
 
-## 🔌 API Endpoints
+## API Endpoints
 
 ### Users & Profiles
 | Method | Endpoint | Description |
@@ -221,7 +221,7 @@ Full product lifecycle visualization on every second-life listing:
 | POST | `/api/redemptions/redeem` | Redeem credits |
 | GET | `/api/redemptions/history?user_id=` | Redemption history |
 
-## 🧠 AI & Services Architecture
+## AI & Services Architecture
 
 | Service | File | Purpose |
 |---------|------|---------|
@@ -233,7 +233,7 @@ Full product lifecycle visualization on every second-life listing:
 | Sustainability Advisor | `services/sustainability_advisor.py` | Contextual tips (stub → Bedrock) |
 | Shopping Twin | `services/matching.py` | Heuristic buyer-item matching |
 
-## 🌍 Business Impact
+## Business Impact
 
 | Metric | How |
 |--------|-----|
@@ -244,7 +244,7 @@ Full product lifecycle visualization on every second-life listing:
 | **Customer savings** | 15-50% dynamic discount from logistics savings |
 | **Return cost reduction** | No reverse logistics to warehouse — direct P2P |
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -255,6 +255,12 @@ Full product lifecycle visualization on every second-life listing:
 | Storage | AWS S3 (return images) |
 | Testing | Pytest, httpx, FastAPI TestClient |
 
-## 👥 Team FluxForge
+## Team FluxForge
+
+| Name | GitHub |
+|------|--------|
+| Anuj A | [@a-anuj](https://github.com/a-anuj) |
+| Harish J | [@harish1604](https://github.com/harish1604) |
+| Hari Prasath K | [@hariPrasathK-Dev](https://github.com/hariPrasathK-Dev) |
 
 Built in 48 hours for Amazon HackOn Season 6.0.
