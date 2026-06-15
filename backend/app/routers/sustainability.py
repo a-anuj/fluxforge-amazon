@@ -31,7 +31,7 @@ if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter(
-        "\n🔬 [%(levelname)s] %(message)s"
+        "\n[%(levelname)s] %(message)s"
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
@@ -203,7 +203,7 @@ REASON: One concise sentence explaining your decision."""
     is_match = "YES" in match_line.upper()
     reason = reason_line.split(":", 1)[-1].strip() if reason_line else text
 
-    logger.info(f"Product verification — result: {'✅ MATCH' if is_match else '❌ NO MATCH'} | Reason: {reason}")
+    logger.info(f"Product verification — result: {'MATCH' if is_match else '❌ NO MATCH'} | Reason: {reason}")
 
     return is_match, reason
 
@@ -267,7 +267,7 @@ async def verify_product(
             },
         )
 
-    logger.info(f"✅ Product verified successfully")
+    logger.info(f"Product verified successfully")
     return {"matched": True, "reason": reason}
 
 
@@ -366,7 +366,7 @@ async def assess_return(
                     "reason": reason,
                 },
             )
-        logger.info(f"✅ Product verified — proceeding to assessment")
+        logger.info(f"Product verified — proceeding to assessment")
     else:
         logger.info("No product name provided — skipping verification step")
 
@@ -461,6 +461,6 @@ async def assess_return(
     result["environmental_impact"] = impact
     result["sustainability_advice"] = advice
 
-    logger.info(f"✅ Assessment complete — classification: {result['classification']}, score: {result.get('condition_score')}, confidence: {result.get('confidence')}")
+    logger.info(f"Assessment complete — classification: {result['classification']}, score: {result.get('condition_score')}, confidence: {result.get('confidence')}")
 
     return JSONResponse(content=result)

@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability
+from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability, community
 
 # Create tables on startup (idempotent)
 Base.metadata.create_all(bind=engine)
@@ -20,10 +20,10 @@ app = FastAPI(
     version="0.2.0",
 )
 
-# CORS — allow the Vite dev server
+# CORS — allow any origin for network access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,6 +38,7 @@ app.include_router(listings.router, prefix="/api")
 app.include_router(redemptions.router, prefix="/api")
 app.include_router(media.router, prefix="/api")
 app.include_router(sustainability.router, prefix="/api")
+app.include_router(community.router, prefix="/api")
 
 
 @app.get("/")

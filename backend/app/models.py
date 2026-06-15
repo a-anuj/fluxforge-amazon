@@ -4,7 +4,7 @@ All tables are defined here for hackathon simplicity.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -24,7 +24,7 @@ class User(Base):
 
     # ── Green Credits Ecosystem fields ──
     lifetime_credits = Column(Integer, default=0)
-    level = Column(String, default="Seed 🌱")
+    level = Column(String, default="Seed")
     co2_saved = Column(Float, default=0.0)             # kg
     ewaste_prevented = Column(Float, default=0.0)      # kg
     water_saved = Column(Float, default=0.0)            # liters
@@ -32,10 +32,17 @@ class User(Base):
     products_repaired = Column(Integer, default=0)
     products_resold = Column(Integer, default=0)
 
+    # ── Location fields ──
+    city    = Column(String, nullable=True)          # e.g. "Mumbai"
+    pincode = Column(String, nullable=True)          # e.g. "400001"
+
     orders = relationship("Order", back_populates="user")
     green_credit_txs = relationship("GreenCreditTx", back_populates="user")
     challenges = relationship("GreenChallenge", back_populates="user")
     redemptions = relationship("Redemption", back_populates="user")
+    community_listings_sold = relationship("CommunityListing", foreign_keys="CommunityListing.seller_id", back_populates="seller")
+    community_alerts = relationship("CommunityAlert", back_populates="user")
+    community_notifications = relationship("CommunityNotification", back_populates="user")
 
 
 class Product(Base):
@@ -156,3 +163,77 @@ class Redemption(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="redemptions")
+
+
+# ── Community Resale Marketplace ───────────────────────────────
+
+EWASTE_KG_BY_CATEGORY = {
+    "electronics": 1.5,
+    "laptops": 2.2,
+    "mobiles": 0.5,
+    "clothing": 0.3,
+    "furniture": 5.0,
+    "appliances": 3.5,
+    "books": 0.1,
+    "sports": 0.8,
+    "toys": 0.4,
+    "other": 0.5,
+}
+
+
+class CommunityListing(Base):
+    __tablename__ = "community_listings"
+
+    id                   = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    seller_id            = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title                = Column(String, nullable=False)
+    description          = Column(Text, nullable=True)
+    category             = Column(String, nullable=False)        # "Electronics" | "Clothing" etc.
+    brand                = Column(String, nullable=True)
+    asking_price         = Column(Float, nullable=False)
+    suggested_price      = Column(Float, nullable=True)          # AI-generated
+    condition            = Column(String, nullable=False)        # "like_new" | "good" | "fair" | "poor"
+    ai_condition_summary = Column(Text, nullable=True)           # AI verification output
+    image_urls           = Column(String, nullable=True)         # comma-separated S3 keys
+    city                 = Column(String, nullable=True)
+    pincode              = Column(String, nullable=True)
+    allows_local_pickup  = Column(Boolean, default=False)
+    status               = Column(String, default="active")     # "active" | "sold" | "removed"
+    ai_condition_summary = Column(Text, nullable=True)           # AI-generated condition text
+    ai_price_reasoning   = Column(Text, nullable=True)           # AI price rationale
+    ewaste_kg_saved      = Column(Float, default=0.0)
+    buyer_id             = Column(Integer, ForeignKey("users.id"), nullable=True)
+    seller_trust_score   = Column(Float, default=0.0)            # computed on sale completion
+    created_at           = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    sold_at              = Column(DateTime, nullable=True)
+
+    seller = relationship("User", foreign_keys=[seller_id], back_populates="community_listings_sold")
+    buyer  = relationship("User", foreign_keys=[buyer_id])
+
+
+class CommunityAlert(Base):
+    """User subscriptions — notify me when a listing in my category+area appears."""
+    __tablename__ = "community_alerts"
+
+    id         = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    category   = Column(String, nullable=False)
+    pincode    = Column(String, nullable=True)    # notify only if listing pincode matches
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="community_alerts")
+
+
+class CommunityNotification(Base):
+    """In-app notification bell items."""
+    __tablename__ = "community_notifications"
+
+    id         = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    listing_id = Column(Integer, ForeignKey("community_listings.id"), nullable=True)
+    message    = Column(String, nullable=False)
+    is_read    = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user    = relationship("User", back_populates="community_notifications")
+    listing = relationship("CommunityListing")

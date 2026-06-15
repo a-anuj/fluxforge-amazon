@@ -79,7 +79,7 @@ def get_return_advice(product, condition_score: float, return_period_over: bool 
         resell_impact = calculate_action_impact("resell", "general")
         suggestions.append({
             "action": "resell",
-            "title": "🔄 List on Amazon ReLife",
+            "title": "List on Amazon ReLife",
             "message": f"Your item qualifies for resale. Earn {resell_credits} Green Credits "
                        f"and save {resell_impact['co2_saved']} kg CO₂.",
             "credits": resell_credits,
@@ -88,7 +88,7 @@ def get_return_advice(product, condition_score: float, return_period_over: bool 
 
     return {
         "advice_type": "return",
-        "title": "♻️ Second Chance Options",
+        "title": "Second Chance Options",
         "message": "Your item may qualify for a second life:" if suggestions else "No second-chance options available yet — check back after the 7-day return window.",
         "stats": {"condition_score": condition_score},
         "suggestions": suggestions,

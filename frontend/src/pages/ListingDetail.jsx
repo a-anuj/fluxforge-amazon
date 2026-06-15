@@ -60,7 +60,7 @@ export default function ListingDetail() {
               <>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="badge-choice">Certified Pre-Owned</span>
-                  <span className="eco-badge">♻ Second Life</span>
+                  <span className="eco-badge">Second Life</span>
                 </div>
                 <h1 className="text-[24px] text-amazon-text leading-tight font-normal">{prod.name}</h1>
                 <p className="text-[14px] text-amazon-link mt-1">{prod.brand} · {prod.category}</p>
@@ -70,7 +70,7 @@ export default function ListingDetail() {
             {/* Product Lifecycle Visualization */}
             <div className="mt-4 border border-amazon-border rounded-lg overflow-hidden">
               <div className="bg-[#232f3e] px-4 py-3 flex items-center gap-2">
-                <span className="text-[18px]">🔄</span>
+                <span className="text-[18px]"></span>
                 <div>
                   <p className="text-white text-[14px] font-bold">Product Lifecycle Journey</p>
                   <p className="text-[11px] text-[#ccc]">Every product deserves a second chance</p>
@@ -79,11 +79,11 @@ export default function ListingDetail() {
               <div className="p-4">
                 <div className="flex items-center justify-between gap-2">
                   {[
-                    { icon: "👤", label: "Original Owner", sub: "Purchased new", active: true },
-                    { icon: "📦", label: "Returned", sub: "AI assessed", active: true },
-                    { icon: "🔬", label: ret?.recommended_action === "refurbish" ? "Refurbished" : "Verified", sub: `Score: ${ret?.condition_score || "—"}/100`, active: true },
-                    { icon: "♻️", label: "Listed", sub: "On Second Life", active: true },
-                    { icon: "🎉", label: "You", sub: "New owner", active: purchased ? true : false },
+                    { icon: "", label: "Original Owner", sub: "Purchased new", active: true },
+                    { icon: "", label: "Returned", sub: "AI assessed", active: true },
+                    { icon: "", label: ret?.recommended_action === "refurbish" ? "Refurbished" : "Verified", sub: `Score: ${ret?.condition_score || "—"}/100`, active: true },
+                    { icon: "", label: "Listed", sub: "On Second Life", active: true },
+                    { icon: "", label: "You", sub: "New owner", active: purchased ? true : false },
                   ].map((step, i, arr) => (
                     <div key={i} className="flex items-center gap-1 flex-1">
                       <div className={`flex flex-col items-center text-center flex-shrink-0 ${step.active ? "" : "opacity-40"}`}>
@@ -119,7 +119,7 @@ export default function ListingDetail() {
             {/* Trust & Transparency Report */}
             <div className="mt-4 border border-amazon-border rounded-lg overflow-hidden">
               <div className="bg-[#232f3e] px-4 py-3 flex items-center gap-2">
-                <span className="text-[18px]">🛡️</span>
+                <span className="text-[18px]"></span>
                 <div>
                   <p className="text-white text-[14px] font-bold">Trust & Transparency Report</p>
                   <p className="text-[11px] text-[#ccc]">AI-verified condition assessment · Listing #{listing.id}</p>
@@ -150,7 +150,7 @@ export default function ListingDetail() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 border border-[#d4edda] bg-[#f0f9f4] rounded p-3">
-                    <span className="text-[20px]">✅</span>
+                    <span className="text-[20px]"></span>
                     <div>
                       <p className="text-[13px] font-bold text-[#067d62]">Amazon Certified</p>
                       <p className="text-[11px] text-amazon-text-secondary">Inspected and verified by AI quality assessment</p>
@@ -179,7 +179,7 @@ export default function ListingDetail() {
 
             {/* Dynamic Green Credits */}
             <div className="bg-[#f0f9f4] border border-[#d4edda] rounded p-3 mb-3">
-              <p className="text-[12px] text-[#067d62] font-bold">🌱 Earn Green Credits with this purchase</p>
+              <p className="text-[12px] text-[#067d62] font-bold">Earn Green Credits with this purchase</p>
               <p className="text-[11px] text-amazon-text-secondary">Dynamic credits based on product environmental impact</p>
               {circularSavings && (
                 <div className="mt-2 grid grid-cols-2 gap-2 text-[10px]">
@@ -197,7 +197,7 @@ export default function ListingDetail() {
                 {purchased.level && <p className="text-[11px] text-[#067d62] mt-1">Level: {purchased.level}</p>}
                 {purchased.environmental_impact && (
                   <div className="mt-2 pt-2 border-t border-[#d4edda] text-[10px] text-amazon-text-secondary">
-                    🌍 You saved {purchased.environmental_impact.co2_saved} kg CO₂, prevented {purchased.environmental_impact.ewaste_prevented} kg e-waste
+                    You saved {purchased.environmental_impact.co2_saved} kg CO₂, prevented {purchased.environmental_impact.ewaste_prevented} kg e-waste
                   </div>
                 )}
               </div>

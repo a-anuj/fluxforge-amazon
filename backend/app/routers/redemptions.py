@@ -56,7 +56,7 @@ REDEMPTION_OPTIONS = [
         "title": "Support Recycling Program",
         "description": "Donate to e-waste recycling initiatives",
         "credits_required": 250,
-        "icon": "♻️",
+        "icon": "",
     },
 ]
 

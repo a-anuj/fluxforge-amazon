@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { getOrders, createReturn, getProduct } from "../api/client";
 import { useUser } from "../context/UserContext";
 
-const BASE_URL = "http://localhost:8000/api";
+const BASE_URL = `http://${window.location.hostname}:8000/api`;
 
 // ── Classification badge config ───────────────────────────────────────────────
 const SUSTAINABILITY_BADGE = {
@@ -601,12 +601,7 @@ export default function NewReturn() {
                 )}
 
                 {/* Verification states */}
-                {verifyingImage && (
-                  <div className="mt-3 bg-[#f0f4f8] border border-[#d2e0f0] rounded-lg px-4 py-2.5 flex items-center gap-3 animate-pulse">
-                    <div className="w-4 h-4 border-2 border-amazon-orange border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-[12px] font-semibold text-[#1a6bb5]">AI is checking if the uploaded image matches "{selectedProduct?.name}"...</p>
-                  </div>
-                )}
+                {/* Full screen overlay is rendered at the bottom */}
 
                 {verifiedImage && imageFile && !verifyingImage && (
                   <div className="mt-3 bg-[#f2fbf7] border border-[#067d62]/30 rounded-lg px-4 py-2.5 flex items-center gap-3">
@@ -663,6 +658,46 @@ export default function NewReturn() {
           </form>
         )}
       </div>
+
+      {/* AI Verification Full Screen Overlay */}
+      {verifyingImage && (
+        <div className="fixed inset-0 bg-[#0f1923]/95 z-[100] flex flex-col items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+          <div className="relative w-32 h-32 mb-8">
+            <div className="absolute inset-0 border-[6px] border-[#00a86b]/20 rounded-full"></div>
+            <div className="absolute inset-0 border-[6px] border-[#00a86b] rounded-full border-t-transparent animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <svg className="w-12 h-12 text-[#00a86b] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+              </svg>
+            </div>
+            
+            {/* Scanning beam effect */}
+            <div className="absolute inset-0 overflow-hidden rounded-full">
+              <div className="w-full h-1 bg-[#00a86b] absolute top-0 left-0 shadow-[0_0_15px_#00a86b] animate-[scan_2s_ease-in-out_infinite]"></div>
+            </div>
+          </div>
+          
+          <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Amazon <span className="text-[#00a86b]">Circular Intelligence</span></h2>
+          <p className="text-[#8a9bb0] text-lg mb-10 max-w-md text-center">
+            Analyzing your product photo with Bedrock AI...
+          </p>
+          
+          <div className="w-72 space-y-4 bg-white/5 rounded-xl p-6 border border-white/10">
+            <div className="flex items-center gap-4 text-[15px]">
+              <div className="w-2.5 h-2.5 bg-[#00a86b] rounded-full animate-ping shadow-[0_0_8px_#00a86b]"></div>
+              <span className="text-white font-medium">Verifying product identity</span>
+            </div>
+            <div className="flex items-center gap-4 text-[15px] opacity-60">
+              <div className="w-2.5 h-2.5 bg-gray-500 rounded-full"></div>
+              <span className="text-gray-300">Checking physical condition</span>
+            </div>
+            <div className="flex items-center gap-4 text-[15px] opacity-60">
+              <div className="w-2.5 h-2.5 bg-gray-500 rounded-full"></div>
+              <span className="text-gray-300">Evaluating resale potential</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

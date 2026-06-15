@@ -71,7 +71,7 @@ export default function Cart() {
                     <h3 className="text-[18px] text-amazon-text font-medium">
                       {item.name || (item.product && item.product.name)}
                     </h3>
-                    {item.cartType === "listing" && <span className="eco-badge mt-1 inline-block">♻ Second Life</span>}
+                    {item.cartType === "listing" && <span className="eco-badge mt-1 inline-block">Second Life</span>}
                     <p className="text-amazon-success text-[12px] mt-1 font-bold">In stock</p>
                     <p className="text-[12px] text-amazon-text mt-1">Eligible for FREE Shipping</p>
                     <div className="mt-2 flex items-center gap-4">

@@ -11,11 +11,11 @@ Also manages sustainability level progression.
 
 # ── Level Tiers ────────────────────────────────────────────────────────
 LEVEL_TIERS = [
-    {"name": "Seed 🌱",               "min": 0,    "max": 100},
-    {"name": "Sapling 🌿",            "min": 101,  "max": 300},
-    {"name": "Green Hero 🌎",         "min": 301,  "max": 700},
-    {"name": "Planet Protector 🌍",   "min": 701,  "max": 1500},
-    {"name": "Circular Champion ♻️",  "min": 1501, "max": 999999},
+    {"name": "Seed",               "min": 0,    "max": 100},
+    {"name": "Sapling",            "min": 101,  "max": 300},
+    {"name": "Green Hero",         "min": 301,  "max": 700},
+    {"name": "Planet Protector",   "min": 701,  "max": 1500},
+    {"name": "Circular Champion",  "min": 1501, "max": 999999},
 ]
 
 # ── Base Rewards per Action ────────────────────────────────────────────

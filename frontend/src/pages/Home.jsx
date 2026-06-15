@@ -38,7 +38,7 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="relative bg-gradient-to-r from-[#232f3e] to-[#37475a] p-8 md:p-12">
               <div className="relative z-10 max-w-xl">
-                <p className="text-amazon-orange text-[13px] font-bold tracking-wide uppercase mb-2">🌱 Amazon Green Credits Ecosystem</p>
+                <p className="text-amazon-orange text-[13px] font-bold tracking-wide uppercase mb-2">Amazon Green Credits Ecosystem</p>
                 <h1 className="text-[28px] md:text-[36px] font-bold text-white leading-tight mb-3">Sustainability that rewards you</h1>
                 <p className="text-[#ccc] text-[14px] mb-4 leading-relaxed">
                   Earn Green Credits for every sustainable action &mdash; buy refurbished, repair, resell, or donate.
@@ -50,7 +50,7 @@ export default function Home() {
                   <Link to="/profile" className="btn-amazon-orange text-[14px] px-6 py-2.5 inline-block">View Dashboard</Link>
                 </div>
               </div>
-              <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden lg:block opacity-20 text-[120px]">🌱</div>
+              <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden lg:block opacity-20 text-[120px]"></div>
             </div>
 
             {/* Dynamic Stats Row */}
@@ -66,7 +66,7 @@ export default function Home() {
                 </div>
                 <div className="p-4 border-r border-amazon-border text-center">
                   <p className="text-[11px] text-amazon-text-secondary">Green Credits</p>
-                  <p className="text-[14px] font-bold text-amazon-orange">🌱 {currentUser.green_credits}</p>
+                  <p className="text-[14px] font-bold text-amazon-orange">{currentUser.green_credits}</p>
                 </div>
                 <div className="p-4 border-r border-amazon-border text-center">
                   <p className="text-[11px] text-amazon-text-secondary">CO₂ Saved</p>
@@ -132,35 +132,35 @@ export default function Home() {
 
         {/* Product Grid */}
         {loading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[1px] bg-amazon-border">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="bg-white p-4 h-[360px] animate-pulse">
-                <div className="bg-[#f5f5f5] h-[200px] mb-3" /><div className="bg-[#f5f5f5] h-4 mb-2 w-3/4" /><div className="bg-[#f5f5f5] h-5 w-1/3" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="bg-white p-6 h-[400px] animate-pulse">
+                <div className="bg-[#f5f5f5] h-[240px] mb-4" /><div className="bg-[#f5f5f5] h-4 mb-2 w-3/4" /><div className="bg-[#f5f5f5] h-5 w-1/3" />
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[1px] bg-amazon-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
             {filtered.map((product) => (
-              <Link key={product.id} to={`/products/${product.id}`} className="product-card flex flex-col">
-                <div className="flex items-center justify-center h-[200px] mb-2">
-                  <img src={product.image_url || "https://via.placeholder.com/300"} alt={product.name} className="max-h-full max-w-full object-contain" />
+              <Link key={product.id} to={`/products/${product.id}`} className="product-card flex flex-col bg-white p-6 hover:shadow-lg transition-shadow">
+                <div className="flex items-center justify-center h-[240px] mb-4">
+                  <img src={product.image_url || "https://via.placeholder.com/300"} alt={product.name} className="max-h-full max-w-full object-contain mix-blend-multiply" />
                 </div>
                 <div className="flex-1 flex flex-col">
-                  <h3 className="text-[13px] text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">{product.name}</h3>
-                  <p className="text-[11px] text-amazon-text-secondary mt-1">{product.brand}</p>
+                  <h3 className="text-[15px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">{product.name}</h3>
+                  <p className="text-[13px] text-amazon-text-secondary mt-1">{product.brand}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <span className="star-rating text-[13px]">★★★★☆</span>
                     <span className="text-[12px] text-amazon-link">{Math.floor(Math.random() * 500 + 50)}</span>
                   </div>
-                  <div className="mt-1">
-                    <span className="amazon-price"><span className="symbol">₹</span>{Math.floor(product.price).toLocaleString("en-IN")}</span>
+                  <div className="mt-2">
+                    <span className="text-[24px] font-bold text-amazon-text"><span className="text-[14px] align-top relative top-[3px] mr-1">₹</span>{Math.floor(product.price).toLocaleString("en-IN")}</span>
                   </div>
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-3">
                     {product.size && product.size !== "One Size" && (
                       <span className="text-[11px] bg-[#f0f2f2] text-amazon-text-secondary px-1.5 py-0.5 rounded">Size: {product.size}</span>
                     )}
-                    <span className="eco-badge">♻ Circular Ready</span>
+                    <span className="eco-badge">Circular Ready</span>
                   </div>
                   <p className="text-[12px] text-amazon-text-secondary mt-1.5">FREE delivery by <b className="text-amazon-text">Tomorrow</b></p>
                 </div>

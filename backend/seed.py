@@ -37,7 +37,7 @@ def seed():
             budget_min=500, budget_max=8000,
             interests="running,fitness,electronics",
             green_credits=250, lifetime_credits=250,
-            level="Sapling 🌿",
+            level="Sapling",
             co2_saved=18.0, ewaste_prevented=5.0, water_saved=120.0,
             products_reused=3, products_repaired=1, products_resold=1,
         ),
@@ -48,7 +48,7 @@ def seed():
             budget_min=800, budget_max=12000,
             interests="yoga,travel,electronics",
             green_credits=80, lifetime_credits=120,
-            level="Sapling 🌿",
+            level="Sapling",
             co2_saved=8.5, ewaste_prevented=1.2, water_saved=60.0,
             products_reused=1, products_repaired=0, products_resold=1,
         ),
@@ -59,7 +59,7 @@ def seed():
             budget_min=1000, budget_max=15000,
             interests="running,backpacking,gadgets",
             green_credits=45, lifetime_credits=65,
-            level="Seed 🌱",
+            level="Seed",
             co2_saved=4.2, ewaste_prevented=0.8, water_saved=30.0,
             products_reused=1, products_repaired=0, products_resold=0,
         ),
@@ -70,7 +70,7 @@ def seed():
             budget_min=400, budget_max=6000,
             interests="yoga,fitness,sustainable living",
             green_credits=320, lifetime_credits=450,
-            level="Green Hero 🌎",
+            level="Green Hero",
             co2_saved=28.0, ewaste_prevented=3.5, water_saved=200.0,
             products_reused=4, products_repaired=2, products_resold=2,
         ),
@@ -81,7 +81,7 @@ def seed():
             budget_min=600, budget_max=10000,
             interests="running,travel,electronics",
             green_credits=15, lifetime_credits=15,
-            level="Seed 🌱",
+            level="Seed",
             co2_saved=1.5, ewaste_prevented=0.2, water_saved=10.0,
             products_reused=0, products_repaired=0, products_resold=0,
         ),
@@ -209,30 +209,7 @@ def seed():
     db.add_all([return1, return2])
     db.commit()
 
-    # ── Sample Listings (auto-matched) ────────────────────────────
-    listing1 = Listing(
-        return_id=1, product_id=3, price=round(2499 * 0.7, 2), status="available",
-    )
-    db.add(listing1)
-    db.commit()
-    db.refresh(listing1)
-    matched1 = find_best_match(listing1, db)
-    if matched1:
-        listing1.matched_user_id = matched1
-        listing1.status = "matched"
-
-    listing2 = Listing(
-        return_id=2, product_id=4, price=round(1299 * 0.5, 2), status="available",
-    )
-    db.add(listing2)
-    db.commit()
-    db.refresh(listing2)
-    matched2 = find_best_match(listing2, db)
-    if matched2:
-        listing2.matched_user_id = matched2
-        listing2.status = "matched"
-
-    db.commit()
+    # No pre-seeded listings. Listings must be generated from active user returns.
 
     # ── Green Credit Transactions (rich history for Harish) ───────
     transactions = [
@@ -319,10 +296,10 @@ def seed():
     db.commit()
 
     db.close()
-    print("✅ Database seeded successfully!")
-    print(f"   • {len(users)} users (Harish at Sapling 🌿 with 250 credits)")
+    print("Database seeded successfully!")
+    print(f"   • {len(users)} users (Harish at Sapling with 250 credits)")
     print(f"   • {len(products)} products with environmental impact metrics")
-    print(f"   • {len(orders_data)} orders, 2 returns, 2 listings")
+    print(f"   • {len(orders_data)} orders, {db.query(Return).count()} returns, {db.query(Listing).count()} listings")
     print(f"   • {len(transactions)} credit transactions")
     print(f"   • {len(challenges)} green challenges")
     print(f"   • {len(redemptions)} redemptions")
