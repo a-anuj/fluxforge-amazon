@@ -1,6 +1,6 @@
 # FluxForge — Amazon Circular Commerce Platform
 
-> **Amazon HackOn Season 6.0** | Problem Statement: *Reimagining Urgent Shopping*
+> **Amazon HackOn Season 6.0** | Problem Statement: *Second Life Commerce : AI Powered Returns & Sustainable Resale*
 
 ## The Idea
 
