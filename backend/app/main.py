@@ -12,8 +12,7 @@ from app.database import engine, Base
 from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability
 from app.routers import wishlist as wishlist_router, community
 
-# Create tables on startup (idempotent)
-Base.metadata.create_all(bind=engine)
+from contextlib import asynccontextmanager
 
 # ── Safe column migrations for new features ────────────────────────────
 from sqlalchemy import text as _sql_text
@@ -28,21 +27,28 @@ def _safe_add_column(conn, table, column, col_type, default=None):
     except Exception:
         pass  # column already exists or DB doesn't support it
 
-try:
-    with engine.connect() as _conn:
-        _safe_add_column(_conn, "orders", "placed_at", "TIMESTAMP WITH TIME ZONE", "NOW()")
-        _safe_add_column(_conn, "orders", "return_period_days", "INTEGER", "30")
-        _safe_add_column(_conn, "orders", "no_return_credits", "INTEGER", "0")
-        _safe_add_column(_conn, "orders", "no_return_credits_status", "VARCHAR", "'pending'")
-        _conn.commit()
-except Exception:
-    pass  # Non-critical — app can still run
-
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create tables on startup (idempotent)
+    Base.metadata.create_all(bind=engine)
+    
+    try:
+        with engine.connect() as _conn:
+            _safe_add_column(_conn, "orders", "placed_at", "TIMESTAMP WITH TIME ZONE", "NOW()")
+            _safe_add_column(_conn, "orders", "return_period_days", "INTEGER", "30")
+            _safe_add_column(_conn, "orders", "no_return_credits", "INTEGER", "0")
+            _safe_add_column(_conn, "orders", "no_return_credits_status", "VARCHAR", "'pending'")
+            _conn.commit()
+    except Exception:
+        pass  # Non-critical — app can still run
+    yield
+    # Clean up resources if needed
 
 app = FastAPI(
     title="Amazon Green Credits Ecosystem",
     description="Sustainability reward ecosystem — AI-powered assessment, green credits, impact tracking, and circular commerce.",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 # CORS — allow any origin for network access
