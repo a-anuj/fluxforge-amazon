@@ -15,6 +15,30 @@ from app.routers import wishlist as wishlist_router, community
 # Create tables on startup (idempotent)
 Base.metadata.create_all(bind=engine)
 
+# ── Safe column migrations for new features ────────────────────────────
+from sqlalchemy import text as _sql_text
+
+def _safe_add_column(conn, table, column, col_type, default=None):
+    """Add a column to an existing table if it doesn't already exist."""
+    try:
+        if default is not None:
+            conn.execute(_sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type} DEFAULT {default}"))
+        else:
+            conn.execute(_sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+    except Exception:
+        pass  # column already exists or DB doesn't support it
+
+try:
+    with engine.connect() as _conn:
+        _safe_add_column(_conn, "orders", "placed_at", "TIMESTAMP WITH TIME ZONE", "NOW()")
+        _safe_add_column(_conn, "orders", "return_period_days", "INTEGER", "30")
+        _safe_add_column(_conn, "orders", "no_return_credits", "INTEGER", "0")
+        _safe_add_column(_conn, "orders", "no_return_credits_status", "VARCHAR", "'pending'")
+        _conn.commit()
+except Exception:
+    pass  # Non-critical — app can still run
+
+
 app = FastAPI(
     title="Amazon Green Credits Ecosystem",
     description="Sustainability reward ecosystem — AI-powered assessment, green credits, impact tracking, and circular commerce.",

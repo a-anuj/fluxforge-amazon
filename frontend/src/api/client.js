@@ -63,6 +63,9 @@ export const createOrder = (userId, productId, isRefurbished = false, deliveryTy
 export const getOrders = (userId) => request(`/orders/?user_id=${userId}`);
 export const getDeliveryOptions = (category = "electronics") =>
   request(`/orders/delivery-options?category=${category}`);
+export const vestNoReturnCredits = (orderId) =>
+  request(`/orders/${orderId}/vest-credits`, { method: "POST" });
+
 
 // ── Returns ───────────────────────────────────────────────────
 export const createReturn = (orderId, imageUrls = [], conditionScore = null, recommendedAction = null, remainingLifePct = null) =>

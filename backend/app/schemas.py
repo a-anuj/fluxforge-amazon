@@ -122,6 +122,12 @@ class OrderOut(BaseModel):
     delivery_type: str = "standard"
     green_credits_earned: int = 0
 
+    # No-Return Loyalty Credits
+    placed_at: Optional[datetime] = None
+    return_period_days: int = 30
+    no_return_credits: int = 0
+    no_return_credits_status: str = "pending"   # "pending" | "vested" | "forfeited"
+
     model_config = {"from_attributes": True}
 
 

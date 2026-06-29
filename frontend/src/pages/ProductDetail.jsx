@@ -1,7 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getProduct, getAlternatives, createOrder, getProductConfidence, getProductImpact, getRefurbishedAlt, getSustainabilityAdvice, getDeliveryOptions, addToWishlist } from "../api/client";
 import { useUser } from "../context/UserContext";
+
+// Same formula as backend credit_engine.py
+const PRODUCT_IMPACT_SCORES = {
+  electronics: 2.5, running: 1.2, backpacking: 1.0,
+  yoga: 0.8, fitness: 1.0, clothing: 1.0, sports: 0.9, other: 1.0,
+};
+function computePendingCredits(category) {
+  const impact = PRODUCT_IMPACT_SCORES[(category || "").toLowerCase()] || 1.0;
+  return Math.max(1, Math.round(20 * impact * 0.4));
+}
 
 function scoreColor(score) {
   if (score >= 7.5) return "#067d62";
@@ -30,6 +40,57 @@ function ScoreRow({ label, score, sublabel, delay = 0 }) {
     </div>
   );
 }
+
+/* Clickable credit badge with attached info popup */
+function CreditInfoBadge({ label, color, title, reason }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handle(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  return (
+    <div className="relative inline-block mt-1" ref={ref}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 text-[12px] font-bold hover:underline focus:outline-none"
+        style={{ color }}
+      >
+        {label}
+        <span className="text-[10px] font-normal opacity-60 border rounded-full px-1 ml-0.5" style={{ borderColor: color }}>
+          why?
+        </span>
+      </button>
+
+      {open && (
+        <div
+          className="absolute z-50 left-0 top-full mt-1.5 w-[240px] bg-white rounded-xl shadow-xl border overflow-hidden"
+          style={{ borderColor: color, animation: "fadeSlideDown 0.15s ease" }}
+        >
+          <style>{`@keyframes fadeSlideDown { from { opacity:0; transform:translateY(-4px) } to { opacity:1; transform:translateY(0) } }`}</style>
+          <div className="px-3 py-2 text-white text-[12px] font-bold" style={{ backgroundColor: color }}>
+            {title}
+          </div>
+          <p className="px-3 py-2.5 text-[12px] text-[#333] leading-relaxed">{reason}</p>
+          <button
+            onClick={() => setOpen(false)}
+            className="w-full text-center text-[11px] py-1.5 border-t text-[#888] hover:text-[#444] transition-colors"
+            style={{ borderColor: "#e8e8e8" }}
+          >
+            Got it
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -222,12 +283,57 @@ export default function ProductDetail() {
               </div>
             )}
 
+            {/* 🌱 Green Loyalty Credits Incentive */}
+            {product && (() => {
+              const pendingCredits = computePendingCredits(product.category);
+              return (
+                <div className="border border-[#a5d6a7] rounded-lg p-3 mb-3 bg-gradient-to-br from-[#f1f8e9] to-[#e8f5e9]">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[12px] font-bold text-[#2e7d32] flex items-center gap-1.5">
+                      🌱 Keep it, earn it
+                    </p>
+                    <span className="text-[18px] font-bold text-[#2e7d32]">{pendingCredits}</span>
+                  </div>
+                  <p className="text-[11px] text-[#555] leading-relaxed">
+                    Buy this product and keep it past the <strong>7-day return window</strong> to
+                    earn <strong className="text-[#2e7d32]">{pendingCredits} Green Credits</strong> automatically.
+                  </p>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <div className="flex-1 bg-[#c8e6c9] rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-gradient-to-r from-[#66bb6a] to-[#2e7d32] h-1.5 rounded-full" style={{ width: "0%", transition: "width 1s" }} />
+                    </div>
+                    <span className="text-[10px] text-[#777]">Unlocks after day 7</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {orderResult ? (
               <div className="border border-[#067d62] rounded-lg p-3 bg-[#f0faf7]">
                 <p className="text-[14px] text-[#067d62] font-bold">✓ Order placed!</p>
                 <p className="text-[12px] text-amazon-text-secondary mt-1">Order #{orderResult.id} • Fit: {orderResult.fit_score}%</p>
-                {orderResult.green_credits_earned > 0 && <p className="text-[12px] text-[#067d62] font-bold mt-1">+{orderResult.green_credits_earned} Green Credits earned!</p>}
-                <Link to="/orders" className="text-[13px] text-amazon-link mt-1 inline-block hover:underline">View your orders ›</Link>
+
+                {/* Immediate delivery credits — clickable info popup */}
+                {orderResult.green_credits_earned > 0 && (
+                  <CreditInfoBadge
+                    label={`+${orderResult.green_credits_earned} Green Credits earned!`}
+                    color="#067d62"
+                    title="Delivery Green Credits"
+                    reason={`You earned ${orderResult.green_credits_earned} Green Credits instantly for choosing an eco-friendly delivery option. Lower-carbon delivery reduces emissions and is rewarded right away.`}
+                  />
+                )}
+
+                {/* Pending loyalty credits — clickable info popup */}
+                {orderResult.no_return_credits > 0 && (
+                  <CreditInfoBadge
+                    label={`${orderResult.no_return_credits} credits on the way`}
+                    color="#2e7d32"
+                    title="No-Return Loyalty Credits"
+                    reason={`These ${orderResult.no_return_credits} Green Credits will be added to your wallet automatically after the 7-day return window closes — as a reward for keeping the product instead of returning it.`}
+                  />
+                )}
+
+                <Link to="/orders" className="text-[13px] text-amazon-link mt-2 inline-block hover:underline">View your orders ›</Link>
               </div>
             ) : (
               <div className="space-y-2">
