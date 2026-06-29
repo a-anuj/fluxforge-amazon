@@ -55,8 +55,10 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(return_item)
 
-    # Mark original order as returned
+    # Mark original order as returned and forfeit any pending loyalty credits
     order.status = "returned"
+    if order.no_return_credits_status == "pending":
+        order.no_return_credits_status = "forfeited"
     db.commit()
 
     # ── Award Green Credits for the return action ──

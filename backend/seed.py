@@ -124,7 +124,7 @@ def seed():
             name="boAt Airdopes 141 TWS", category="electronics", brand="boAt",
             size="One Size", price=1299,
             description="True wireless earbuds with 42H playtime, ENx noise cancelling, and BEAST mode.",
-            image_url="https://images.unsplash.com/photo-1590658268037-6bf12f032f55?w=400",
+            image_url="https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=400",
             co2_impact=25.0, ewaste_impact=0.8, water_impact=200.0,
             repair_cost_estimate=150, avg_lifespan_months=24,
         ),
@@ -206,7 +206,7 @@ def seed():
         green_credits_earned=80,
     )
     return2 = Return(
-        order_id=3, image_urls="https://images.unsplash.com/photo-1590658268037-6bf12f032f55?w=400",
+        order_id=3, image_urls="https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=400",
         condition_score=71.0, defects="Slight color fading on the exterior",
         remaining_life_pct=65, recommended_action="refurbish", status="assessed",
         green_credits_earned=60,

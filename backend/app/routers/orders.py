@@ -1,14 +1,30 @@
 import random
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import Order, User, Product, GreenCreditTx
+from app.models import Order, User, Product, GreenCreditTx, Return
 from app.schemas import OrderCreate, OrderOut, DeliveryOptionOut
 from app.services.credit_engine import calculate_credits, get_delivery_credits, get_level, get_delivery_options
 from app.services.impact_calculator import calculate_action_impact
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+# Return window configuration per category (in days)
+RETURN_WINDOW_DAYS = {
+    "electronics": 7,
+    "clothing": 7,
+    "running": 7,
+    "sports": 7,
+    "books": 7,
+    "furniture": 7,
+    "appliances": 7,
+    "other": 7,
+}
+
+# No-return loyalty credits base reward
+NO_RETURN_CREDIT_BASE = 20  # base credits for keeping the product
 
 
 def compute_fit(user: User, product: Product) -> tuple[float, str]:
@@ -98,6 +114,10 @@ def create_order(body: OrderCreate, db: Session = Depends(get_db)):
             )
             db.add(tx)
 
+    # ── Calculate No-Return Loyalty Credits (pending) ──
+    return_period = RETURN_WINDOW_DAYS.get(category, 30)
+    no_return_credits = calculate_credits("purchase_refurbished", category, multiplier=0.4, override_base=NO_RETURN_CREDIT_BASE)
+
     order = Order(
         user_id=body.user_id,
         product_id=body.product_id,
@@ -107,6 +127,10 @@ def create_order(body: OrderCreate, db: Session = Depends(get_db)):
         is_refurbished=body.is_refurbished,
         delivery_type=body.delivery_type,
         green_credits_earned=total_credits,
+        placed_at=datetime.now(timezone.utc),
+        return_period_days=return_period,
+        no_return_credits=no_return_credits,
+        no_return_credits_status="pending",
     )
     db.add(order)
     db.commit()
@@ -123,3 +147,83 @@ def list_orders(user_id: int = Query(...), db: Session = Depends(get_db)):
 def list_delivery_options(category: str = Query("electronics")):
     """Return available delivery options with CO₂ and credit details."""
     return get_delivery_options(category)
+
+
+@router.post("/{order_id}/vest-credits", response_model=dict)
+def vest_no_return_credits(order_id: int, db: Session = Depends(get_db)):
+    """
+    Check if the return window has passed for an order without any returns.
+    If so, vest the pending no-return loyalty credits to the user.
+    Called by the frontend when user visits the orders page.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.no_return_credits_status != "pending":
+        return {
+            "status": order.no_return_credits_status,
+            "message": "Credits already processed",
+            "credits_vested": 0,
+        }
+
+    # If order was returned — forfeit
+    has_return = db.query(Return).filter(Return.order_id == order_id).first()
+    if has_return:
+        order.no_return_credits_status = "forfeited"
+        db.commit()
+        return {
+            "status": "forfeited",
+            "message": "Order was returned — loyalty credits forfeited",
+            "credits_vested": 0,
+        }
+
+    # Check if return window has elapsed
+    now = datetime.now(timezone.utc)
+    placed_at = order.placed_at
+    if placed_at and placed_at.tzinfo is None:
+        placed_at = placed_at.replace(tzinfo=timezone.utc)
+
+    if placed_at is None:
+        return {"status": "pending", "message": "Order date unavailable", "credits_vested": 0}
+
+    vest_date = placed_at + timedelta(days=order.return_period_days)
+
+    if now < vest_date:
+        days_remaining = max(1, (vest_date - now).days)
+        return {
+            "status": "pending",
+            "message": f"Return window active — {days_remaining} day(s) remaining",
+            "credits_vested": 0,
+            "days_remaining": days_remaining,
+        }
+
+    # Vest the credits!
+    order.no_return_credits_status = "vested"
+    user = db.query(User).filter(User.id == order.user_id).first()
+    credits_vested = 0
+    if user:
+        credits_vested = order.no_return_credits
+        user.green_credits += credits_vested
+        user.lifetime_credits += credits_vested
+        level_info = get_level(user.lifetime_credits)
+        user.level = level_info["name"]
+
+        product = db.query(Product).filter(Product.id == order.product_id).first()
+        product_name = product.name if product else f"Product #{order.product_id}"
+
+        tx = GreenCreditTx(
+            user_id=order.user_id,
+            amount=credits_vested,
+            type="earned",
+            action_type="no_return_loyalty",
+            description=f"Loyalty reward: kept '{product_name}' past the return window",
+        )
+        db.add(tx)
+
+    db.commit()
+    return {
+        "status": "vested",
+        "message": "Green Credits vested 🌱 Thank you for keeping your product!",
+        "credits_vested": credits_vested,
+    }

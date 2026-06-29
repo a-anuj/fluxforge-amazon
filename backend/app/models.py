@@ -3,7 +3,7 @@ SQLAlchemy ORM models for Amazon Green Credits Ecosystem.
 All tables are defined here for hackathon simplicity.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -81,6 +81,12 @@ class Order(Base):
     is_refurbished = Column(Boolean, default=False)
     delivery_type = Column(String, default="standard")  # "express" | "standard" | "eco"
     green_credits_earned = Column(Integer, default=0)
+
+    # ── No-Return Loyalty Credits (pending until return window expires) ──
+    placed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    return_period_days = Column(Integer, default=30)   # return window in days
+    no_return_credits = Column(Integer, default=0)     # credits pending if not returned
+    no_return_credits_status = Column(String, default="pending")  # "pending" | "vested" | "forfeited"
 
     user = relationship("User", back_populates="orders")
     product = relationship("Product", back_populates="orders")
