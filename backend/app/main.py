@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
-from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability
+from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability, analytics
 from app.routers import wishlist as wishlist_router, community
 
 from contextlib import asynccontextmanager
@@ -71,6 +71,7 @@ app.include_router(media.router, prefix="/api")
 app.include_router(sustainability.router, prefix="/api")
 app.include_router(wishlist_router.router, prefix="/api")
 app.include_router(community.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 
 
 @app.get("/")

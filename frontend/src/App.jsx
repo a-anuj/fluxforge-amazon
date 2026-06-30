@@ -10,6 +10,7 @@ import ListingDetail from "./pages/ListingDetail";
 import Profile from "./pages/Profile";
 import Cart from "./pages/Cart";
 import NearDrop from "./pages/NearDrop";
+import Dashboard from "./pages/Dashboard";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/neardrop" element={<NearDrop />} />
             <Route path="/cart" element={<Cart />} />
+            <Route path="/dashboard" element={<Dashboard />} />
           </Route>
         </Routes>
       </UserProvider>
