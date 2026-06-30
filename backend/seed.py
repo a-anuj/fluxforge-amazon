@@ -90,6 +90,19 @@ def seed():
             products_reused=0, products_repaired=0, products_resold=0,
             city="Pune", pincode="411001",
         ),
+        User(
+            name="Admin User",
+            sizes="shoes:9,top:L",
+            brand_prefs="Nike",
+            budget_min=1000, budget_max=10000,
+            interests="electronics",
+            green_credits=0, lifetime_credits=0,
+            level="Seed",
+            co2_saved=0.0, ewaste_prevented=0.0, water_saved=0.0,
+            products_reused=0, products_repaired=0, products_resold=0,
+            city="Mumbai", pincode="400001",
+            is_admin=True,
+        ),
     ]
     db.add_all(users)
     db.commit()

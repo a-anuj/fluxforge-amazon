@@ -32,6 +32,7 @@ class UserOut(BaseModel):
     # Location
     city: Optional[str] = None
     pincode: Optional[str] = None
+    is_admin: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -45,6 +46,7 @@ class UserUpdate(BaseModel):
     interests: Optional[str] = None
     city: Optional[str] = None
     pincode: Optional[str] = None
+    is_admin: Optional[bool] = None
 
 
 # ── Products ───────────────────────────────────────────────────────────

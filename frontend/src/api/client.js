@@ -144,3 +144,6 @@ export const purchaseWishlistMatch = (matchId, userId) =>
     method: "POST",
     body: JSON.stringify({ user_id: userId }),
   });
+
+// ── Analytics ──────────────────────────────────────────────────
+export const getDashboardMetrics = () => request("/analytics/dashboard");
