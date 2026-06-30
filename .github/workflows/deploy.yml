@@ -3,7 +3,7 @@ name: Deploy to EC2
 on:
   workflow_run:
     workflows:
-      - "Backend Tests"        # Must match exactly the `name:` field in backend-tests.yml
+      - "Backend Tests"       # Must match exactly the `name:` field in backend-tests.yml
     branches:
       - main
     types:
@@ -12,7 +12,7 @@ on:
 # Prevent concurrent deployments from piling up
 concurrency:
   group: production-deploy
-  cancel-in-progress: false    # Never cancel an in-progress deploy; queue instead
+  cancel-in-progress: false   # Never cancel an in-progress deploy; queue instead
 
 jobs:
   deploy:
@@ -23,7 +23,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - name: Checkout code (for reference / future use)
+      - name: Checkout code
         uses: actions/checkout@v4
 
       # ---------------------------------------------------------------
@@ -35,7 +35,7 @@ jobs:
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          # Add EC2 host to known_hosts using the stored fingerprint (prevents MITM)
+          # Add EC2 host to known_hosts using stored fingerprint (prevents MITM)
           echo "${{ secrets.EC2_HOST_KEY }}" >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
@@ -68,8 +68,7 @@ jobs:
             source "${VENV_DIR}/bin/activate"
 
             echo "==> [3/4] Installing/updating dependencies only if requirements changed..."
-            # Compare the hash of requirements.txt with the last-installed snapshot.
-            # This avoids a slow pip install on every deploy when nothing changed.
+            # Compare hash of requirements.txt to avoid slow pip install on every deploy
             HASH_FILE="${VENV_DIR}/.requirements_hash"
             CURRENT_HASH=$(sha256sum "${REQUIREMENTS}" | awk '{print $1}')
             STORED_HASH=$(cat "${HASH_FILE}" 2>/dev/null || echo "")
