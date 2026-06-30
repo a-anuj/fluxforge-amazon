@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { 
   BarChart, 
   Bar, 
@@ -23,13 +24,21 @@ import {
   Download
 } from "lucide-react";
 import { getDashboardMetrics } from "../api/client";
+import { useUser } from "../context/UserContext";
 
 export default function Dashboard() {
+  const { currentUser, loading: userLoading } = useUser();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (userLoading) return;
+    if (!currentUser || !currentUser.is_admin) {
+      setLoading(false);
+      return;
+    }
+
     const fetchMetrics = async () => {
       try {
         const data = await getDashboardMetrics();
@@ -43,7 +52,7 @@ export default function Dashboard() {
     };
     
     fetchMetrics();
-  }, []);
+  }, [currentUser, userLoading]);
 
   const handleExportCSV = () => {
     if (!metrics) return;
@@ -66,6 +75,30 @@ export default function Dashboard() {
     link.click();
     document.body.removeChild(link);
   };
+
+  if (userLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  if (!currentUser || !currentUser.is_admin) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto shadow-sm">
+          <h2 className="text-xl font-bold text-red-600 mb-2">Access Denied</h2>
+          <p className="text-gray-600 text-sm mb-4">
+            Only administrator accounts are authorized to view this KPI Dashboard.
+          </p>
+          <Link to="/" className="inline-block bg-[#FFD814] hover:bg-[#F7CA00] text-amazon-text font-bold px-4 py-2 rounded text-sm transition-colors shadow">
+            Go to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

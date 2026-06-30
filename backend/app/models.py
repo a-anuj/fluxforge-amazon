@@ -35,6 +35,7 @@ class User(Base):
     # ── Location fields ──
     city    = Column(String, nullable=True)          # e.g. "Mumbai"
     pincode = Column(String, nullable=True)          # e.g. "400001"
+    is_admin = Column(Boolean, default=False)
 
     orders = relationship("Order", back_populates="user")
     green_credit_txs = relationship("GreenCreditTx", back_populates="user")
