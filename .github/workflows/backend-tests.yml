@@ -1,0 +1,56 @@
+name: Backend Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "backend/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+
+jobs:
+  test:
+    name: Run Backend Test Suite
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: "sqlite:///:memory:"
+          AWS_DEFAULT_REGION: "us-east-1"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          pytest tests/ test_vision.py \
+            -v \
+            --tb=short \
+            --junitxml=test-results.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: backend/test-results.xml

@@ -39,7 +39,7 @@ if not logger.handlers:
 
 # ── Bedrock configuration ─────────────────────────────────────────────────────
 
-MODEL_ID = "us.amazon.nova-lite-v1:0"
+MODEL_ID = "amazon.nova-lite-v1:0"
 
 ASSESSMENT_SYSTEM_PROMPT = """You are an AI Reverse Logistics Inspector for Amazon Returns.
 
