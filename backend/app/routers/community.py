@@ -31,7 +31,7 @@ from app.schemas import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/community", tags=["community"])
 
-MODEL_ID = "us.amazon.nova-lite-v1:0"
+MODEL_ID = "amazon.nova-lite-v1:0"
 
 CONDITION_LABELS = {
     "like_new": "Like New",
