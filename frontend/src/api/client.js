@@ -147,3 +147,25 @@ export const purchaseWishlistMatch = (matchId, userId) =>
 
 // ── Analytics ──────────────────────────────────────────────────
 export const getDashboardMetrics = () => request("/analytics/dashboard");
+
+// ── Baseline Scan (Employee) ────────────────────────────────
+const multipartRequest = async (path, formData) => {
+  const url = `${BASE_URL}${path}`;
+  const res = await fetch(url, { method: "POST", body: formData });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `API error: ${res.status}`);
+  }
+  return res.json();
+};
+
+export const submitBaselineScan = (orderId, employeeId, images) =>
+  request(`/baseline/${orderId}/scan`, {
+    method: "POST",
+    body: JSON.stringify({ employee_id: employeeId, images }),
+  });
+
+export const getBaselineScan = (orderId) => request(`/baseline/${orderId}`);
+
+export const getPendingBaselineOrders = (employeeId) =>
+  request(`/baseline/pending/list?employee_id=${employeeId}`);

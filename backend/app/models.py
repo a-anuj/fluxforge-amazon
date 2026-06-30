@@ -36,8 +36,10 @@ class User(Base):
     city    = Column(String, nullable=True)          # e.g. "Mumbai"
     pincode = Column(String, nullable=True)          # e.g. "400001"
     is_admin = Column(Boolean, default=False)
+    role    = Column(String, default="customer")      # "customer" | "employee" | "admin"
+    employee_zone = Column(String, nullable=True)     # e.g. "Mumbai-West" — delivery zone for employees
 
-    orders = relationship("Order", back_populates="user")
+    orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")
     green_credit_txs = relationship("GreenCreditTx", back_populates="user")
     challenges = relationship("GreenChallenge", back_populates="user")
     redemptions = relationship("Redemption", back_populates="user")
@@ -65,6 +67,10 @@ class Product(Base):
     repair_cost_estimate = Column(Float, nullable=True) # ₹ estimated repair cost
     avg_lifespan_months = Column(Integer, default=24)   # average product lifespan
 
+    # ── Return Policy ──
+    return_period_days = Column(Integer, default=7)    # 0 = no return policy
+    has_no_return_policy = Column(Boolean, default=False)  # True = no returns allowed
+
     orders = relationship("Order", back_populates="product")
 
 
@@ -89,7 +95,12 @@ class Order(Base):
     no_return_credits = Column(Integer, default=0)     # credits pending if not returned
     no_return_credits_status = Column(String, default="pending")  # "pending" | "vested" | "forfeited"
 
-    user = relationship("User", back_populates="orders")
+    # ── Delivery Baseline Scan (captured by employee at delivery) ──
+    baseline_scan_urls = Column(String, nullable=True)  # comma-separated image URLs/keys
+    baseline_scan_at = Column(DateTime, nullable=True)  # when the baseline was recorded
+    baseline_scan_employee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    user = relationship("User", back_populates="orders", foreign_keys="Order.user_id")
     product = relationship("Product", back_populates="orders")
     returns = relationship("Return", back_populates="order")
 

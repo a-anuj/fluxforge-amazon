@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits } from "../api/client";
+import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits, getBaselineScan } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 /* ── Credits Badge with simple "why" popup ───────────────── */
@@ -353,11 +353,45 @@ export default function Orders() {
                               Buy it again
                             </Link>
                           )}
-                          {!order.is_community && order.status !== "returned" && (
-                            <Link to={`/returns/new?orderId=${order.id}`} className="btn-amazon text-[12px] px-3 py-1">
-                              Return or Replace
-                            </Link>
-                          )}
+                          {/* Return button — only shown if product has a return policy and order not yet returned */}
+                          {!order.is_community && order.status !== "returned" && (() => {
+                            const noReturn = prod?.has_no_return_policy;
+                            const returnDays = prod?.return_period_days ?? order.return_period_days ?? 7;
+                            const placedAt = order.placed_at ? new Date(order.placed_at) : null;
+                            const returnDeadline = placedAt ? new Date(placedAt.getTime() + returnDays * 86400000) : null;
+                            const isWithinWindow = returnDeadline ? new Date() <= returnDeadline : true;
+                            const daysLeft = returnDeadline ? Math.max(0, Math.ceil((returnDeadline - new Date()) / 86400000)) : null;
+
+                            if (noReturn) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-red-50 border border-red-200 text-red-600 px-2.5 py-1 rounded font-bold">
+                                  🚫 No Return Policy
+                                </span>
+                              );
+                            }
+                            if (!isWithinWindow) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-[#f0f2f2] border border-amazon-border text-amazon-text-secondary px-2.5 py-1 rounded">
+                                  ⏰ Return window expired
+                                </span>
+                              );
+                            }
+                            return (
+                              <Link
+                                to={`/returns/new?orderId=${order.id}`}
+                                className="btn-amazon text-[12px] px-3 py-1 flex items-center gap-1"
+                              >
+                                Return or Replace
+                                {daysLeft !== null && (
+                                  <span className={`ml-1 text-[10px] font-bold ${
+                                    daysLeft <= 2 ? 'text-red-500' : daysLeft <= 5 ? 'text-orange-500' : 'text-[#067d62]'
+                                  }`}>
+                                    {daysLeft}d left
+                                  </span>
+                                )}
+                              </Link>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

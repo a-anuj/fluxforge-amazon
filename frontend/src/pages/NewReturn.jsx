@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getOrders, createReturn, getProduct } from "../api/client";
+import { getOrders, createReturn, getProduct, getBaselineScan } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 const BASE_URL = `http://${window.location.hostname}:8000/api`;
@@ -105,6 +105,7 @@ export default function NewReturn() {
 
   const [verifyingImage, setVerifyingImage] = useState(false);
   const [verifiedImage, setVerifiedImage] = useState(null);
+  const [baselineScan, setBaselineScan] = useState(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -129,10 +130,12 @@ export default function NewReturn() {
   }, [currentUser]);
 
   useEffect(() => {
-    if (!selectedOrder || !orders.length) { setSelectedProduct(null); return; }
+    if (!selectedOrder || !orders.length) { setSelectedProduct(null); setBaselineScan(null); return; }
     const order = orders.find((o) => String(o.id) === String(selectedOrder));
-    if (!order) { setSelectedProduct(null); return; }
+    if (!order) { setSelectedProduct(null); setBaselineScan(null); return; }
     getProduct(order.product_id).then(setSelectedProduct).catch(() => setSelectedProduct(null));
+    // Fetch baseline scan info for this order
+    getBaselineScan(order.id).then(setBaselineScan).catch(() => setBaselineScan(null));
   }, [selectedOrder, orders]);
 
   // Immediate image verification when image or product changes
@@ -558,6 +561,43 @@ export default function NewReturn() {
                   ))}
                 </select>
               </div>
+
+              {/* Baseline scan indicator */}
+              {selectedOrder && baselineScan && (
+                <div className={`rounded-lg px-4 py-3 flex items-start gap-3 border ${
+                  baselineScan.has_baseline_scan
+                    ? "bg-[#f0fdf4] border-[#22c55e]/40"
+                    : "bg-[#fffbeb] border-[#f59e0b]/40"
+                }`}>
+                  <span className="text-[18px] flex-shrink-0 mt-0.5">
+                    {baselineScan.has_baseline_scan ? "🛡️" : "⚠️"}
+                  </span>
+                  <div className="flex-1">
+                    {baselineScan.has_baseline_scan ? (
+                      <>
+                        <p className="text-[12px] font-bold text-[#15803d]">Delivery Baseline Scan Available</p>
+                        <p className="text-[11px] text-[#166534] mt-0.5">
+                          {baselineScan.angles_count} angles captured by{" "}
+                          <strong>{baselineScan.employee?.name || "delivery agent"}</strong> on{" "}
+                          {baselineScan.baseline_scan_at
+                            ? new Date(baselineScan.baseline_scan_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                            : "delivery day"}.
+                          The AI will compare your return photo <strong>against this baseline</strong> for accurate assessment.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[12px] font-bold text-[#92400e]">No Baseline Scan on Record</p>
+                        <p className="text-[11px] text-[#78350f] mt-0.5">
+                          No delivery-time baseline scan was captured for this order. The AI will assess
+                          the return photo independently without a comparison reference.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-[12px] font-semibold text-[#0f1923] block mb-1">Reason for return</label>
                 <select value={reason} onChange={(e) => setReason(e.target.value)} className="w-full px-3 py-2 border border-[#c8cdd3] rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-[#0f1923] bg-white">

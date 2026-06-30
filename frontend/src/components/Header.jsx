@@ -112,18 +112,28 @@ export default function Header() {
           {/* User Switcher (Hackathon feature) */}
           <div className="group relative px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
             <Link to="/profile" className="flex flex-col">
-              <span className="text-[12px] text-white hover:underline">Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}</span>
+              <span className="text-[12px] text-white hover:underline flex items-center gap-1">
+                Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}
+                {currentUser?.role === "employee" && (
+                  <span className="text-[9px] bg-[#c7511f] text-white px-1.5 py-0.5 rounded font-bold leading-none">STAFF</span>
+                )}
+                {(currentUser?.is_admin || currentUser?.role === "admin") && (
+                  <span className="text-[9px] bg-purple-700 text-white px-1.5 py-0.5 rounded font-bold leading-none">ADMIN</span>
+                )}
+              </span>
               <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
             </Link>
             
             {/* Dropdown menu */}
-            <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[240px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
+            <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[260px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
               <div className="p-3 border-b border-amazon-border bg-[#f0f2f2]">
                 <p className="font-bold text-[14px]">Demo Profiles</p>
-                <p className="text-[11px] text-amazon-text-secondary">Switch user to test different states</p>
+                <p className="text-[11px] text-amazon-text-secondary">Switch user to test different roles</p>
               </div>
               <div className="py-2">
-                {users.map(u => (
+                {/* Customer profiles */}
+                <p className="px-4 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-amazon-text-secondary">Customers</p>
+                {users.filter(u => u.role === "customer" || (!u.role && !u.is_admin)).map(u => (
                   <button 
                     key={u.id} 
                     onClick={() => switchUser(u.id)}
@@ -133,6 +143,37 @@ export default function Header() {
                     {currentUser?.id === u.id && <span>✓</span>}
                   </button>
                 ))}
+                {/* Employee profiles */}
+                <p className="px-4 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-[#c7511f]">🚚 Delivery Employees</p>
+                {users.filter(u => u.role === "employee").map(u => (
+                  <button 
+                    key={u.id} 
+                    onClick={() => switchUser(u.id)}
+                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-orange-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#fff8f0] text-[#c7511f]' : ''}`}
+                  >
+                    <div>
+                      <span>{u.name}</span>
+                      <span className="ml-2 text-[10px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-bold">{u.employee_zone || 'Employee'}</span>
+                    </div>
+                    {currentUser?.id === u.id && <span className="text-[#c7511f]">✓</span>}
+                  </button>
+                ))}
+                {/* Admin profiles */}
+                {users.filter(u => u.is_admin || u.role === "admin").length > 0 && (
+                  <>
+                    <p className="px-4 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-[#6b21a8]">🔧 Admin</p>
+                    {users.filter(u => u.is_admin || u.role === "admin").map(u => (
+                      <button 
+                        key={u.id} 
+                        onClick={() => switchUser(u.id)}
+                        className={`w-full text-left px-4 py-2 text-[13px] hover:bg-purple-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#faf5ff] text-[#6b21a8]' : ''}`}
+                      >
+                        <span>{u.name}</span>
+                        {currentUser?.id === u.id && <span className="text-[#6b21a8]">✓</span>}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -198,6 +239,11 @@ export default function Header() {
         {currentUser?.is_admin && (
           <Link to="/dashboard" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
             KPI Dashboard
+          </Link>
+        )}
+        {currentUser?.role === "employee" && (
+          <Link to="/employee-scan" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#febd69] font-bold flex items-center gap-1">
+            <span>📦</span> Delivery Scan
           </Link>
         )}
       </div>
