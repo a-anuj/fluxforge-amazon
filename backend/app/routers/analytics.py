@@ -105,6 +105,72 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
                 "aiAccuracy": round(ai_accuracy, 1)
             })
 
+    # --- New Metrics ---
+    
+    # Category-wise returns
+    category_returns = db.query(models.Product.category, func.count(models.Return.id)).join(
+        models.Order, models.Return.order_id == models.Order.id
+    ).join(
+        models.Product, models.Order.product_id == models.Product.id
+    ).group_by(models.Product.category).all()
+    category_data = [{"name": c[0], "value": c[1]} for c in category_returns if c[0]]
+
+    # Brand-wise (Seller-wise) returns
+    brand_returns = db.query(models.Product.brand, func.count(models.Return.id)).join(
+        models.Order, models.Return.order_id == models.Order.id
+    ).join(
+        models.Product, models.Order.product_id == models.Product.id
+    ).group_by(models.Product.brand).all()
+    brand_data = [{"name": b[0], "value": b[1]} for b in brand_returns if b[0]]
+
+    # Region-wise returns
+    region_returns = db.query(models.User.city, func.count(models.Return.id)).join(
+        models.Order, models.Return.order_id == models.Order.id
+    ).join(
+        models.User, models.Order.user_id == models.User.id
+    ).group_by(models.User.city).all()
+    region_data = [{"name": r[0] or "Unknown", "value": r[1]} for r in region_returns]
+
+    # Return reasons
+    reason_returns = db.query(models.Return.defects, func.count(models.Return.id)).group_by(models.Return.defects).all()
+    # Handle potentially long comma-separated strings by taking the first primary reason if desired, or just raw
+    reason_data = []
+    for r in reason_returns:
+        raw_reason = r[0]
+        count = r[1]
+        if not raw_reason or raw_reason.strip() == "none":
+            name = "No Defect / Disliked"
+        else:
+            name = raw_reason.split(',')[0].strip().title() # take first for cleaner pie chart
+        
+        # Check if already in list to aggregate
+        existing = next((item for item in reason_data if item["name"] == name), None)
+        if existing:
+            existing["value"] += count
+        else:
+            reason_data.append({"name": name, "value": count})
+
+    # Top returned products
+    top_products = db.query(
+        models.Product.name, 
+        models.Product.brand,
+        models.Product.category,
+        func.count(models.Return.id).label('return_count')
+    ).join(
+        models.Order, models.Return.order_id == models.Order.id
+    ).join(
+        models.Product, models.Order.product_id == models.Product.id
+    ).group_by(
+        models.Product.id
+    ).order_by(
+        func.count(models.Return.id).desc()
+    ).limit(5).all()
+    
+    top_products_data = [
+        {"name": p[0], "brand": p[1], "category": p[2], "returns": p[3]} 
+        for p in top_products
+    ]
+
     metrics = {
         "overall": {
             "reductionInReturnRate": round(reduction_pct, 1),
@@ -116,7 +182,12 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
             "productsResold": products_resold,
             "carbonEmissionsSavedKg": round(co2_saved, 1)
         },
-        "historicalTrends": trends
+        "historicalTrends": trends,
+        "categoryReturns": category_data,
+        "brandReturns": brand_data,
+        "regionReturns": region_data,
+        "reasonReturns": reason_data,
+        "topReturnedProducts": top_products_data
     }
     
     return metrics

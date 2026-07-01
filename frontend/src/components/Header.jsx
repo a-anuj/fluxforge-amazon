@@ -70,42 +70,46 @@ export default function Header() {
         </Link>
 
         {/* Location (Desktop) */}
-        <div 
-          onClick={() => setShowLocModal(true)}
-          className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer"
-        >
-          <span className="text-[12px] text-[#ccc] leading-tight ml-4">
-            Delivering to {currentUser?.city || "Select"} {currentUser?.pincode || "Location"}
-          </span>
-          <span className="text-[14px] font-bold flex items-center gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Update location
-          </span>
-        </div>
+        {!currentUser?.is_admin && (
+          <div 
+            onClick={() => setShowLocModal(true)}
+            className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer"
+          >
+            <span className="text-[12px] text-[#ccc] leading-tight ml-4">
+              Delivering to {currentUser?.city || "Select"} {currentUser?.pincode || "Location"}
+            </span>
+            <span className="text-[14px] font-bold flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Update location
+            </span>
+          </div>
+        )}
 
         {/* Search */}
-        <form onSubmit={handleSearch} className="flex-1 hidden sm:flex rounded-md overflow-hidden bg-white">
-          <select className="bg-[#f3f3f3] text-[#0f1111] text-[12px] px-3 border-r border-[#cdcdcd] outline-none hover:bg-[#d4d4d4] cursor-pointer">
-            <option>All</option>
-            <option>Electronics</option>
-            <option>Sports & Outdoors</option>
-          </select>
-          <input 
-            type="text" 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search Amazon.in"
-            className="flex-1 px-3 py-2 text-amazon-text text-[15px] outline-none"
-          />
-          <button type="submit" className="bg-[#febd69] hover:bg-[#f3a847] px-4 flex items-center justify-center transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amazon-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </button>
-        </form>
+        {!currentUser?.is_admin && (
+          <form onSubmit={handleSearch} className="flex-1 hidden sm:flex rounded-md overflow-hidden bg-white">
+            <select className="bg-[#f3f3f3] text-[#0f1111] text-[12px] px-3 border-r border-[#cdcdcd] outline-none hover:bg-[#d4d4d4] cursor-pointer">
+              <option>All</option>
+              <option>Electronics</option>
+              <option>Sports & Outdoors</option>
+            </select>
+            <input 
+              type="text" 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search Amazon.in"
+              className="flex-1 px-3 py-2 text-amazon-text text-[15px] outline-none"
+            />
+            <button type="submit" className="bg-[#febd69] hover:bg-[#f3a847] px-4 flex items-center justify-center transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amazon-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </form>
+        )}
 
         {/* Right Nav Items */}
         <div className="flex items-center gap-1">
@@ -137,65 +141,74 @@ export default function Header() {
             </div>
           </div>
 
-          <Link to="/orders" className="hidden lg:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
-            <span className="text-[12px] text-white leading-tight">Returns</span>
-            <span className="text-[14px] font-bold">& Orders</span>
-          </Link>
+          {!currentUser?.is_admin && (
+            <>
+              <Link to="/orders" className="hidden lg:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
+                <span className="text-[12px] text-white leading-tight">Returns</span>
+                <span className="text-[14px] font-bold">& Orders</span>
+              </Link>
 
-          {/* Green Credits Wallet Icon */}
-          {currentUser && (
-            <Link to="/profile" className="flex items-center gap-2 px-2 py-1 border border-transparent hover:border-white rounded-sm transition-colors">
-              <div className="flex flex-col items-center">
-                <span className="text-[18px] leading-none mb-[1px]">{levelEmoji}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[12px] text-white font-bold leading-tight">Green Credits</span>
-                <span className="text-[14px] font-bold text-amazon-orange leading-none">{currentUser.green_credits}</span>
-              </div>
-            </Link>
+              {/* Green Credits Wallet Icon */}
+              {currentUser && (
+                <Link to="/profile" className="flex items-center gap-2 px-2 py-1 border border-transparent hover:border-white rounded-sm transition-colors">
+                  <div className="flex flex-col items-center">
+                    <span className="text-[18px] leading-none mb-[1px]">{levelEmoji}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[12px] text-white font-bold leading-tight">Green Credits</span>
+                    <span className="text-[14px] font-bold text-amazon-orange leading-none">{currentUser.green_credits}</span>
+                  </div>
+                </Link>
+              )}
+
+              <Link to="/cart" className="flex items-center px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer relative">
+                <span className="text-[32px] leading-none mt-1">🛒</span>
+                <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">{currentUser ? cart.length : 0}</span>
+                <span className="hidden sm:block text-[14px] font-bold mt-3">Cart</span>
+              </Link>
+            </>
           )}
-
-          <Link to="/cart" className="flex items-center px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer relative">
-            <span className="text-[32px] leading-none mt-1">🛒</span>
-            <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">{currentUser ? cart.length : 0}</span>
-            <span className="hidden sm:block text-[14px] font-bold mt-3">Cart</span>
-          </Link>
         </div>
       </div>
 
       {/* Mobile Search */}
-      <div className="sm:hidden px-4 pb-3">
-        <form onSubmit={handleSearch} className="flex rounded-md overflow-hidden bg-white h-10">
-          <input 
-            type="text" 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search Amazon.in"
-            className="flex-1 px-3 py-2 text-amazon-text text-[15px] outline-none"
-          />
-          <button type="submit" className="bg-[#febd69] px-4 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amazon-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </button>
-        </form>
-      </div>
+      {!currentUser?.is_admin && (
+        <div className="sm:hidden px-4 pb-3">
+          <form onSubmit={handleSearch} className="flex rounded-md overflow-hidden bg-white h-10">
+            <input 
+              type="text" 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search Amazon.in"
+              className="flex-1 px-3 py-2 text-amazon-text text-[15px] outline-none"
+            />
+            <button type="submit" className="bg-[#febd69] px-4 flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amazon-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Sub Nav */}
       <div className="bg-amazon-navy-light px-4 py-1.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap text-[14px]">
-        <Link to="/" className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-          All
-        </Link>
-        <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
-          Circular Commerce
-        </Link>
-        <Link to="/neardrop" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold flex items-center gap-1">
-          <span className="text-[#00e5a0]">📍</span> NearDrop
-        </Link>
-        {currentUser?.is_admin && (
+        {!currentUser?.is_admin ? (
+          <>
+            <Link to="/" className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+              All
+            </Link>
+            <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
+              Circular Commerce
+            </Link>
+            <Link to="/neardrop" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold flex items-center gap-1">
+              <span className="text-[#00e5a0]">📍</span> NearDrop
+            </Link>
+          </>
+        ) : (
           <Link to="/dashboard" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
             KPI Dashboard
           </Link>
