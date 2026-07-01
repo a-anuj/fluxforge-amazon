@@ -8,6 +8,7 @@ export function UserProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState([]);
+  const [isAdminMode, setIsAdminMode] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("amazon_cart");
@@ -56,7 +57,20 @@ export function UserProvider({ children }) {
 
   return (
     <UserContext.Provider
-      value={{ users, currentUser, switchUser, refreshUser, updateUserProfile, loading, cart, addToCart, removeFromCart, isInCart }}
+      value={{ 
+        users, 
+        currentUser, 
+        switchUser, 
+        refreshUser, 
+        updateUserProfile, 
+        loading, 
+        cart, 
+        addToCart, 
+        removeFromCart, 
+        isInCart,
+        isAdminMode,
+        setIsAdminMode
+      }}
     >
       {children}
     </UserContext.Provider>

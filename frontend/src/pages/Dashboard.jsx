@@ -31,14 +31,14 @@ import { getDashboardMetrics } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 export default function Dashboard() {
-  const { currentUser, loading: userLoading } = useUser();
+  const { currentUser, loading: userLoading, isAdminMode } = useUser();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (userLoading) return;
-    if (!currentUser || !currentUser.is_admin) {
+    if (!isAdminMode) {
       setLoading(false);
       return;
     }
@@ -56,7 +56,7 @@ export default function Dashboard() {
     };
     
     fetchMetrics();
-  }, [currentUser, userLoading]);
+  }, [isAdminMode, userLoading]);
 
   const handleExportCSV = () => {
     if (!metrics) return;
@@ -88,7 +88,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!currentUser || !currentUser.is_admin) {
+  if (!isAdminMode) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 text-center">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto shadow-sm">
@@ -106,8 +106,38 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <div className="h-8 w-64 animate-pulse rounded-md bg-gray-200"></div>
+            <div className="mt-2 h-4 w-96 animate-pulse rounded-md bg-gray-200"></div>
+          </div>
+        </div>
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-gray-200"></div>
+              <div className="space-y-2 w-full">
+                <div className="h-4 w-24 animate-pulse rounded bg-gray-200"></div>
+                <div className="h-6 w-16 animate-pulse rounded bg-gray-200"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div className="h-80 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center shadow-sm">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+              <p className="text-sm font-medium text-gray-500 animate-pulse">Aggregating real-time metrics...</p>
+            </div>
+          </div>
+          <div className="h-80 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center shadow-sm">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-purple-500 border-t-transparent"></div>
+              <p className="text-sm font-medium text-gray-500 animate-pulse">Analyzing return trends...</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

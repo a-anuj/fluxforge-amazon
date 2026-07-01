@@ -13,7 +13,7 @@ const LEVEL_EMOJIS = {
 
 export default function Header() {
   const navigate = useNavigate();
-  const { currentUser, switchUser, updateUserProfile, cart } = useUser();
+  const { currentUser, switchUser, updateUserProfile, cart, isAdminMode, setIsAdminMode } = useUser();
   const [users, setUsers] = useState([]);
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("q") || "");
@@ -70,7 +70,7 @@ export default function Header() {
         </Link>
 
         {/* Location (Desktop) */}
-        {!currentUser?.is_admin && (
+        {!isAdminMode && (
           <div 
             onClick={() => setShowLocModal(true)}
             className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer"
@@ -89,7 +89,7 @@ export default function Header() {
         )}
 
         {/* Search */}
-        {!currentUser?.is_admin && (
+        {!isAdminMode && (
           <form onSubmit={handleSearch} className="flex-1 hidden sm:flex rounded-md overflow-hidden bg-white">
             <select className="bg-[#f3f3f3] text-[#0f1111] text-[12px] px-3 border-r border-[#cdcdcd] outline-none hover:bg-[#d4d4d4] cursor-pointer">
               <option>All</option>
@@ -113,35 +113,50 @@ export default function Header() {
 
         {/* Right Nav Items */}
         <div className="flex items-center gap-1">
-          {/* User Switcher (Hackathon feature) */}
-          <div className="group relative px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
-            <Link to="/profile" className="flex flex-col">
-              <span className="text-[12px] text-white hover:underline">Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}</span>
-              <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
-            </Link>
-            
-            {/* Dropdown menu */}
-            <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[240px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
-              <div className="p-3 border-b border-amazon-border bg-[#f0f2f2]">
-                <p className="font-bold text-[14px]">Demo Profiles</p>
-                <p className="text-[11px] text-amazon-text-secondary">Switch user to test different states</p>
-              </div>
-              <div className="py-2">
-                {users.map(u => (
-                  <button 
-                    key={u.id} 
-                    onClick={() => switchUser(u.id)}
-                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
-                  >
-                    <span>{u.name}</span>
-                    {currentUser?.id === u.id && <span>✓</span>}
-                  </button>
-                ))}
-              </div>
+          {/* Admin Toggle */}
+          <div className="hidden sm:flex items-center gap-2 px-3 border-r border-gray-600 mr-2">
+            <span className="text-[12px] font-bold text-white select-none">Admin</span>
+            <div 
+              className={`w-8 h-4 rounded-full p-0.5 cursor-pointer flex items-center transition-colors ${isAdminMode ? 'bg-[#00e5a0]' : 'bg-gray-500'}`}
+              onClick={() => {
+                 setIsAdminMode(!isAdminMode);
+                 navigate(!isAdminMode ? "/dashboard" : "/");
+              }}
+            >
+              <div className={`w-3 h-3 rounded-full bg-white transition-transform ${isAdminMode ? 'translate-x-4' : 'translate-x-0'}`} />
             </div>
           </div>
+          {/* User Switcher (Hackathon feature) */}
+          {!isAdminMode && (
+            <div className="group relative px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
+              <Link to="/profile" className="flex flex-col">
+                <span className="text-[12px] text-white hover:underline">Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}</span>
+                <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
+              </Link>
+              
+              {/* Dropdown menu */}
+              <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[240px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
+                <div className="p-3 border-b border-amazon-border bg-[#f0f2f2]">
+                  <p className="font-bold text-[14px]">Demo Profiles</p>
+                  <p className="text-[11px] text-amazon-text-secondary">Switch user to test different states</p>
+                </div>
+                <div className="py-2">
+                  {users.map(u => (
+                    <button 
+                      key={u.id} 
+                      onClick={() => switchUser(u.id)}
+                      className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
+                    >
+                      <span>{u.name}</span>
+                      {currentUser?.id === u.id && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
-          {!currentUser?.is_admin && (
+          {!isAdminMode && (
             <>
               <Link to="/orders" className="hidden lg:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
                 <span className="text-[12px] text-white leading-tight">Returns</span>
@@ -172,7 +187,7 @@ export default function Header() {
       </div>
 
       {/* Mobile Search */}
-      {!currentUser?.is_admin && (
+      {!isAdminMode && (
         <div className="sm:hidden px-4 pb-3">
           <form onSubmit={handleSearch} className="flex rounded-md overflow-hidden bg-white h-10">
             <input 
@@ -193,7 +208,7 @@ export default function Header() {
 
       {/* Sub Nav */}
       <div className="bg-amazon-navy-light px-4 py-1.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap text-[14px]">
-        {!currentUser?.is_admin ? (
+        {!isAdminMode ? (
           <>
             <Link to="/" className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
