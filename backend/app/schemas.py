@@ -136,6 +136,9 @@ class OrderOut(BaseModel):
     no_return_credits: int = 0
     no_return_credits_status: str = "pending"   # "pending" | "vested" | "forfeited"
 
+    # Delivery baseline scan status (computed in list endpoint)
+    has_baseline_scan: bool = False
+
     model_config = {"from_attributes": True}
 
 

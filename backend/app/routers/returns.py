@@ -18,6 +18,23 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    if order.status == "returned":
+        raise HTTPException(status_code=409, detail="This order has already been returned.")
+
+    # Returns require delivery verification — employee must complete baseline scan first
+    if order.status != "delivered":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "type": "delivery_not_verified",
+                "message": (
+                    "This order has not been verified by the delivery agent yet. "
+                    "Returns are available only after the delivery baseline scan is complete."
+                ),
+                "order_status": order.status,
+            },
+        )
+
     # If AI assessment details are passed, use them; otherwise fall back to stub
     if body.recommended_action:
         condition_score = body.condition_score if body.condition_score is not None else 85.0
@@ -49,14 +66,14 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
         defects=defects,
         remaining_life_pct=remaining_life_pct,
         recommended_action=action,
-        status="assessed",
+        status="pending_pickup",
     )
     db.add(return_item)
     db.commit()
     db.refresh(return_item)
 
-    # Mark original order as returned and forfeit any pending loyalty credits
-    order.status = "returned"
+    # Mark original order as pending return and forfeit any pending loyalty credits
+    order.status = "return_pending"
     if order.no_return_credits_status == "pending":
         order.no_return_credits_status = "forfeited"
     db.commit()
@@ -69,67 +86,12 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     credits = calculate_credits(action, category)
     impact = calculate_action_impact(action, category)
 
-    # Update return record
+    # Update return record with the credits they *will* earn upon pickup
     return_item.green_credits_earned = credits
-
-    # Update user stats
-    user = db.query(User).filter(User.id == order.user_id).first()
-    if user:
-        user.green_credits += credits
-        user.lifetime_credits += credits
-        user.co2_saved += impact["co2_saved"]
-        user.ewaste_prevented += impact["ewaste_prevented"]
-        user.water_saved += impact["water_saved"]
-
-        if action in ("resell", "refurbish"):
-            user.products_resold += 1
-        elif action == "repair":
-            user.products_repaired += 1
-        elif action == "donate":
-            user.products_reused += 1
-
-        # Update level
-        level_info = get_level(user.lifetime_credits)
-        user.level = level_info["name"]
-
-        # Create credit transaction
-        tx = GreenCreditTx(
-            user_id=order.user_id,
-            amount=credits,
-            type="earned",
-            action_type=action,
-            description=f"Return action ({action}): {product.name if product else 'Product'}",
-        )
-        db.add(tx)
-
     db.commit()
     db.refresh(return_item)
-
-    # If resellable, auto-create a listing and match to a shopping twin
+    
     listing_id = None
-    if action in ("resell", "refurbish"):
-        discount = 0.7 if action == "resell" else 0.5
-        listing = Listing(
-            return_id=return_item.id,
-            product_id=order.product_id,
-            price=round(product.price * discount, 2) if product else 0,
-            status="available",
-        )
-        db.add(listing)
-        db.commit()
-        db.refresh(listing)
-        listing_id = listing.id
-
-        # 🔌 STUB — calls heuristic matching; swap for ML model later
-        matched_id = find_best_match(listing, db)
-        if matched_id:
-            listing.matched_user_id = matched_id
-            listing.status = "matched"
-            db.commit()
-
-        # 🎯 Wishlist radius matching — notify nearby users who want this product
-        from app.services.wishlist_matcher import find_wishlist_matches
-        wishlist_matches = find_wishlist_matches(return_item, listing, db)
 
     # Get sustainability advice for response
     # NOTE: Order model has no created_at column yet — return_period_over defaults False
@@ -150,3 +112,85 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
         "sustainability_advice": advice,
         "listing_id": listing_id,
     }
+
+@router.post("/{return_id}/pickup-scan")
+def pickup_scan(
+    return_id: int,
+    db: Session = Depends(get_db)
+):
+    """Called by the employee when they scan the return item at pickup."""
+    return_item = db.query(Return).filter(Return.id == return_id).first()
+    if not return_item:
+        raise HTTPException(status_code=404, detail="Return not found")
+        
+    if return_item.status != "pending_pickup":
+        raise HTTPException(status_code=400, detail="Return is not pending pickup")
+
+    order = return_item.order
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Update states
+    return_item.status = "completed"
+    order.status = "returned"
+    
+    action = return_item.recommended_action
+    credits = return_item.green_credits_earned
+    product = order.product
+    category = product.category.lower() if product and product.category else "electronics"
+    impact = calculate_action_impact(action, category)
+
+    # ── Award Green Credits for the return action ──
+    user = db.query(User).filter(User.id == order.user_id).first()
+    if user:
+        user.green_credits += credits
+        user.lifetime_credits += credits
+        user.co2_saved += impact["co2_saved"]
+        user.ewaste_prevented += impact["ewaste_prevented"]
+        user.water_saved += impact["water_saved"]
+
+        if action in ("resell", "refurbish"):
+            user.products_resold += 1
+        elif action == "repair":
+            user.products_repaired += 1
+        elif action == "donate":
+            user.products_reused += 1
+
+        level_info = get_level(user.lifetime_credits)
+        user.level = level_info["name"]
+
+        tx = GreenCreditTx(
+            user_id=order.user_id,
+            amount=credits,
+            type="earned",
+            action_type=action,
+            description=f"Return action ({action}): {product.name if product else 'Product'}",
+        )
+        db.add(tx)
+
+    # If resellable, auto-create a listing and match to a shopping twin
+    listing_id = None
+    if action in ("resell", "refurbish"):
+        discount = 0.7 if action == "resell" else 0.5
+        listing = Listing(
+            return_id=return_item.id,
+            product_id=order.product_id,
+            price=round(product.price * discount, 2) if product else 0,
+            status="available",
+        )
+        db.add(listing)
+        db.commit()
+        db.refresh(listing)
+        listing_id = listing.id
+
+        matched_id = find_best_match(listing, db)
+        if matched_id:
+            listing.matched_user_id = matched_id
+            listing.status = "matched"
+            db.commit()
+
+        from app.services.wishlist_matcher import find_wishlist_matches
+        wishlist_matches = find_wishlist_matches(return_item, listing, db)
+
+    db.commit()
+    return {"success": True, "listing_id": listing_id, "credits_awarded": credits}

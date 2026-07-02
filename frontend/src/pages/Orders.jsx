@@ -113,7 +113,7 @@ export default function Orders() {
         const commOrders = commPurchases.map(c => ({
           id: `C${c.id}`,
           is_community: true,
-          status: "delivered",
+          status: "placed",
           created_at: c.sold_at || c.created_at,
           product_id: `C${c.id}`,
           community_data: c,
@@ -201,7 +201,7 @@ export default function Orders() {
   };
 
   const statusStyles = {
-    placed:    { color: "text-[#c7511f]", label: "Order Placed" },
+    placed:    { color: "text-[#1a6bb5]", label: "Awaiting Delivery Verification" },
     delivered: { color: "text-[#067d62]", label: "Delivered" },
     returned:  { color: "text-amazon-red", label: "Returned" },
   };
@@ -314,6 +314,12 @@ export default function Orders() {
                       )}
                       <div className="flex-1">
                         <p className={`text-[14px] font-bold ${st.color} mb-1`}>{st.label}</p>
+                        {order.status === "placed" && !order.is_community && (
+                          <p className="text-[11px] text-[#1a6bb5]/80 mb-1 flex items-center gap-1">
+                            <span>🚚</span>
+                            Your delivery agent will verify this product with a live scan before it appears as delivered
+                          </p>
+                        )}
                         <p className="text-[14px] text-amazon-link hover:text-amazon-link-hover">
                           {prod
                             ? <Link to={`/products/${prod.id}`}>{prod.name}</Link>
@@ -366,6 +372,13 @@ export default function Orders() {
                               return (
                                 <span className="inline-flex items-center gap-1 text-[11px] bg-red-50 border border-red-200 text-red-600 px-2.5 py-1 rounded font-bold">
                                   🚫 No Return Policy
+                                </span>
+                              );
+                            }
+                            if (order.status === "placed") {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-[#ebf2fb] border border-[#1a6bb5]/30 text-[#1a6bb5] px-2.5 py-1 rounded font-bold">
+                                  🔒 Return available after delivery verification
                                 </span>
                               );
                             }

@@ -9,5 +9,7 @@ Thumbs.db
 *.swo
 *~
 
-# Environment variables
+# Environment variables  (secrets only — production URL is safe to commit)
 .env
+.env.*
+!.env.production

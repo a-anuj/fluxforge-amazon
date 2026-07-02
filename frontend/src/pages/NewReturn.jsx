@@ -2,6 +2,8 @@ import { useRef, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getOrders, createReturn, getProduct, getBaselineScan } from "../api/client";
 import { useUser } from "../context/UserContext";
+import LiveVideoScanner from "../components/LiveVideoScanner";
+import { dataUrlToBlob } from "../utils/videoUtils";
 
 const BASE_URL = `http://${window.location.hostname}:8000/api`;
 
@@ -25,7 +27,7 @@ function ScoreBar({ value, color }) {
   );
 }
 
-// ── Image upload zone ─────────────────────────────────────────────────────────
+// ── Image upload zone (legacy fallback) ───────────────────────────────────────
 function UploadZone({ file, preview, onFile }) {
   const inputRef = useRef();
   const [dragging, setDragging] = useState(false);
@@ -89,8 +91,10 @@ export default function NewReturn() {
   const [selectedOrder, setSelectedOrder] = useState(preselectedOrderId);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reason, setReason] = useState("size_mismatch");
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [scanFrames, setScanFrames] = useState([]);
+  const [videoBlob, setVideoBlob] = useState(null);
+  const [scanPreview, setScanPreview] = useState(null);
+  const [scanPhase, setScanPhase] = useState("form"); // "form" | "scan"
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -111,7 +115,8 @@ export default function NewReturn() {
     if (!currentUser) return;
     getOrders(currentUser.id)
       .then(async (data) => {
-        const returnable = data.filter((o) => o.status !== "returned");
+        // Only delivered orders are eligible for return (delivery agent must verify first)
+        const returnable = data.filter((o) => o.status === "delivered");
         setOrders(returnable);
         if (preselectedOrderId && !returnable.find((o) => String(o.id) === preselectedOrderId))
           setSelectedOrder("");
@@ -138,64 +143,21 @@ export default function NewReturn() {
     getBaselineScan(order.id).then(setBaselineScan).catch(() => setBaselineScan(null));
   }, [selectedOrder, orders]);
 
-  // Immediate image verification when image or product changes
-  useEffect(() => {
-    if (!imageFile || !selectedProduct) {
-      setVerifiedImage(null);
-      setMismatchError(null);
-      return;
-    }
+  // Image verification on the fly is removed as we assess the video natively later.
 
-    let active = true;
-    setVerifyingImage(true);
-    setVerifiedImage(null);
+  const handleScanComplete = ({ frames, videoBlob }) => {
+    setScanFrames(frames);
+    setVideoBlob(videoBlob);
+    setScanPreview(frames[0] || null);
+    setScanPhase("form");
     setMismatchError(null);
+  };
 
-    const form = new FormData();
-    form.append("image", imageFile);
-    form.append("product_name", selectedProduct.name || "");
-    form.append("product_category", selectedProduct.category || "");
-
-    fetch(`${BASE_URL}/sustainability/verify`, { method: "POST", body: form })
-      .then(async (res) => {
-        if (!active) return;
-        if (!res.ok) {
-          const errBody = await res.json().catch(() => ({ detail: res.statusText }));
-          const detail = errBody.detail;
-          if (typeof detail === "object" && detail?.type === "product_mismatch") {
-            setMismatchError(detail);
-          } else {
-            throw new Error(typeof detail === "string" ? detail : detail?.message || `Error ${res.status}`);
-          }
-        } else {
-          setVerifiedImage(imageFile);
-        }
-      })
-      .catch((err) => {
-        if (!active) return;
-        setMismatchError({
-          message: "Could not complete image verification.",
-          reason: err.message,
-        });
-      })
-      .finally(() => {
-        if (active) {
-          setVerifyingImage(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [imageFile, selectedProduct]);
-
-  const handleFileSelect = (f) => {
-    setImageFile(f);
+  const clearScan = () => {
+    setScanFrames([]);
+    setVideoBlob(null);
+    setScanPreview(null);
     setMismatchError(null);
-    setVerifiedImage(null);
-    const reader = new FileReader();
-    reader.onload = (e) => setImagePreview(e.target.result);
-    reader.readAsDataURL(f);
   };
 
   const handleSubmit = async (e) => {
@@ -205,23 +167,9 @@ export default function NewReturn() {
     setSustainError("");
     setMismatchError(null);
 
-    if (!imageFile) {
-      // Standard return without AI assessment. Create return immediately.
-      setProgress(20);
-      setProgressLabel("Submitting return request\u2026");
-      try {
-        const res = await createReturn(Number(selectedOrder), []);
-        setReturnResult(res);
-        refreshUser();
-        setProgress(100);
-        setProgressLabel("Done!");
-        setSubmitting(false);
-        setConfirmed(true);
-        setShowResults(true);
-      } catch (err) {
-        alert(`Failed to complete return: ${err.message}`);
-        setSubmitting(false);
-      }
+    if (!scanFrames.length) {
+      alert("Please complete the live product scan before submitting a return.");
+      setSubmitting(false);
       return;
     }
 
@@ -229,7 +177,7 @@ export default function NewReturn() {
     setProgressLabel("Initializing AI scanner\u2026");
 
     const form = new FormData();
-    form.append("image", imageFile);
+    form.append("video", videoBlob, "return-scan.webm");
     form.append("order_id", selectedOrder);
     if (selectedProduct) {
       form.append("product_name", selectedProduct.name || "");
@@ -249,6 +197,11 @@ export default function NewReturn() {
           setMismatchError(detail);
           setProgress(100); setProgressLabel("Done!"); setSubmitting(false);
           setShowResults(true);
+          return;
+        }
+        if (typeof detail === "object" && detail?.type === "delivery_not_verified") {
+          alert(detail.message);
+          setSubmitting(false);
           return;
         }
         throw new Error(typeof detail === "string" ? detail : detail?.message || `Error ${res.status}`);
@@ -274,7 +227,7 @@ export default function NewReturn() {
     try {
       const res = await createReturn(
         Number(selectedOrder),
-        [],
+        scanFrames.slice(0, 3),
         sustainResult.condition_score,
         sustainResult.classification,
         sustainResult.remaining_life_pct
@@ -334,12 +287,11 @@ export default function NewReturn() {
                     onClick={() => {
                       setShowResults(false);
                       setMismatchError(null);
-                      setImageFile(null);
-                      setImagePreview("");
+                      clearScan();
                     }} 
                     className="btn-amazon-primary text-[13px] px-5 py-2"
                   >
-                    Go Back &amp; Upload Different Photo
+                    Go Back &amp; Re-scan Product
                   </button>
                 </div>
               </div>
@@ -489,8 +441,7 @@ export default function NewReturn() {
                       onClick={() => {
                         setShowResults(false);
                         setSustainResult(null);
-                        setImageFile(null);
-                        setImagePreview("");
+                        clearScan();
                       }}
                       className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2 rounded-lg"
                     >
@@ -529,6 +480,21 @@ export default function NewReturn() {
     );
   }
 
+  // Live scan full-screen phase
+  if (scanPhase === "scan") {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#030712] flex flex-col">
+        <LiveVideoScanner
+          title="Return Product Scan"
+          subtitle="Follow motion guides — AI compares against delivery baseline"
+          accentColor="#067d62"
+          onComplete={handleScanComplete}
+          onCancel={() => setScanPhase("form")}
+        />
+      </div>
+    );
+  }
+
   // Return form
   return (
     <div className="bg-white min-h-screen animate-fade-in">
@@ -539,11 +505,21 @@ export default function NewReturn() {
         </div>
         <h1 className="text-[28px] text-amazon-text font-normal mb-1">Return an Item</h1>
         <p className="text-[14px] text-amazon-text-secondary mb-5">
-          Our AI assesses the product and recommends the best circular action.{" "}
+          Record a guided live scan of your product. Our AI compares it against the delivery baseline and recommends the best circular action.{" "}
           <span className="text-[#067d62] font-semibold">Earn Green Credits for every return.</span>
         </p>
         {loading ? (
           <div className="border border-[#e3e6ea] rounded-xl p-8 animate-pulse bg-[#fafbfc]" />
+        ) : orders.length === 0 ? (
+          <div className="border border-[#d0d4d9] rounded-xl p-8 text-center">
+            <div className="text-4xl mb-3">🚚</div>
+            <p className="text-[16px] font-semibold text-amazon-text mb-2">No orders ready for return</p>
+            <p className="text-[13px] text-amazon-text-secondary mb-4">
+              Returns are available only after your delivery agent completes the verification scan.
+              Orders still awaiting verification won't appear here.
+            </p>
+            <Link to="/orders" className="text-amazon-link text-[14px] hover:underline">View your orders</Link>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
             <div className="bg-[#f5f6f8] px-5 py-3 border-b border-[#e3e6ea]">
@@ -610,8 +586,10 @@ export default function NewReturn() {
               </div>
               <div>
                 <div className="bg-[#f5f6f8] -mx-5 px-5 py-3 border-y border-[#e3e6ea] mb-4">
-                  <p className="text-[13px] font-semibold text-[#0f1923]">Step 2 &mdash; Upload product photo for AI assessment</p>
-                  <p className="text-[11px] text-[#6c7480] mt-0.5">Upload an image to get a disposition: RESALE, REFURBISH, RECYCLE, or DISPOSE.</p>
+                  <p className="text-[13px] font-semibold text-[#0f1923]">Step 2 &mdash; Live product scan for AI assessment</p>
+                  <p className="text-[11px] text-[#6c7480] mt-0.5">
+                    Record a guided video scan — motion prompts walk you through all angles. AI extracts key frames and compares against the delivery baseline.
+                  </p>
                   {selectedProduct && (
                     <div className="mt-2 flex items-center gap-1.5">
                       <span className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider">Verifying against:</span>
@@ -619,59 +597,68 @@ export default function NewReturn() {
                     </div>
                   )}
                 </div>
-                
-                <UploadZone file={imageFile} preview={imagePreview} onFile={handleFileSelect} />
-                
-                {imageFile && (
-                  <div className="flex items-center justify-between mt-2">
-                    <p className="text-[11px] text-[#6c7480] truncate max-w-[80%] font-medium">{imageFile.name}</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImageFile(null);
-                        setImagePreview(null);
-                        setVerifiedImage(null);
-                        setMismatchError(null);
-                      }}
-                      className="text-[11px] text-[#b12704] hover:underline"
-                    >
-                      Remove photo
-                    </button>
+
+                {scanPreview ? (
+                  <div className="border border-[#067d62]/30 rounded-xl overflow-hidden mb-3">
+                    <div className="grid grid-cols-3 gap-0.5 bg-[#e3e6ea]">
+                      {scanFrames.slice(0, 6).map((frame, i) => (
+                        <img key={i} src={frame} alt={`Scan frame ${i + 1}`} className="w-full aspect-square object-cover" />
+                      ))}
+                    </div>
+                    <div className="px-4 py-3 bg-[#f2fbf7] flex items-center justify-between">
+                      <div>
+                        <p className="text-[12px] font-semibold text-[#067d62]">✓ Live scan complete</p>
+                        <p className="text-[11px] text-[#067d62]/80">{scanFrames.length} frames captured</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setScanPhase("scan")}
+                        className="text-[11px] text-[#1a6bb5] hover:underline font-semibold"
+                      >
+                        Re-scan
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setScanPhase("scan")}
+                    disabled={!selectedOrder}
+                    className="w-full border-2 border-dashed border-[#067d62]/40 rounded-xl py-8 flex flex-col items-center gap-2 hover:border-[#067d62] hover:bg-[#f2fbf7] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="w-14 h-14 rounded-full bg-[#067d62]/10 flex items-center justify-center text-2xl">🎥</div>
+                    <p className="text-[14px] font-semibold text-[#067d62]">Start Live Product Scan</p>
+                    <p className="text-[11px] text-[#6c7480]">Guided motion recording · ~18 seconds</p>
+                  </button>
                 )}
 
-                {/* Verification states */}
-                {/* Full screen overlay is rendered at the bottom */}
-
-                {verifiedImage && imageFile && !verifyingImage && (
+                {scanFrames.length > 0 && !submitting && (
                   <div className="mt-3 bg-[#f2fbf7] border border-[#067d62]/30 rounded-lg px-4 py-2.5 flex items-center gap-3">
                     <svg className="w-4 h-4 text-[#067d62] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                     <div>
-                      <p className="text-[12px] font-semibold text-[#067d62]">Product Identity Verified</p>
-                      <p className="text-[11px] text-[#067d62]/80 mt-0.5">The uploaded photo matches your ordered {selectedProduct?.name}. Ready for return scan.</p>
+                      <p className="text-[12px] font-semibold text-[#067d62]">Video Recorded</p>
+                      <p className="text-[11px] text-[#067d62]/80 mt-0.5">Ready for AI assessment.</p>
                     </div>
                   </div>
                 )}
 
-                {mismatchError && imageFile && !verifyingImage && (
+                {mismatchError && scanFrames.length > 0 && !verifyingImage && (
                   <div className="mt-3 bg-[#fdf3e7] border border-[#c45500]/30 rounded-lg px-4 py-3">
                     <div className="flex items-center gap-2 mb-1">
                       <svg className="w-4.5 h-4.5 text-[#c45500] flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                       </svg>
-                      <p className="text-[12px] font-semibold text-[#c45500]">Photo Verification Failed</p>
+                      <p className="text-[12px] font-semibold text-[#c45500]">Scan Verification Failed</p>
                     </div>
                     <p className="text-[12px] text-[#1a1f27]">{mismatchError.message}</p>
                     {mismatchError.reason && (
                       <p className="text-[11px] text-[#c45500]/80 mt-1 italic">Reason: {mismatchError.reason}</p>
                     )}
-                    <p className="text-[11px] text-[#6c7480] mt-2">Please upload a clear photo of the actual item you ordered to proceed with the AI assessment.</p>
+                    <p className="text-[11px] text-[#6c7480] mt-2">Please re-scan the actual item you ordered.</p>
                   </div>
                 )}
-
-                {!imageFile && <p className="text-[11px] text-[#9aa0aa] mt-1.5">Image upload is optional &mdash; skip to submit without AI assessment.</p>}
               </div>
               {submitting && (
                 <div>
@@ -681,18 +668,14 @@ export default function NewReturn() {
               )}
               <button
                 type="submit"
-                disabled={submitting || !selectedOrder || verifyingImage || (imageFile && !verifiedImage)}
+                disabled={submitting || !selectedOrder || !videoBlob}
                 className="btn-amazon-primary w-full py-2.5 text-[14px] font-semibold disabled:opacity-50"
               >
                 {submitting
                   ? "Processing\u2026"
-                  : verifyingImage
-                  ? "Verifying product photo\u2026"
-                  : imageFile && !verifiedImage
-                  ? "Verification required to submit"
-                  : imageFile
-                  ? "Submit & Get AI Assessment"
-                  : "Submit Return"}
+                  : !videoBlob
+                  ? "Complete live scan to continue"
+                  : "Submit & Get AI Assessment"}
               </button>
             </div>
           </form>
@@ -719,7 +702,7 @@ export default function NewReturn() {
           
           <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Amazon <span className="text-[#00a86b]">Circular Intelligence</span></h2>
           <p className="text-[#8a9bb0] text-lg mb-10 max-w-md text-center">
-            Analyzing your product photo with Bedrock AI...
+            Analyzing your live product scan with Bedrock AI...
           </p>
           
           <div className="w-72 space-y-4 bg-white/5 rounded-xl p-6 border border-white/10">

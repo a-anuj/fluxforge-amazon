@@ -1,0 +1,100 @@
+name: Deploy to EC2
+
+on:
+  workflow_run:
+    workflows:
+      - "Backend Tests"       # Must match exactly the `name:` field in backend-tests.yml
+    branches:
+      - main
+    types:
+      - completed
+
+# Prevent concurrent deployments from piling up
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false   # Never cancel an in-progress deploy; queue instead
+
+jobs:
+  deploy:
+    name: SSH Deploy to EC2
+    runs-on: ubuntu-latest
+
+    # Only deploy when the upstream test workflow actually passed
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------
+      # Set up the ephemeral SSH key from GitHub Secrets
+      # ---------------------------------------------------------------
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Add EC2 host to known_hosts using stored fingerprint (prevents MITM)
+          echo "${{ secrets.EC2_HOST_KEY }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # ---------------------------------------------------------------
+      # Deploy: pull latest code, sync deps, restart service
+      # ---------------------------------------------------------------
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o ConnectTimeout=30 \
+              "${EC2_USER}@${EC2_HOST}" 'bash -s' << 'ENDSSH'
+            set -euo pipefail   # Abort on any error, undefined variable, or pipe failure
+
+            APP_DIR="/home/ubuntu/fluxforge-amazon"
+            BACKEND_DIR="${APP_DIR}/backend"
+            VENV_DIR="${BACKEND_DIR}/venv"
+            SERVICE_NAME="fluxforge"
+            REQUIREMENTS="${BACKEND_DIR}/requirements.txt"
+
+            echo "==> [1/4] Pulling latest code from main..."
+            cd "${APP_DIR}"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> [2/4] Activating virtual environment..."
+            source "${VENV_DIR}/bin/activate"
+
+            echo "==> [3/4] Installing/updating dependencies only if requirements changed..."
+            # Compare hash of requirements.txt to avoid slow pip install on every deploy
+            HASH_FILE="${VENV_DIR}/.requirements_hash"
+            CURRENT_HASH=$(sha256sum "${REQUIREMENTS}" | awk '{print $1}')
+            STORED_HASH=$(cat "${HASH_FILE}" 2>/dev/null || echo "")
+
+            if [ "${CURRENT_HASH}" != "${STORED_HASH}" ]; then
+              echo "    requirements.txt changed — running pip install..."
+              pip install --quiet -r "${REQUIREMENTS}"
+              echo "${CURRENT_HASH}" > "${HASH_FILE}"
+            else
+              echo "    requirements.txt unchanged — skipping pip install."
+            fi
+
+            echo "==> [4/4] Restarting ${SERVICE_NAME} service..."
+            sudo systemctl restart "${SERVICE_NAME}"
+            sudo systemctl is-active --quiet "${SERVICE_NAME}" \
+              && echo "    Service is running." \
+              || { echo "    ERROR: Service failed to start!"; sudo journalctl -u "${SERVICE_NAME}" -n 30 --no-pager; exit 1; }
+
+            echo ""
+            echo "✅ Deployment complete."
+          ENDSSH
+
+      # ---------------------------------------------------------------
+      # Cleanup: shred the private key from the runner's filesystem
+      # ---------------------------------------------------------------
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          shred -u ~/.ssh/deploy_key 2>/dev/null || rm -f ~/.ssh/deploy_key

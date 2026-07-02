@@ -8,6 +8,7 @@ from app.main import app
 from app.database import Base, get_db
 from app.models import User, Product
 
+
 # Setup in-memory SQLite for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 

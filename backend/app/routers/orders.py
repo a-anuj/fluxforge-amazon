@@ -140,7 +140,13 @@ def create_order(body: OrderCreate, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=list[OrderOut])
 def list_orders(user_id: int = Query(...), db: Session = Depends(get_db)):
-    return db.query(Order).filter(Order.user_id == user_id).order_by(Order.id.desc()).all()
+    orders = db.query(Order).filter(Order.user_id == user_id).order_by(Order.id.desc()).all()
+    result = []
+    for order in orders:
+        out = OrderOut.model_validate(order)
+        out.has_baseline_scan = bool(order.baseline_scan_urls)
+        result.append(out)
+    return result
 
 
 @router.get("/delivery-options", response_model=list[DeliveryOptionOut])

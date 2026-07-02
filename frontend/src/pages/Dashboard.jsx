@@ -10,7 +10,10 @@ import {
   Legend, 
   ResponsiveContainer,
   LineChart,
-  Line
+  Line,
+  PieChart,
+  Pie,
+  Cell
 } from "recharts";
 import { 
   TrendingDown, 
@@ -21,20 +24,21 @@ import {
   IndianRupee, 
   Package, 
   Leaf,
-  Download
+  Download,
+  Info
 } from "lucide-react";
 import { getDashboardMetrics } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 export default function Dashboard() {
-  const { currentUser, loading: userLoading } = useUser();
+  const { currentUser, loading: userLoading, isAdminMode } = useUser();
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     if (userLoading) return;
-    if (!currentUser || !currentUser.is_admin) {
+    if (!isAdminMode) {
       setLoading(false);
       return;
     }
@@ -52,7 +56,7 @@ export default function Dashboard() {
     };
     
     fetchMetrics();
-  }, [currentUser, userLoading]);
+  }, [isAdminMode, userLoading]);
 
   const handleExportCSV = () => {
     if (!metrics) return;
@@ -84,7 +88,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!currentUser || !currentUser.is_admin) {
+  if (!isAdminMode) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8 text-center">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto shadow-sm">
@@ -102,8 +106,38 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <div className="h-8 w-64 animate-pulse rounded-md bg-gray-200"></div>
+            <div className="mt-2 h-4 w-96 animate-pulse rounded-md bg-gray-200"></div>
+          </div>
+        </div>
+        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="h-12 w-12 shrink-0 animate-pulse rounded-lg bg-gray-200"></div>
+              <div className="space-y-2 w-full">
+                <div className="h-4 w-24 animate-pulse rounded bg-gray-200"></div>
+                <div className="h-6 w-16 animate-pulse rounded bg-gray-200"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div className="h-80 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center shadow-sm">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+              <p className="text-sm font-medium text-gray-500 animate-pulse">Aggregating real-time metrics...</p>
+            </div>
+          </div>
+          <div className="h-80 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center shadow-sm">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-purple-500 border-t-transparent"></div>
+              <p className="text-sm font-medium text-gray-500 animate-pulse">Analyzing return trends...</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -120,7 +154,17 @@ export default function Dashboard() {
 
   if (!metrics) return null;
 
-  const { overall, historicalTrends } = metrics;
+  const { 
+    overall, 
+    historicalTrends,
+    categoryReturns,
+    brandReturns,
+    regionReturns,
+    reasonReturns,
+    topReturnedProducts
+  } = metrics;
+  
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
   const kpis = [
     { label: "Return Rate Reduction", value: `${overall.reductionInReturnRate}%`, icon: TrendingDown, color: "text-emerald-500", bg: "bg-emerald-500/10" },
@@ -167,7 +211,16 @@ export default function Dashboard() {
 
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-medium text-gray-900">Return Rate Trend</h2>
+          <h2 className="mb-4 text-lg font-medium text-gray-900 flex items-center gap-2">
+            Return Rate Trend
+            <div className="group relative flex items-center">
+              <Info className="h-4 w-4 text-gray-400 cursor-pointer" />
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded bg-gray-800 px-2 py-1.5 text-center text-[11px] font-normal text-white opacity-0 transition-opacity group-hover:opacity-100 z-10 shadow-lg">
+                Percentage of total orders that resulted in a return over time.
+                <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </h2>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={historicalTrends} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -192,7 +245,16 @@ export default function Dashboard() {
         </div>
 
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-medium text-gray-900">AI Accuracy Overview</h2>
+          <h2 className="mb-4 text-lg font-medium text-gray-900 flex items-center gap-2">
+            AI Accuracy Overview
+            <div className="group relative flex items-center">
+              <Info className="h-4 w-4 text-gray-400 cursor-pointer" />
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded bg-gray-800 px-2 py-1.5 text-center text-[11px] font-normal text-white opacity-0 transition-opacity group-hover:opacity-100 z-10 shadow-lg">
+                Percentage of total returns successfully analyzed and scored by the AI pipeline.
+                <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </h2>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={historicalTrends} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -213,6 +275,140 @@ export default function Dashboard() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      {/* New Row: Pie Charts */}
+      <div className="mt-8 grid gap-8 lg:grid-cols-4">
+        {/* Return Reasons */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-1">
+          <h2 className="mb-4 text-lg font-medium text-gray-900 flex items-center gap-2">
+            Return Reasons
+            <div className="group relative flex items-center">
+              <Info className="h-4 w-4 text-gray-400 cursor-pointer" />
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded bg-gray-800 px-2 py-1.5 text-center text-[11px] font-normal text-white opacity-0 transition-opacity group-hover:opacity-100 z-10 shadow-lg">
+                Breakdown of the primary reasons customers returned their products.
+                <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={reasonReturns} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {reasonReturns.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Category Returns */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-1">
+          <h2 className="mb-4 text-lg font-medium text-gray-900 flex items-center gap-2">
+            Category Returns
+            <div className="group relative flex items-center">
+              <Info className="h-4 w-4 text-gray-400 cursor-pointer" />
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded bg-gray-800 px-2 py-1.5 text-center text-[11px] font-normal text-white opacity-0 transition-opacity group-hover:opacity-100 z-10 shadow-lg">
+                Distribution of returns across different product categories.
+                <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={categoryReturns} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {categoryReturns.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Brand Returns */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-1">
+          <h2 className="mb-4 text-lg font-medium text-gray-900 flex items-center gap-2">
+            Brand Returns
+            <div className="group relative flex items-center">
+              <Info className="h-4 w-4 text-gray-400 cursor-pointer" />
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded bg-gray-800 px-2 py-1.5 text-center text-[11px] font-normal text-white opacity-0 transition-opacity group-hover:opacity-100 z-10 shadow-lg">
+                Distribution of returns based on the product brand (seller).
+                <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={brandReturns} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {brandReturns.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        
+        {/* Region Returns */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm lg:col-span-1">
+          <h2 className="mb-4 text-lg font-medium text-gray-900 flex items-center gap-2">
+            Region Returns
+            <div className="group relative flex items-center">
+              <Info className="h-4 w-4 text-gray-400 cursor-pointer" />
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-48 -translate-x-1/2 rounded bg-gray-800 px-2 py-1.5 text-center text-[11px] font-normal text-white opacity-0 transition-opacity group-hover:opacity-100 z-10 shadow-lg">
+                Geographic distribution of returns by the user's city.
+                <div className="absolute top-full left-1/2 -ml-1 border-4 border-transparent border-t-gray-800"></div>
+              </div>
+            </div>
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={regionReturns} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  {regionReturns.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Returned Products Table */}
+      <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-medium text-gray-900">Most Frequently Returned Products</h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 text-sm text-left">
+            <thead>
+              <tr>
+                <th className="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Product Name</th>
+                <th className="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Brand</th>
+                <th className="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Category</th>
+                <th className="whitespace-nowrap px-4 py-2 font-medium text-gray-900">Total Returns</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {topReturnedProducts.map((product, idx) => (
+                <tr key={idx}>
+                  <td className="whitespace-nowrap px-4 py-2 font-medium text-gray-900">{product.name}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-gray-700">{product.brand}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-gray-700">{product.category}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-red-600 font-bold">{product.returns}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

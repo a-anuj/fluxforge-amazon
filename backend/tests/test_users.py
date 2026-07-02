@@ -12,3 +12,4 @@ def test_get_user(client):
 def test_get_user_not_found(client):
     response = client.get("/api/users/999")
     assert response.status_code == 404
+
