@@ -141,7 +141,7 @@ export default function Header() {
                   <p className="text-[11px] text-amazon-text-secondary">Switch user to test different states</p>
                 </div>
                 <div className="py-2">
-                  {users.map(u => (
+                  {users.filter(u => !u.is_admin).map(u => (
                     <button 
                       key={u.id} 
                       onClick={() => switchUser(u.id)}
