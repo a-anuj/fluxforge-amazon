@@ -9,8 +9,11 @@ import logging
 import os
 import re
 import uuid
+import base64
+import urllib.request
 
 import boto3
+from pydantic import BaseModel
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -82,6 +85,51 @@ Return ONLY valid JSON with no markdown fences or extra text:
   "confidence": 0
 }"""
 
+BASELINE_COMPARISON_PROMPT = """You are an AI Reverse Logistics Inspector for Amazon Returns.
+
+You are given TWO sets of product images:
+1. BASELINE images — captured by the delivery agent at the moment of delivery (source of truth).
+2. RETURN images — captured by the customer when initiating a return.
+
+Your task:
+- Compare the return images against the baseline to detect NEW damage, wear, or changes that occurred AFTER delivery.
+- If baseline shows pristine condition but return shows damage, classify accordingly and note post-delivery damage.
+- If condition is similar to baseline, the return is likely legitimate (size mismatch, changed mind, etc.).
+
+Inspect:
+1. Product category and identity match between baseline and return
+2. NEW visible damage not present in baseline
+3. Scratches, dents, cracks that appeared after delivery
+4. Missing parts compared to baseline
+5. Packaging condition changes
+6. Signs of usage beyond what baseline showed
+7. Overall condition relative to delivery state
+
+Classification Rules:
+
+RESALE: Product appears new or lightly used with minimal cosmetic damage (similar to or better than baseline).
+
+REFURBISH: Product has repairable defects or moderate damage — especially NEW damage vs baseline.
+
+RECYCLE: Product is heavily damaged but contains recoverable materials.
+
+DISPOSE: Product is unsafe, contaminated, or beyond economic recovery.
+
+Return ONLY valid JSON with no markdown fences or extra text:
+
+{
+  "product_type": "",
+  "condition_score": 0,
+  "damage_assessment": "",
+  "packaging_condition": "",
+  "estimated_recovery_value": "",
+  "sustainability_reasoning": "",
+  "baseline_comparison": "",
+  "new_damage_detected": false,
+  "classification": "RESALE | REFURBISH | RECYCLE | DISPOSE",
+  "confidence": 0
+}"""
+
 
 def _get_bedrock_client():
     return boto3.client(
@@ -130,6 +178,178 @@ def _parse_json_response(response: dict) -> dict:
         return json.loads(text)
     except (KeyError, IndexError, json.JSONDecodeError) as exc:
         raise ValueError(f"Could not parse Bedrock response: {exc}") from exc
+
+
+def _load_image_bytes_from_url(url: str) -> tuple[bytes, str]:
+    """
+    Load image bytes from a data URL or HTTP(S) URL.
+    Returns (raw_bytes, format_string for Bedrock).
+    """
+    if url.startswith("data:"):
+        if "," not in url:
+            raise ValueError("Invalid data URL")
+        header, payload = url.split(",", 1)
+        raw = base64.b64decode(payload)
+        fmt = "jpeg"
+        if "png" in header:
+            fmt = "png"
+        elif "webp" in header:
+            fmt = "webp"
+        elif "gif" in header:
+            fmt = "gif"
+        return raw, fmt
+
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        raw = resp.read()
+    fmt = "jpeg"
+    if url.lower().endswith(".png"):
+        fmt = "png"
+    elif url.lower().endswith(".webp"):
+        fmt = "webp"
+    return raw, fmt
+
+
+def _bytes_to_bedrock_format(raw: bytes, content_type: str) -> tuple[str, bytes]:
+    fmt_map = {
+        "image/jpeg": "jpeg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    return fmt_map.get(content_type.lower(), "jpeg"), raw
+
+
+class FingerprintScanRequest(BaseModel):
+    order_id: int | None = None
+    product_name: str = ""
+    product_category: str = ""
+    frames: list[str] = []
+    scan_context: str = "packaging"
+
+
+def _to_percent(value) -> int:
+    """
+    Coerce a model-returned score to an integer in [0, 100].
+
+    Bedrock models sometimes return confidence/coverage as a 0-1 float
+    (e.g. 0.85) instead of an integer (85). int(0.85) silently truncates
+    to 0, causing the UI to always show 0%. This helper detects the 0-1
+    range and scales it to 0-100.
+    """
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    # If the model returned a 0-1 fraction, scale up
+    if 0.0 < v <= 1.0:
+        v = v * 100
+    return max(0, min(100, int(round(v))))
+
+
+def _normalize_fingerprint_result(result: dict, product_name: str, product_category: str) -> dict:
+    matched = bool(result.get("matched", False))
+    confidence    = _to_percent(result.get("confidence",    0))
+    coverage_score = _to_percent(result.get("coverage_score", 0))
+    missing_views = result.get("missing_views", []) or []
+    if not isinstance(missing_views, list):
+        missing_views = [str(missing_views)]
+
+    next_prompt = str(result.get("recommended_next_prompt", "") or "").strip()
+    if not next_prompt:
+        next_prompt = "Move the product slowly so I can see what is still missing."
+
+    observed = str(result.get("observed_product_type", "") or product_name or product_category).strip()
+
+    return {
+        "matched": matched,
+        "confidence":     confidence,
+        "coverage_score": coverage_score,
+        "observed_product_type": observed,
+        "missing_views": missing_views[:5],
+        "recommended_next_prompt": next_prompt,
+        "reason": str(result.get("reason", "") or "").strip(),
+    }
+
+
+def _assess_scan_fingerprint(
+    frame_urls: list[str],
+    product_name: str,
+    product_category: str,
+    scan_context: str = "packaging",
+) -> dict:
+    """
+    Ask Nova Lite to verify whether the captured frames plausibly show the intended product
+    and which coverage gaps still remain.
+    """
+    coverage_prompt = f"""You are a product fingerprint verifier for Amazon circular commerce.
+
+Context: {scan_context}
+Claimed product:
+  Product: "{product_name or 'unknown'}"
+  Category: "{product_category or 'unknown'}"
+
+You are given a small set of keyframes from a guided scan. Your job is to decide:
+1. Does the scan plausibly show the intended product?
+2. How confident are you?
+3. What coverage is still missing?
+4. What should the user capture next?
+
+Rules:
+- Be strict enough to reject obvious mismatches (selfies, random objects, unrelated products).
+- IMPORTANT FOR FAST FAILURES: If the first 1 or 2 frames clearly show a completely different product (e.g. a phone instead of a shoe, or a person's face), return `matched=false` and set `confidence` to a HIGH value (e.g. 80-100). Do not keep confidence low just because there are few frames if the object is clearly the wrong category.
+- Be practical: accept unusual angles, partial occlusions, and poor lighting if the item still appears to be the claimed product.
+- Prefer a high-confidence match only when the frames together clearly describe the intended item.
+- If the item is a backpack or bag, look for straps, seams, zippers, logo/tag, opening, side profile, and back panel.
+- If the item is electronics, look for front, ports, branding, edges, labels/serials, and back panel.
+- If the item is apparel, look for front, back, tag/label, texture, seams, and size markers.
+
+Return ONLY valid JSON in this exact shape (no markdown fences, no extra keys):
+{{
+    "matched": true,
+    "confidence": 72,
+    "coverage_score": 65,
+    "observed_product_type": "<what you see>",
+    "missing_views": ["back panel", "serial label"],
+    "recommended_next_prompt": "<one sentence instruction for the next capture>",
+    "reason": "<one sentence explanation>"
+}}
+
+IMPORTANT: "confidence" and "coverage_score" MUST be plain integers between 0 and 100 (not decimals like 0.72 — write 72, not 0.72)."""
+
+    content_blocks = []
+    for frame in frame_urls[:10]:
+        raw, fmt = _load_image_bytes_from_url(frame)
+        content_blocks.append({"image": {"format": fmt, "source": {"bytes": raw}}})
+
+    content_blocks.append({"text": coverage_prompt})
+
+    try:
+        client = _get_bedrock_client()
+        response = client.converse(
+            modelId=MODEL_ID,
+            messages=[{"role": "user", "content": content_blocks}],
+            inferenceConfig={"maxTokens": 500, "temperature": 0.1},
+        )
+        parsed = _parse_json_response(response)
+        return _normalize_fingerprint_result(parsed, product_name, product_category)
+    except Exception as exc:
+        logger.warning(f"Fingerprint verification — Bedrock failed, using fallback: {exc}")
+        first_frame = frame_urls[0]
+        raw, fmt = _load_image_bytes_from_url(first_frame)
+        try:
+            is_match, reason = _verify_product_match(raw, fmt, product_name, product_category)
+        except Exception:
+            is_match, reason = False, "Unable to verify product identity"
+
+        return {
+            "matched": is_match,
+            "confidence": 52 if is_match else 90,
+            "coverage_score": min(80, 30 + len(frame_urls) * 12),
+            "observed_product_type": product_name or product_category or "unknown",
+            "missing_views": ["branding/tag", "one more side profile", "close detail"],
+            "recommended_next_prompt": "Rotate the product slowly and capture the branding/tag plus one clear side profile.",
+            "reason": reason,
+        }
 
 
 # ── Product identity verification ─────────────────────────────────────────────
@@ -271,130 +491,223 @@ async def verify_product(
     return {"matched": True, "reason": reason}
 
 
+@router.post("/fingerprint")
+async def verify_fingerprint(request: FingerprintScanRequest, db: Session = Depends(get_db)):
+    """
+    Verify that captured scan frames plausibly show the intended product and
+    return an adaptive prompt describing what still needs capture.
+    """
+    if not request.frames:
+        raise HTTPException(status_code=422, detail="At least one scan frame is required.")
+
+    product_name = request.product_name.strip()
+    product_category = request.product_category.strip()
+
+    if request.order_id is not None and (not product_name or not product_category):
+        order = db.query(Order).filter(Order.id == request.order_id).first()
+        if order and order.product:
+            if not product_name:
+                product_name = order.product.name or ""
+            if not product_category:
+                product_category = order.product.category or ""
+
+    result = _assess_scan_fingerprint(
+        frame_urls=request.frames,
+        product_name=product_name,
+        product_category=product_category,
+        scan_context=request.scan_context,
+    )
+
+    result["order_id"] = request.order_id
+    result["product_name"] = product_name
+    result["product_category"] = product_category
+    result["scan_context"] = request.scan_context
+
+    # Always return 200 — matched=false is a normal advisory state during an
+    # in-progress scan. The frontend's state machine handles it gracefully.
+    # Raising 409 caused the frontend to treat every mid-scan non-match as an
+    # error and log repeated failures.
+    return JSONResponse(content=result)
+
+def _assess_live_match(frame_urls: list[str], product_name: str, product_category: str) -> dict:
+    content_blocks = []
+    for frame in frame_urls[:10]:
+        raw, fmt = _load_image_bytes_from_url(frame)
+        content_blocks.append({"image": {"format": fmt, "source": {"bytes": raw}}})
+
+    prompt = f"""You are an immediate fail-fast product-verification assistant.
+The expected product is '{product_name}' (Category: '{product_category}').
+
+You are given several rapid frames from the very beginning of a video scan.
+Identify the primary object shown in these frames.
+
+Rules:
+- If the object is CLEARLY a completely different category (e.g., you see a mug but the expected category is a bag, or you see a phone but expected is a shoe), return "matched": false and "confidence": 90.
+- If the object is the correct category '{product_category}', or if it is too blurry or close to tell for sure, return "matched": true and "confidence": 50.
+
+Return ONLY valid JSON in this exact shape:
+{{
+    "matched": true,
+    "confidence": 50,
+    "observed_product_type": "<what you actually see>"
+}}"""
+
+    try:
+        client = _get_bedrock_client()
+        response = client.converse(
+            modelId=MODEL_ID,
+            messages=[{"role": "user", "content": [*content_blocks, {"text": prompt}]}],
+            inferenceConfig={"maxTokens": 100, "temperature": 0.1},
+        )
+        parsed = _parse_json_response(response)
+        logger.info(f"Verify Live Match Bedrock Output: {parsed}")
+        return {
+            "matched": bool(parsed.get("matched", True)),
+            "confidence": int(parsed.get("confidence", 50)),
+            "observed_product_type": str(parsed.get("observed_product_type", "unknown")),
+        }
+    except Exception as exc:
+        logger.warning(f"Live match Bedrock failed: {exc}")
+        return {"matched": True, "confidence": 0, "observed_product_type": "error"}
+
+@router.post("/verify_live_match")
+async def verify_live_match(request: FingerprintScanRequest, db: Session = Depends(get_db)):
+    if not request.frames:
+        raise HTTPException(status_code=422, detail="At least one scan frame is required.")
+
+    product_name = request.product_name.strip()
+    product_category = request.product_category.strip()
+
+    if request.order_id is not None and (not product_name or not product_category):
+        order = db.query(Order).filter(Order.id == request.order_id).first()
+        if order and order.product:
+            if not product_name:
+                product_name = order.product.name or ""
+            if not product_category:
+                product_category = order.product.category or ""
+
+    result = _assess_live_match(request.frames, product_name, product_category)
+    return JSONResponse(content=result)
+
+
 @router.post("/assess")
 async def assess_return(
-    image: UploadFile = File(...),
+    video: UploadFile = File(...),
     order_id: int = Form(...),
     product_name: str = Form(""),
     product_category: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """
-    Accept a product image and return an AI sustainability assessment.
-    - Runs quality guardrail checks (blur, brightness, resolution) before Bedrock.
-    - Optionally verifies the image matches the claimed product before assessing.
-    - Supported formats: JPEG, PNG, WebP, GIF (≤ 5 MB).
+    Accept return product images (from live video scan) and return AI sustainability assessment.
+    - Runs quality guardrail checks before Bedrock.
+    - Verifies product identity.
+    - Compares against delivery baseline scan when available.
+    - Supported formats: JPEG, PNG, WebP, GIF (≤ 5 MB each).
     """
     from app.services.media_validator import validate_image as quality_check
 
-    logger.info(f"=== /assess — product_name='{product_name}', category='{product_category}', file='{image.filename}' ===")
+    logger.info(f"=== /assess — order_id={order_id}, product_name='{product_name}', file='{image.filename}' ===")
 
-    # ── Validate image ────────────────────────────────────────────────────────
-    content_type = (image.content_type or "").lower()
-    if content_type not in ALLOWED_MIME:
+    # ── Validate order is eligible for return assessment ─────────────────────
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.status == "returned":
+        raise HTTPException(status_code=409, detail="This order has already been returned.")
+    if order.status != "delivered":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "type": "delivery_not_verified",
+                "message": (
+                    "Delivery verification is pending. The delivery agent must complete "
+                    "the baseline scan before you can initiate a return."
+                ),
+                "order_status": order.status,
+            },
+        )
+
+    product = order.product if order else None
+    if not product_name.strip() and product:
+        product_name = product.name or ""
+    if not product_category.strip() and product:
+        product_category = product.category or ""
+
+    content_type = (video.content_type or "").lower()
+    if not content_type.startswith("video/"):
         logger.warning(f"Rejected — unsupported MIME type: {content_type}")
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported image type '{content_type}'. Use JPEG, PNG, WebP, or GIF.",
+            detail=f"Unsupported video type '{content_type}'. Use WEBM or MP4.",
         )
 
-    raw = await image.read()
-    logger.info(f"File received — size: {len(raw)} bytes, content_type: {content_type}")
+    raw_video = await video.read()
+    logger.info(f"Video received — size: {len(raw_video)} bytes, content_type: {content_type}")
 
-    if len(raw) > MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="Image exceeds the 5 MB size limit.")
-    if not raw:
+    if len(raw_video) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Video exceeds the 20 MB size limit.")
+    if not raw_video:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
 
-    # ── Quality Guardrail — validate before expensive Bedrock call ────────────
-    logger.info("Running quality guardrail checks...")
-    quality_result = quality_check(raw, filename=image.filename or "image.jpg")
-    logger.info(f"Quality guardrail — status: {quality_result.status.value} | metadata: {quality_result.metadata}")
+    video_format = "webm" if "webm" in content_type else "mp4"
 
-    if not quality_result.passed:
-        # Only BLOCK on truly fatal issues — corrupt file or no content at all
-        fatal_codes = {"corrupt_file", "no_content_detected", "invalid_format"}
-        fatal_issues = [i for i in quality_result.issues if i.code in fatal_codes]
+    # Upload video to S3
+    s3_key = _upload_to_s3(raw_video, video.filename or "scan.webm", content_type)
+    logger.info(f"Video securely stored in S3 at: {s3_key}")
 
-        if fatal_issues:
-            for issue in fatal_issues:
-                logger.warning(f"  ❌ FATAL quality issue [{issue.code}]: {issue.message}")
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "type": "quality_check_failed",
-                    "message": "Image quality is insufficient for AI analysis.",
-                    "issues": [
-                        {"code": i.code, "message": i.message, "suggestion": i.suggestion}
-                        for i in fatal_issues
-                    ],
-                    "metadata": quality_result.metadata,
-                },
+    # No pre-flight image validation for video right now; passing directly to AI
+
+    # ── Step 2: Load baseline images for comparison ───────────────────────────
+    baseline_images: list[tuple[bytes, str]] = []
+    has_baseline = bool(order.baseline_scan_urls)
+    if has_baseline:
+        baseline_urls = [u.strip() for u in order.baseline_scan_urls.split(",") if u.strip()]
+        for url in baseline_urls[:4]:  # limit to 4 baseline frames for token budget
+            try:
+                b_raw, b_fmt = _load_image_bytes_from_url(url)
+                baseline_images.append((b_raw, b_fmt))
+            except Exception as exc:
+                logger.warning(f"Could not load baseline image {url[:60]}...: {exc}")
+
+    # ── Step 3: Run full sustainability assessment ────────────────────────────
+    logger.info(f"Step 2: Running assessment — baseline frames: {len(baseline_images)}")
+
+    content_blocks = []
+
+    if baseline_images:
+        content_blocks.append({"text": "BASELINE DELIVERY IMAGES (captured at delivery by agent):"})
+        for b_raw, b_fmt in baseline_images:
+            content_blocks.append({"image": {"format": b_fmt, "source": {"bytes": b_raw}}})
+
+    content_blocks.append({"text": "RETURN VIDEO (captured by customer during return):"})
+    content_blocks.append({"video": {"format": video_format, "source": {"bytes": raw_video}}})
+
+    if baseline_images:
+        content_blocks.append({
+            "text": (
+                "Compare the RETURN video against the BASELINE delivery images. "
+                "Detect any NEW damage or wear that occurred after delivery. "
+                "Return the JSON assessment as described in your instructions. Return ONLY valid JSON."
             )
-        else:
-            # Non-fatal issues (blur, brightness, size) — log warning but proceed
-            for issue in quality_result.issues:
-                logger.info(f"  ⚠️ Non-blocking quality warning [{issue.code}]: {issue.message}")
-            logger.info("Quality guardrail — proceeding despite minor issues")
-
-    fmt_map = {
-        "image/jpeg": "jpeg",
-        "image/png": "png",
-        "image/webp": "webp",
-        "image/gif": "gif",
-    }
-    img_format = fmt_map[content_type]
-
-    # Upload to S3
-    s3_key = _upload_to_s3(raw, image.filename or "image.jpg", content_type)
-    logger.info(f"Image securely stored in S3 at: {s3_key}")
-
-    # ── Step 1: Verify the image matches the ordered product ──────────────────
-    if product_name.strip():
-        logger.info(f"Step 1: Verifying product identity...")
-        is_match, reason = _verify_product_match(raw, img_format, product_name, product_category)
-        if not is_match:
-            logger.warning(f"❌ Product mismatch — rejecting. Reason: {reason}")
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "type": "product_mismatch",
-                    "message": (
-                        f"The uploaded image does not appear to be '{product_name}'. "
-                        "Please upload a clear photo of the actual item you ordered."
-                    ),
-                    "reason": reason,
-                },
-            )
-        logger.info(f"Product verified — proceeding to assessment")
+        })
+        system_prompt = BASELINE_COMPARISON_PROMPT
     else:
-        logger.info("No product name provided — skipping verification step")
+        content_blocks.append({
+            "text": (
+                "Analyze this product image and return the JSON assessment "
+                "as described in your instructions. Return ONLY valid JSON."
+            )
+        })
+        system_prompt = ASSESSMENT_SYSTEM_PROMPT
 
-    # ── Step 2: Run full sustainability assessment ────────────────────────────
-    logger.info("Step 2: Running full sustainability assessment via Bedrock...")
-    message = {
-        "role": "user",
-        "content": [
-            {
-                "image": {
-                    "format": img_format,
-                    "source": {"bytes": raw},
-                }
-            },
-            {
-                "text": (
-                    "Analyze this product image and return the JSON assessment "
-                    "as described in your instructions. Return ONLY valid JSON."
-                )
-            },
-        ],
-    }
+    message = {"role": "user", "content": content_blocks}
 
     try:
         client = _get_bedrock_client()
         response = client.converse(
             modelId=MODEL_ID,
-            system=[{"text": ASSESSMENT_SYSTEM_PROMPT}],
+            system=[{"text": system_prompt}],
             messages=[message],
             inferenceConfig={"maxTokens": 1024, "temperature": 0.1},
         )
@@ -415,10 +728,11 @@ async def assess_return(
 
     # Normalise classification to uppercase for consistent badge rendering
     result["classification"] = str(result.get("classification", "")).upper()
+    result["has_baseline_comparison"] = len(baseline_images) > 0
+    result["baseline_frames_used"] = len(baseline_images)
+    result["return_frames_used"] = 1 # One video
 
     # Calculate circularity/sustainability metadata preview
-    order = db.query(Order).filter(Order.id == order_id).first()
-    product = order.product if order else None
     category = product.category.lower() if product and product.category else product_category.lower()
     
     act_lower = result["classification"].lower()

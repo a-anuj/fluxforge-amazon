@@ -23,13 +23,23 @@ export function UserProvider({ children }) {
     getUsers()
       .then((data) => {
         setUsers(data);
-        if (data.length > 0) {
+        const savedUserId = localStorage.getItem("amazon_current_user_id");
+        const savedUser = savedUserId ? data.find((user) => String(user.id) === String(savedUserId)) : null;
+        if (savedUser) {
+          setCurrentUser(savedUser);
+        } else if (data.length > 0) {
           setCurrentUser(data[0]);
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    localStorage.setItem("amazon_current_user_id", String(currentUser.id));
+    setIsAdminMode(currentUser.role === "admin");
+  }, [currentUser]);
 
   const switchUser = async (userId) => {
     const user = await getUser(userId);
@@ -46,6 +56,7 @@ export function UserProvider({ children }) {
   const updateUserProfile = async (userId, data) => {
     const updated = await updateUser(userId, data);
     setCurrentUser(updated);
+    localStorage.setItem("amazon_current_user_id", String(updated.id));
     setUsers((prevUsers) =>
       prevUsers.map((u) => (u.id === userId ? updated : u))
     );

@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import engine, Base
 from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability, analytics
-from app.routers import wishlist as wishlist_router, community
+from app.routers import wishlist as wishlist_router, community, baseline
 
 from contextlib import asynccontextmanager
 
@@ -38,6 +38,13 @@ async def lifespan(app: FastAPI):
             _safe_add_column(_conn, "orders", "return_period_days", "INTEGER", "30")
             _safe_add_column(_conn, "orders", "no_return_credits", "INTEGER", "0")
             _safe_add_column(_conn, "orders", "no_return_credits_status", "VARCHAR", "'pending'")
+            _safe_add_column(_conn, "orders", "baseline_scan_urls", "TEXT")
+            _safe_add_column(_conn, "orders", "baseline_scan_at", "TIMESTAMP WITH TIME ZONE")
+            _safe_add_column(_conn, "orders", "baseline_scan_employee_id", "INTEGER")
+            _safe_add_column(_conn, "users", "role", "VARCHAR", "'customer'")
+            _safe_add_column(_conn, "users", "employee_zone", "VARCHAR")
+            _safe_add_column(_conn, "products", "return_period_days", "INTEGER", "7")
+            _safe_add_column(_conn, "products", "has_no_return_policy", "BOOLEAN", "FALSE")
             _conn.commit()
     except Exception:
         pass  # Non-critical — app can still run
@@ -72,6 +79,7 @@ app.include_router(sustainability.router, prefix="/api")
 app.include_router(wishlist_router.router, prefix="/api")
 app.include_router(community.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+app.include_router(baseline.router, prefix="/api")
 
 
 @app.get("/")

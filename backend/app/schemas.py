@@ -33,6 +33,8 @@ class UserOut(BaseModel):
     city: Optional[str] = None
     pincode: Optional[str] = None
     is_admin: bool = False
+    role: str = "customer"
+    employee_zone: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -67,6 +69,10 @@ class ProductOut(BaseModel):
     water_impact: float = 0.0
     repair_cost_estimate: Optional[float] = None
     avg_lifespan_months: int = 24
+
+    # Return policy
+    return_period_days: int = 7
+    has_no_return_policy: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -129,6 +135,9 @@ class OrderOut(BaseModel):
     return_period_days: int = 30
     no_return_credits: int = 0
     no_return_credits_status: str = "pending"   # "pending" | "vested" | "forfeited"
+
+    # Delivery baseline scan status (computed in list endpoint)
+    has_baseline_scan: bool = False
 
     model_config = {"from_attributes": True}
 

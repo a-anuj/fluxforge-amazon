@@ -101,7 +101,36 @@ def seed():
             co2_saved=0.0, ewaste_prevented=0.0, water_saved=0.0,
             products_reused=0, products_repaired=0, products_resold=0,
             city="Mumbai", pincode="400001",
-            is_admin=True,
+            is_admin=True, role="admin",
+        ),
+        # ── Amazon Delivery Employees (access the baseline scan feature) ──
+        User(
+            name="Ravi Delivery Agent",
+            sizes="shoes:9,top:L",
+            brand_prefs="",
+            budget_min=0, budget_max=0,
+            interests="",
+            green_credits=120, lifetime_credits=200,
+            level="Sapling",
+            co2_saved=5.0, ewaste_prevented=0.5, water_saved=40.0,
+            products_reused=0, products_repaired=0, products_resold=0,
+            city="Mumbai", pincode="400001",
+            is_admin=False, role="employee",
+            employee_zone="Mumbai-West",
+        ),
+        User(
+            name="Sneha Delivery Agent",
+            sizes="shoes:7,top:M",
+            brand_prefs="",
+            budget_min=0, budget_max=0,
+            interests="",
+            green_credits=85, lifetime_credits=140,
+            level="Sapling",
+            co2_saved=3.2, ewaste_prevented=0.3, water_saved=25.0,
+            products_reused=0, products_repaired=0, products_resold=0,
+            city="Mumbai", pincode="400015",
+            is_admin=False, role="employee",
+            employee_zone="Mumbai-Central",
         ),
     ]
     db.add_all(users)
@@ -116,6 +145,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400",
             co2_impact=14.0, ewaste_impact=0.3, water_impact=100.0,
             repair_cost_estimate=350, avg_lifespan_months=18,
+            return_period_days=7, has_no_return_policy=False,
         ),
         Product(
             name="Adidas Ultraboost Light", category="running", brand="Adidas",
@@ -124,6 +154,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=400",
             co2_impact=16.0, ewaste_impact=0.3, water_impact=120.0,
             repair_cost_estimate=400, avg_lifespan_months=20,
+            return_period_days=7, has_no_return_policy=False,
         ),
         Product(
             name="Wildcraft Wanderer 40L Backpack", category="backpacking", brand="Wildcraft",
@@ -132,6 +163,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400",
             co2_impact=8.0, ewaste_impact=0.2, water_impact=60.0,
             repair_cost_estimate=200, avg_lifespan_months=36,
+            return_period_days=15, has_no_return_policy=False,
         ),
         Product(
             name="boAt Airdopes 141 TWS", category="electronics", brand="boAt",
@@ -140,6 +172,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=400",
             co2_impact=25.0, ewaste_impact=0.8, water_impact=200.0,
             repair_cost_estimate=150, avg_lifespan_months=24,
+            return_period_days=7, has_no_return_policy=False,
         ),
         Product(
             name="Decathlon Yoga Mat 5mm", category="yoga", brand="Decathlon",
@@ -148,6 +181,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400",
             co2_impact=5.0, ewaste_impact=0.1, water_impact=30.0,
             repair_cost_estimate=None, avg_lifespan_months=36,
+            return_period_days=0, has_no_return_policy=True,   # No returns — hygiene item
         ),
         Product(
             name="Noise ColorFit Pro 5 Max", category="electronics", brand="Noise",
@@ -156,6 +190,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1575311373937-040b8e1fd5b6?w=400",
             co2_impact=35.0, ewaste_impact=0.5, water_impact=300.0,
             repair_cost_estimate=250, avg_lifespan_months=30,
+            return_period_days=7, has_no_return_policy=False,
         ),
         Product(
             name="Puma Resolve Modern Running Shoes", category="running", brand="Puma",
@@ -164,6 +199,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400",
             co2_impact=12.0, ewaste_impact=0.3, water_impact=80.0,
             repair_cost_estimate=250, avg_lifespan_months=15,
+            return_period_days=7, has_no_return_policy=False,
         ),
         Product(
             name="Reebok Flexagon Energy TR 4", category="fitness", brand="Reebok",
@@ -172,6 +208,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1539185441755-769473a23570?w=400",
             co2_impact=11.0, ewaste_impact=0.3, water_impact=75.0,
             repair_cost_estimate=280, avg_lifespan_months=18,
+            return_period_days=30, has_no_return_policy=False,
         ),
         Product(
             name="Wildcraft Hiking Daypack 20L", category="backpacking", brand="Wildcraft",
@@ -180,6 +217,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1622260614153-03223fb72052?w=400",
             co2_impact=6.0, ewaste_impact=0.15, water_impact=45.0,
             repair_cost_estimate=120, avg_lifespan_months=30,
+            return_period_days=0, has_no_return_policy=True,   # No returns — sale item
         ),
         Product(
             name="boAt Rockerz 450 Pro Headphones", category="electronics", brand="boAt",
@@ -188,6 +226,7 @@ def seed():
             image_url="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400",
             co2_impact=30.0, ewaste_impact=0.6, water_impact=250.0,
             repair_cost_estimate=180, avg_lifespan_months=24,
+            return_period_days=7, has_no_return_policy=False,
         ),
     ]
     db.add_all(products)
@@ -350,14 +389,14 @@ def seed():
     db.commit()
 
     db.close()
-    print("✅ Database seeded successfully!")
-    print(f"   • {len(users)} users with pincodes (Mumbai + Pune)")
-    print(f"   • {len(products)} products with environmental impact metrics")
-    print(f"   • {len(orders_data)} orders, 2 returns")
-    print(f"   • {len(transactions)} credit transactions")
-    print(f"   • {len(challenges)} green challenges")
-    print(f"   • {len(redemptions)} redemptions")
-    print(f"   • {len(wishlists)} wishlist entries (for radius matching)")
+    print("[OK] Database seeded successfully!")
+    print(f"   * {len(users)} users (customers + 2 employees + admin)")
+    print(f"   * {len(products)} products with return period policies (some no-return)")
+    print(f"   * {len(orders_data)} orders, 2 returns")
+    print(f"   * {len(transactions)} credit transactions")
+    print(f"   * {len(challenges)} green challenges")
+    print(f"   * {len(redemptions)} redemptions")
+    print(f"   * {len(wishlists)} wishlist entries (for radius matching)")
 
 
 if __name__ == "__main__":

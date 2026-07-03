@@ -11,6 +11,7 @@ import Profile from "./pages/Profile";
 import Cart from "./pages/Cart";
 import NearDrop from "./pages/NearDrop";
 import Dashboard from "./pages/Dashboard";
+import EmployeeScan from "./pages/EmployeeScan";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/neardrop" element={<NearDrop />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/employee-scan" element={<EmployeeScan />} />
           </Route>
         </Routes>
       </UserProvider>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits } from "../api/client";
+import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits, getBaselineScan } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 /* ── Credits Badge with simple "why" popup ───────────────── */
@@ -102,6 +102,12 @@ export default function Orders() {
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const getOrderSortTime = (order) => {
+    const rawTimestamp = order?.placed_at || order?.created_at || order?.sold_at;
+    const timeValue = rawTimestamp ? new Date(rawTimestamp).getTime() : 0;
+    return Number.isNaN(timeValue) ? 0 : timeValue;
+  };
+
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
@@ -113,7 +119,7 @@ export default function Orders() {
         const commOrders = commPurchases.map(c => ({
           id: `C${c.id}`,
           is_community: true,
-          status: "delivered",
+          status: "placed",
           created_at: c.sold_at || c.created_at,
           product_id: `C${c.id}`,
           community_data: c,
@@ -122,10 +128,13 @@ export default function Orders() {
         }));
 
         const allData = [...standardOrders, ...commOrders];
-        // Sort numerically descending so newest orders appear first
+        // Sort by the newest timestamp first so recently placed orders appear at the top
         allData.sort((a, b) => {
-          const aNum = parseInt(a.id) || 0;
-          const bNum = parseInt(b.id) || 0;
+          const timeDiff = getOrderSortTime(b) - getOrderSortTime(a);
+          if (timeDiff !== 0) return timeDiff;
+
+          const aNum = Number.parseInt(a.id, 10) || 0;
+          const bNum = Number.parseInt(b.id, 10) || 0;
           return bNum - aNum;
         });
         setOrders(allData);
@@ -201,7 +210,7 @@ export default function Orders() {
   };
 
   const statusStyles = {
-    placed:    { color: "text-[#c7511f]", label: "Order Placed" },
+    placed:    { color: "text-[#1a6bb5]", label: "Awaiting Delivery Verification" },
     delivered: { color: "text-[#067d62]", label: "Delivered" },
     returned:  { color: "text-amazon-red", label: "Returned" },
   };
@@ -314,6 +323,12 @@ export default function Orders() {
                       )}
                       <div className="flex-1">
                         <p className={`text-[14px] font-bold ${st.color} mb-1`}>{st.label}</p>
+                        {order.status === "placed" && !order.is_community && (
+                          <p className="text-[11px] text-[#1a6bb5]/80 mb-1 flex items-center gap-1">
+                            <span>🚚</span>
+                            Your packaging operator will verify this product with a live scan before it appears as delivered
+                          </p>
+                        )}
                         <p className="text-[14px] text-amazon-link hover:text-amazon-link-hover">
                           {prod
                             ? <Link to={`/products/${prod.id}`}>{prod.name}</Link>
@@ -353,11 +368,52 @@ export default function Orders() {
                               Buy it again
                             </Link>
                           )}
-                          {!order.is_community && order.status !== "returned" && (
-                            <Link to={`/returns/new?orderId=${order.id}`} className="btn-amazon text-[12px] px-3 py-1">
-                              Return or Replace
-                            </Link>
-                          )}
+                          {/* Return button — only shown if product has a return policy and order not yet returned */}
+                          {!order.is_community && order.status !== "returned" && (() => {
+                            const noReturn = prod?.has_no_return_policy;
+                            const returnDays = prod?.return_period_days ?? order.return_period_days ?? 7;
+                            const placedAt = order.placed_at ? new Date(order.placed_at) : null;
+                            const returnDeadline = placedAt ? new Date(placedAt.getTime() + returnDays * 86400000) : null;
+                            const isWithinWindow = returnDeadline ? new Date() <= returnDeadline : true;
+                            const daysLeft = returnDeadline ? Math.max(0, Math.ceil((returnDeadline - new Date()) / 86400000)) : null;
+
+                            if (noReturn) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-red-50 border border-red-200 text-red-600 px-2.5 py-1 rounded font-bold">
+                                  🚫 No Return Policy
+                                </span>
+                              );
+                            }
+                            if (order.status === "placed") {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-[#ebf2fb] border border-[#1a6bb5]/30 text-[#1a6bb5] px-2.5 py-1 rounded font-bold">
+                                  🔒 Return available after packaging verification
+                                </span>
+                              );
+                            }
+                            if (!isWithinWindow) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] bg-[#f0f2f2] border border-amazon-border text-amazon-text-secondary px-2.5 py-1 rounded">
+                                  ⏰ Return window expired
+                                </span>
+                              );
+                            }
+                            return (
+                              <Link
+                                to={`/returns/new?orderId=${order.id}`}
+                                className="btn-amazon text-[12px] px-3 py-1 flex items-center gap-1"
+                              >
+                                Return or Replace
+                                {daysLeft !== null && (
+                                  <span className={`ml-1 text-[10px] font-bold ${
+                                    daysLeft <= 2 ? 'text-red-500' : daysLeft <= 5 ? 'text-orange-500' : 'text-[#067d62]'
+                                  }`}>
+                                    {daysLeft}d left
+                                  </span>
+                                )}
+                              </Link>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
