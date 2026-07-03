@@ -230,6 +230,7 @@ export default function LiveVideoScanner({
   const timerRef = useRef(null);
   const phaseTimerRef = useRef(null);
   const phaseIdxRef = useRef(0);
+  const abortedRef = useRef(false);
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(null);
@@ -311,6 +312,7 @@ export default function LiveVideoScanner({
           if (requestSeq !== fingerprintRequestSeq.current) return;
           
           if (!result.matched && result.confidence >= 50) {
+            abortedRef.current = true;
             if (recorderRef.current && recorderRef.current.state === "recording") {
                recorderRef.current.stop();
             }
@@ -435,6 +437,7 @@ export default function LiveVideoScanner({
     if (!streamRef.current || !cameraReady) return;
 
     chunksRef.current = [];
+    abortedRef.current = false;
     setCapturedFrames({});
     phaseIdxRef.current = 0;
     setCurrentPhaseIdx(0);
@@ -458,7 +461,21 @@ export default function LiveVideoScanner({
       const blob = new Blob(chunksRef.current, { type: mimeType });
       setVideoBlob(blob);
       setVideoPreviewUrl(URL.createObjectURL(blob));
-      setPhase("review");
+      // If the stop was triggered by a mismatch abort, stay on "aborted" phase.
+      if (!abortedRef.current) {
+        // Cancel any in-flight recording-phase fingerprint requests so they
+        // cannot overwrite the review-phase result after we transition.
+        fingerprintRequestSeq.current += 1;
+        // Reset to "pending" so the review-phase effect always runs a fresh
+        // definitive check on all captured frames, rather than inheriting a
+        // stale advisory mismatch from an early mid-scan frame.
+        setFingerprintStatus("pending");
+        setFingerprintPrompt("");
+        setFingerprintMissingViews([]);
+        setFingerprintConfidence(null);
+        setFingerprintDebugResponse(null);
+        setPhase("review");
+      }
     };
 
     recorder.start(200);
@@ -489,6 +506,7 @@ export default function LiveVideoScanner({
             frames: initialFrames,
           }).then((result) => {
             if (!result.matched) {
+              abortedRef.current = true;
               if (recorderRef.current && recorderRef.current.state === "recording") {
                 recorderRef.current.stop();
               }
