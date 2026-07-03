@@ -1,15 +1,15 @@
 """
-Delivery Baseline Scan Router
+Packaging Baseline Scan Router
 
-Allows Amazon delivery employees to capture a multi-angle baseline scan
-of a product at the moment of delivery. This scan is stored against the
-Order and later used by the AI to compare against return photos — detecting
-damage that occurred after delivery.
+Allows an admin packaging operator to capture a multi-angle baseline scan
+of a product before it is packed for delivery. This scan is stored against
+the Order and later used by the AI to compare against return photos —
+detecting damage that occurred after the product left packaging.
 
 Endpoints:
-  POST /baseline/{order_id}/scan     — employee uploads baseline scan images
-  GET  /baseline/{order_id}          — get baseline scan info for an order
-  GET  /baseline/pending?employee_id — list orders pending a baseline scan
+    POST /baseline/{order_id}/scan     — operator uploads baseline scan video
+    GET  /baseline/{order_id}          — get baseline scan info for an order
+    GET  /baseline/pending/list        — list orders pending a baseline scan
 """
 
 import os
@@ -87,7 +87,7 @@ async def submit_baseline_scan(
     db: Session = Depends(get_db),
 ):
     """
-    Employee submits a delivery baseline scan at delivery time.
+    Operator submits a packaging baseline scan before the item is packed.
     Accepts a video file upload for the guided live scan.
     """
     # Validate order
@@ -99,8 +99,8 @@ async def submit_baseline_scan(
     employee = db.query(User).filter(User.id == employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    if employee.role != "employee":
-        raise HTTPException(status_code=403, detail="Only delivery employees can submit baseline scans")
+    if employee.role not in {"employee", "admin"}:
+        raise HTTPException(status_code=403, detail="Only operators can submit baseline scans")
 
     # Validate video
     if not video.content_type.startswith("video/"):
@@ -210,17 +210,23 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
 def get_pending_baseline_orders(employee_id: int, db: Session = Depends(get_db)):
     """
     Returns orders that have been placed but not yet received a baseline scan.
-    Employee sees these on their dashboard to know which deliveries need scanning.
+    Admin operators see these on their dashboard to know which packages need scanning.
     """
     employee = db.query(User).filter(User.id == employee_id).first()
-    if not employee or employee.role != "employee":
-        raise HTTPException(status_code=403, detail="Employee access required")
+    if not employee or employee.role not in {"employee", "admin"}:
+        raise HTTPException(status_code=403, detail="Operator access required")
 
-    # Orders without baseline scan OR pending return pickup
-    pending = db.query(Order).filter(
-        (Order.baseline_scan_urls.is_(None) & Order.status.in_(["placed", "delivered"])) |
-        (Order.status == "return_pending")
-    ).order_by(Order.id.desc()).limit(20).all()
+    # Admin packaging flow: only orders waiting for the initial scan.
+    if employee.role == "admin":
+        pending = db.query(Order).filter(
+            Order.baseline_scan_urls.is_(None),
+            Order.status == "placed",
+        ).order_by(Order.id.desc()).limit(20).all()
+    else:
+        pending = db.query(Order).filter(
+            (Order.baseline_scan_urls.is_(None) & Order.status.in_(["placed", "delivered"])) |
+            (Order.status == "return_pending")
+        ).order_by(Order.id.desc()).limit(20).all()
 
     result = []
     from app.models import Return

@@ -17,7 +17,13 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `API error: ${res.status}`);
+    const message = typeof err.detail === "string"
+      ? err.detail
+      : err.message || JSON.stringify(err.detail || { status: res.status });
+    const apiError = new Error(message || `API error: ${res.status}`);
+    apiError.detail = err.detail;
+    apiError.status = res.status;
+    throw apiError;
   }
 
   return res.json();
@@ -150,6 +156,12 @@ export const purchaseWishlistMatch = (matchId, userId) =>
 
 // Analytics
 export const getDashboardMetrics = () => request("/analytics/dashboard");
+
+export const verifyScanFingerprint = (data) =>
+  request("/sustainability/fingerprint", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 
 // Baseline Scan (Employee)
 const multipartRequest = async (path, formData) => {

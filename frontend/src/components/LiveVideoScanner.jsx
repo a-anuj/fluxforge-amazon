@@ -1,144 +1,196 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { verifyScanFingerprint } from "../api/client";
 import { captureVideoFrame } from "../utils/videoUtils";
 
-/** Guided scan phases — motion prompts replace static angle photos. */
+/**
+ * Fingerprint-style scan phases.
+ * The flow emphasizes slow coverage passes over the product, not raw angle jumping.
+ */
 export const SCAN_PHASES = [
   {
-    id: "front",
-    label: "Front View",
+    id: "front_anchor",
+    label: "Front Anchor",
     motion: "Hold steady",
-    hint: "Center the product facing the camera",
-    icon: "⬜",
-    durationSec: 3,
+    hint: "Center the product so the scan can lock the item identity.",
+    icon: "◉",
+    durationSec: 6,
     motionClass: "motion-pulse-center",
   },
   {
-    id: "rotate_right",
-    label: "Rotate Right",
-    motion: "Slowly turn right →",
-    hint: "Reveal the right side and edge profile",
-    icon: "▶",
-    durationSec: 3,
+    id: "right_sweep",
+    label: "Right Sweep",
+    motion: "Ease slowly to your right →",
+    hint: "Reveal the right side and edge profile without rushing.",
+    icon: "▸",
+    durationSec: 6,
     motionClass: "motion-slide-right",
   },
   {
-    id: "back",
-    label: "Back View",
-    motion: "Flip to back",
-    hint: "Show the entire back panel clearly",
-    icon: "🔲",
-    durationSec: 3,
+    id: "back_anchor",
+    label: "Back Anchor",
+    motion: "Rotate to the back",
+    hint: "Show the back panel, seams, and any visible markings.",
+    icon: "▣",
+    durationSec: 7,
     motionClass: "motion-flip",
   },
   {
-    id: "rotate_left",
-    label: "Rotate Left",
-    motion: "← Turn left",
-    hint: "Show the left side and profile",
-    icon: "◀",
-    durationSec: 3,
+    id: "left_sweep",
+    label: "Left Sweep",
+    motion: "Ease slowly to your left ←",
+    hint: "Capture the left side and full profile in one smooth move.",
+    icon: "◂",
+    durationSec: 6,
     motionClass: "motion-slide-left",
   },
   {
-    id: "top",
-    label: "Top & Ports",
-    motion: "Tilt upward ↑",
-    hint: "Reveal ports, buttons, or top surface",
-    icon: "🔼",
-    durationSec: 3,
+    id: "top_detail",
+    label: "Top / Ports",
+    motion: "Tilt slightly upward ↑",
+    hint: "Reveal ports, buttons, seams, or the top surface.",
+    icon: "▴",
+    durationSec: 6,
     motionClass: "motion-tilt-up",
   },
   {
-    id: "label",
-    label: "Label Detail",
+    id: "detail_mark",
+    label: "Detail Mark",
     motion: "Move closer 🔍",
-    hint: "Zoom in on serial number or brand label",
-    icon: "🏷",
-    durationSec: 3,
+    hint: "Capture a close-up of branding, serial number, or unique mark.",
+    icon: "⌁",
+    durationSec: 6,
     motionClass: "motion-zoom-in",
   },
 ];
 
-function MotionGuide({ phase, phaseProgress, isRecording }) {
+function MotionGuide({ phase, phaseProgress, capturedCount, totalCount, isRecording }) {
   const pct = Math.round(phaseProgress * 100);
   return (
-    <div className="absolute inset-0 pointer-events-none z-10 flex flex-col items-center justify-center">
-      <div className="relative w-56 h-56">
-        {[
-          "top-0 left-0 border-t-4 border-l-4 rounded-tl-xl",
-          "top-0 right-0 border-t-4 border-r-4 rounded-tr-xl",
-          "bottom-0 left-0 border-b-4 border-l-4 rounded-bl-xl",
-          "bottom-0 right-0 border-b-4 border-r-4 rounded-br-xl",
-        ].map((cls, i) => (
-          <div
-            key={i}
-            className={`absolute w-12 h-12 ${cls}`}
-            style={{
-              borderColor: isRecording ? "#febd69" : "#ffffff55",
-              transition: "border-color 0.3s",
-            }}
-          />
-        ))}
-
-        <div className={`absolute inset-0 flex items-center justify-center ${phase.motionClass}`}>
-          <div
-            className="text-5xl select-none"
-            style={{
-              filter: isRecording ? "drop-shadow(0 0 12px #febd69)" : "none",
-              opacity: isRecording ? 1 : 0.4,
-            }}
-          >
-            {phase.icon}
+    <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-[26rem] rounded-[28px] border border-white/10 bg-black/20 backdrop-blur-md p-4 sm:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-[#febd69]/90 font-bold">Scan focus</p>
+            <p className="text-[16px] sm:text-[18px] font-semibold text-white">{phase.label}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-[0.24em] text-white/50">Coverage</p>
+            <p className="text-[14px] font-bold text-white">{capturedCount}/{totalCount}</p>
           </div>
         </div>
 
-        {isRecording && (
-          <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="46" fill="none" stroke="#ffffff22" strokeWidth="3" />
-            <circle
-              cx="50"
-              cy="50"
-              r="46"
-              fill="none"
-              stroke="#febd69"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={`${pct * 2.89} 289`}
-              style={{ transition: "stroke-dasharray 0.1s linear" }}
-            />
-          </svg>
-        )}
-      </div>
+        <div className="relative h-52 sm:h-64 rounded-[24px] border border-white/10 bg-gradient-to-br from-white/6 to-white/0 overflow-hidden flex items-center justify-center">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(254,189,105,0.16),transparent_60%)]" />
+          <div className="absolute inset-4 rounded-[22px] border border-dashed border-white/12" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div
+              className={`text-7xl sm:text-8xl select-none ${phase.motionClass}`}
+              style={{
+                filter: isRecording ? "drop-shadow(0 0 18px rgba(254,189,105,0.65))" : "none",
+                opacity: isRecording ? 1 : 0.45,
+              }}
+            >
+              {phase.icon}
+            </div>
+          </div>
 
-      {isRecording && (
-        <div className="mt-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full">
-          <span className="text-[#febd69] text-lg animate-bounce">{phase.motion}</span>
+          {isRecording && (
+            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="3" />
+              <circle
+                cx="50"
+                cy="50"
+                r="46"
+                fill="none"
+                stroke="#febd69"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${pct * 2.89} 289`}
+                style={{ transition: "stroke-dasharray 0.15s linear" }}
+              />
+            </svg>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="flex-1">
+            <p className="text-[12px] text-white/70">{phase.hint}</p>
+          </div>
+          {isRecording && (
+            <div className="shrink-0 inline-flex items-center gap-2 bg-black/50 border border-white/10 px-3 py-2 rounded-full">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#ff4d4d] rec-dot" />
+              <span className="text-[12px] font-semibold text-white/90">Recording</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FingerprintHint({ status, prompt, missingViews, confidence }) {
+  if (!prompt && !missingViews.length && confidence == null) return null;
+
+  const toneClass =
+    status === "matched"
+      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-50"
+      : status === "mismatch"
+      ? "border-rose-500/20 bg-rose-500/10 text-rose-50"
+      : "border-amber-400/20 bg-amber-400/10 text-amber-50";
+
+  return (
+    <div className={`rounded-3xl border p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] uppercase tracking-[0.28em] font-bold">Fingerprint guidance</p>
+        {typeof confidence === "number" && <span className="text-[11px] font-semibold">{confidence}% confidence</span>}
+      </div>
+      {prompt && <p className="mt-2 text-[12px] leading-6">{prompt}</p>}
+      {missingViews.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {missingViews.map((view) => (
+            <span key={view} className="rounded-full border border-white/10 bg-black/10 px-3 py-1 text-[11px] text-inherit">
+              {view}
+            </span>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
+function DebugPanel({ data }) {
+  if (!data) return null;
+
+  return (
+    <div className="rounded-3xl border border-white/10 bg-[#0b1220] p-4 text-[12px] text-[#d5deeb]">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <p className="text-[10px] uppercase tracking-[0.28em] text-[#febd69] font-bold">AI response debug</p>
+      </div>
+      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[#d5deeb]">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
 function PhaseStrip({ phases, currentIdx, capturedFrames }) {
   return (
-    <div className="flex gap-1.5 px-3 py-2 overflow-x-auto bg-[#0f172a]">
+    <div className="flex gap-2 px-4 py-3 overflow-x-auto bg-[#09111f] border-b border-white/6">
       {phases.map((p, i) => {
         const done = !!capturedFrames[p.id];
         const active = i === currentIdx;
         return (
           <div
             key={p.id}
-            className={`flex-shrink-0 flex flex-col items-center gap-0.5 transition-all ${
-              active ? "scale-105" : "opacity-60"
-            }`}
+            className={`flex-shrink-0 flex flex-col items-center gap-1 transition-all ${active ? "scale-105" : "opacity-70"}`}
           >
             <div
-              className={`w-10 h-10 rounded-lg overflow-hidden border-2 flex items-center justify-center text-sm ${
+              className={`w-12 h-12 rounded-2xl overflow-hidden border flex items-center justify-center text-sm shadow-sm ${
                 done
-                  ? "border-[#22c55e] bg-[#022c22]"
+                  ? "border-[#22c55e] bg-[#05261d]"
                   : active
                   ? "border-[#febd69] bg-[#2d2416]"
-                  : "border-[#334155] bg-[#1e293b]"
+                  : "border-[#223049] bg-[#121c2d]"
               }`}
             >
               {done && capturedFrames[p.id] ? (
@@ -148,11 +200,11 @@ function PhaseStrip({ phases, currentIdx, capturedFrames }) {
               )}
             </div>
             <span
-              className={`text-[8px] font-bold truncate max-w-[48px] ${
-                done ? "text-[#22c55e]" : active ? "text-[#febd69]" : "text-[#64748b]"
+              className={`text-[8px] font-bold tracking-wide truncate max-w-[60px] ${
+                done ? "text-[#22c55e]" : active ? "text-[#febd69]" : "text-[#7890b0]"
               }`}
             >
-              {p.label.split(" ")[0]}
+              {p.label}
             </span>
           </div>
         );
@@ -165,8 +217,11 @@ export default function LiveVideoScanner({
   onComplete,
   onCancel,
   title = "Live Product Scan",
-  subtitle = "Follow the on-screen motion guides",
+  subtitle = "A slower, guided coverage pass that fingerprints the product from every visible side",
   accentColor = "#febd69",
+  orderId = null,
+  productName = "",
+  productCategory = "",
 }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -185,6 +240,12 @@ export default function LiveVideoScanner({
   const [videoBlob, setVideoBlob] = useState(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState(null);
   const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [fingerprintStatus, setFingerprintStatus] = useState("pending");
+  const [fingerprintPrompt, setFingerprintPrompt] = useState("");
+  const [fingerprintMissingViews, setFingerprintMissingViews] = useState([]);
+  const [fingerprintConfidence, setFingerprintConfidence] = useState(null);
+  const [fingerprintDebugResponse, setFingerprintDebugResponse] = useState(null);
+  const fingerprintRequestSeq = useRef(0);
 
   const currentPhase = SCAN_PHASES[currentPhaseIdx];
   const capturedCount = Object.keys(capturedFrames).length;
@@ -195,7 +256,11 @@ export default function LiveVideoScanner({
         streamRef.current.getTracks().forEach((t) => t.stop());
       }
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
         audio: false,
       });
       streamRef.current = stream;
@@ -219,6 +284,95 @@ export default function LiveVideoScanner({
       if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
     };
   }, [startCamera]);
+
+  useEffect(() => {
+    return () => {
+      if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    };
+  }, [videoPreviewUrl]);
+
+  useEffect(() => {
+    if (phase !== "recording") return;
+
+    const frames = SCAN_PHASES.map((p) => capturedFrames[p.id]).filter(Boolean);
+    if (!frames.length) return;
+
+    const requestSeq = ++fingerprintRequestSeq.current;
+    const timeout = setTimeout(() => {
+      verifyScanFingerprint({
+        order_id: orderId,
+        product_name: productName,
+        product_category: productCategory,
+        scan_context: "live_capture",
+        frames,
+      })
+        .then((result) => {
+          if (requestSeq !== fingerprintRequestSeq.current) return;
+          setFingerprintStatus(result.matched ? "matched" : "mismatch");
+          setFingerprintPrompt(result.recommended_next_prompt || "");
+          setFingerprintMissingViews(Array.isArray(result.missing_views) ? result.missing_views : []);
+          setFingerprintConfidence(typeof result.confidence === "number" ? result.confidence : null);
+          setFingerprintDebugResponse(result);
+        })
+        .catch((error) => {
+          if (requestSeq !== fingerprintRequestSeq.current) return;
+          const detail = error?.detail || {};
+          setFingerprintStatus("mismatch");
+          setFingerprintPrompt(detail.recommended_next_prompt || detail.message || error?.message || "The scan does not match the intended product.");
+          setFingerprintMissingViews(Array.isArray(detail.missing_views) ? detail.missing_views : []);
+          setFingerprintConfidence(typeof detail.confidence === "number" ? detail.confidence : null);
+          setFingerprintDebugResponse({
+            error: true,
+            status: error?.status || 409,
+            message: error?.message || "Fingerprint verification failed",
+            detail,
+          });
+        });
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [phase, capturedFrames, orderId, productName, productCategory]);
+
+  useEffect(() => {
+    if (phase !== "review" || !videoBlob || fingerprintStatus !== "pending") return;
+
+    let cancelled = false;
+    const frames = SCAN_PHASES.map((p) => capturedFrames[p.id]).filter(Boolean);
+
+    verifyScanFingerprint({
+      order_id: orderId,
+      product_name: productName,
+      product_category: productCategory,
+      scan_context: "product_identity",
+      frames,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setFingerprintStatus(result.matched ? "matched" : "mismatch");
+        setFingerprintPrompt(result.recommended_next_prompt || "");
+        setFingerprintMissingViews(Array.isArray(result.missing_views) ? result.missing_views : []);
+        setFingerprintConfidence(typeof result.confidence === "number" ? result.confidence : null);
+        setFingerprintDebugResponse(result);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const detail = error?.detail || {};
+        setFingerprintStatus("mismatch");
+        setFingerprintPrompt(detail.recommended_next_prompt || detail.message || error?.message || "The scan does not match the intended product.");
+        setFingerprintMissingViews(Array.isArray(detail.missing_views) ? detail.missing_views : []);
+        setFingerprintConfidence(typeof detail.confidence === "number" ? detail.confidence : null);
+        setFingerprintDebugResponse({
+          error: true,
+          status: error?.status || 409,
+          message: error?.message || "Fingerprint verification failed",
+          detail,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, videoBlob, fingerprintStatus, capturedFrames, orderId, productName, productCategory]);
 
   const runPhaseTimer = useCallback(() => {
     const idx = phaseIdxRef.current;
@@ -253,7 +407,7 @@ export default function LiveVideoScanner({
           phaseIdxRef.current = nextIdx;
           setCurrentPhaseIdx(nextIdx);
           setPhaseProgress(0);
-          setTimeout(() => runPhaseTimer(), 150);
+          setTimeout(() => runPhaseTimer(), 220);
         }
       }
     }, tickMs);
@@ -296,7 +450,7 @@ export default function LiveVideoScanner({
       setRecordingElapsed((e) => e + 0.1);
     }, 100);
 
-    setTimeout(() => runPhaseTimer(), 300);
+    setTimeout(() => runPhaseTimer(), 320);
   };
 
   const handleRetake = () => {
@@ -306,6 +460,12 @@ export default function LiveVideoScanner({
     setCurrentPhaseIdx(0);
     setPhaseProgress(0);
     setVideoBlob(null);
+    setFingerprintStatus("pending");
+    setFingerprintPrompt("");
+    setFingerprintMissingViews([]);
+    setFingerprintConfidence(null);
+    setFingerprintDebugResponse(null);
+    fingerprintRequestSeq.current += 1;
     if (videoPreviewUrl) {
       URL.revokeObjectURL(videoPreviewUrl);
       setVideoPreviewUrl(null);
@@ -319,12 +479,19 @@ export default function LiveVideoScanner({
       frames,
       durationSec: recordingElapsed,
       phases: SCAN_PHASES.map((p) => ({ id: p.id, label: p.label, frame: capturedFrames[p.id] })),
+      fingerprint: {
+        status: fingerprintStatus,
+        prompt: fingerprintPrompt,
+        missingViews: fingerprintMissingViews,
+        confidence: fingerprintConfidence,
+        debugResponse: fingerprintDebugResponse,
+      },
     });
   };
 
   if (cameraError) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-black text-white text-center p-6 min-h-[50vh]">
+      <div className="flex-1 flex items-center justify-center bg-black text-white text-center p-6 min-h-[60vh]">
         <div>
           <div className="text-4xl mb-3">📷</div>
           <p className="text-[14px] text-red-400 font-semibold">{cameraError}</p>
@@ -341,28 +508,34 @@ export default function LiveVideoScanner({
   if (phase === "review") {
     return (
       <div className="flex-1 flex flex-col bg-[#030712] text-white overflow-y-auto">
-        <div className="px-4 pt-4 pb-2">
-          <h2 className="text-[16px] font-bold">Review Scan</h2>
-          <p className="text-[12px] text-[#94a3b8]">
-            {capturedCount} frames extracted from {recordingElapsed.toFixed(1)}s recording
-          </p>
+        <div className="px-4 sm:px-6 pt-4 pb-2 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[16px] font-bold">Review Scan</h2>
+            <p className="text-[12px] text-[#94a3b8]">
+              {capturedCount} coverage frames extracted from {recordingElapsed.toFixed(1)}s recording
+            </p>
+          </div>
+          <div className="hidden sm:flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[12px] text-white/80">
+            <span className="w-2 h-2 rounded-full bg-[#febd69]" />
+            Slower fingerprint-style pass
+          </div>
         </div>
 
         {videoPreviewUrl && (
-          <div className="px-4 mb-3">
+          <div className="px-4 sm:px-6 mb-3">
             <video
               src={videoPreviewUrl}
               controls
-              className="w-full rounded-xl border border-[#334155] max-h-[180px] object-cover bg-black"
+              className="w-full rounded-3xl border border-[#334155] max-h-[40vh] sm:max-h-[45vh] object-cover bg-black shadow-[0_20px_70px_rgba(0,0,0,0.45)]"
             />
           </div>
         )}
 
-        <div className="px-4 grid grid-cols-3 gap-2 pb-4">
+        <div className="px-4 sm:px-6 grid grid-cols-3 sm:grid-cols-6 gap-2 pb-4">
           {SCAN_PHASES.map((p) => {
             const frame = capturedFrames[p.id];
             return (
-              <div key={p.id} className="rounded-lg overflow-hidden border border-[#334155] bg-[#1e293b]">
+              <div key={p.id} className="rounded-2xl overflow-hidden border border-[#334155] bg-[#111827] shadow-sm">
                 {frame ? (
                   <img src={frame} alt={p.label} className="w-full aspect-square object-cover" />
                 ) : (
@@ -376,7 +549,7 @@ export default function LiveVideoScanner({
           })}
         </div>
 
-        <div className="px-4 pb-4 flex gap-3 mt-auto">
+        <div className="px-4 sm:px-6 pb-4 flex gap-3 mt-auto sticky bottom-0 bg-[#030712]/95 backdrop-blur-md pt-2">
           <button
             onClick={handleRetake}
             className="flex-1 py-3 rounded-xl border border-[#334155] text-[#94a3b8] hover:text-white text-[13px] font-bold"
@@ -397,38 +570,38 @@ export default function LiveVideoScanner({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-black text-white" style={{ minHeight: 0 }}>
+    <div className="flex-1 flex flex-col bg-[#030712] text-white" style={{ minHeight: 0 }}>
       <style>{`
         @keyframes scanPulseCenter {
           0%, 100% { transform: scale(1); opacity: 0.8; }
-          50% { transform: scale(1.08); opacity: 1; }
+          50% { transform: scale(1.06); opacity: 1; }
         }
         @keyframes scanSlideRight {
-          0%, 100% { transform: translateX(-8px); }
-          50% { transform: translateX(12px); }
+          0%, 100% { transform: translateX(-10px); }
+          50% { transform: translateX(14px); }
         }
         @keyframes scanSlideLeft {
-          0%, 100% { transform: translateX(8px); }
-          50% { transform: translateX(-12px); }
+          0%, 100% { transform: translateX(10px); }
+          50% { transform: translateX(-14px); }
         }
         @keyframes scanFlip {
           0%, 100% { transform: rotateY(0deg); }
           50% { transform: rotateY(180deg); }
         }
         @keyframes scanTiltUp {
-          0%, 100% { transform: translateY(4px) rotate(-5deg); }
-          50% { transform: translateY(-10px) rotate(5deg); }
+          0%, 100% { transform: translateY(4px) rotate(-4deg); }
+          50% { transform: translateY(-10px) rotate(4deg); }
         }
         @keyframes scanZoomIn {
-          0%, 100% { transform: scale(0.85); }
-          50% { transform: scale(1.15); }
+          0%, 100% { transform: scale(0.88); }
+          50% { transform: scale(1.12); }
         }
-        .motion-pulse-center { animation: scanPulseCenter 2s ease-in-out infinite; }
-        .motion-slide-right  { animation: scanSlideRight 2s ease-in-out infinite; }
-        .motion-slide-left   { animation: scanSlideLeft 2s ease-in-out infinite; }
-        .motion-flip         { animation: scanFlip 2.5s ease-in-out infinite; }
-        .motion-tilt-up      { animation: scanTiltUp 2s ease-in-out infinite; }
-        .motion-zoom-in      { animation: scanZoomIn 2s ease-in-out infinite; }
+        .motion-pulse-center { animation: scanPulseCenter 2.4s ease-in-out infinite; }
+        .motion-slide-right  { animation: scanSlideRight 2.6s ease-in-out infinite; }
+        .motion-slide-left   { animation: scanSlideLeft 2.6s ease-in-out infinite; }
+        .motion-flip         { animation: scanFlip 3.2s ease-in-out infinite; }
+        .motion-tilt-up      { animation: scanTiltUp 2.8s ease-in-out infinite; }
+        .motion-zoom-in      { animation: scanZoomIn 2.8s ease-in-out infinite; }
         @keyframes recDot {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
@@ -436,81 +609,196 @@ export default function LiveVideoScanner({
         .rec-dot { animation: recDot 1s ease-in-out infinite; }
       `}</style>
 
-      <div className="px-4 py-2 bg-[#0f172a] flex items-center justify-between z-20">
+      <div className="px-4 sm:px-6 py-3 bg-[#09111f] border-b border-white/6 flex items-start sm:items-center justify-between gap-3">
         <div>
-          <p className="text-[13px] font-bold">{title}</p>
-          <p className="text-[10px] text-[#64748b]">{subtitle}</p>
+          <p className="text-[13px] font-semibold text-white">{title}</p>
+          <p className="text-[10px] sm:text-[11px] text-[#7890b0] max-w-2xl">{subtitle}</p>
         </div>
-        {phase === "recording" && (
-          <div className="flex items-center gap-1.5 bg-red-900/60 px-2.5 py-1 rounded-full">
-            <div className="w-2 h-2 rounded-full bg-red-500 rec-dot" />
-            <span className="text-[11px] font-bold text-red-300">REC {recordingElapsed.toFixed(0)}s</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 bg-black/40 backdrop-blur-sm px-3 py-2 rounded-full border border-white/10 shrink-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#ff4d4d] rec-dot" />
+          <span className="text-[11px] font-bold text-red-200">REC {recordingElapsed.toFixed(0)}s</span>
+        </div>
       </div>
 
-      {phase === "recording" && (
-        <PhaseStrip phases={SCAN_PHASES} currentIdx={currentPhaseIdx} capturedFrames={capturedFrames} />
-      )}
+      <div className="px-4 sm:px-6 pt-3">
+        <div className="rounded-[28px] border border-white/8 bg-gradient-to-b from-[#0c1220] to-[#070b14] p-3 sm:p-4 shadow-[0_24px_80px_rgba(0,0,0,0.4)]">
+          <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
+            <div className="order-2 lg:order-1 flex flex-col gap-4">
+              <div className="rounded-[24px] border border-white/8 bg-white/4 p-4 sm:p-5">
+                {phase === "intro" ? (
+                  <>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-[#febd69] font-bold mb-2">Before you begin</p>
+                    <h3 className="text-[18px] sm:text-[20px] font-semibold text-white leading-tight">A slower fingerprint-style scan</h3>
+                    <p className="text-[13px] text-[#b7c4d9] mt-2 leading-relaxed">
+                      Hold the product steady, then let the scan guide you through each side at a calm pace.
+                      The AI records coverage frames automatically.
+                    </p>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-[#dbe7f7]">
+                      <div className="rounded-2xl border border-white/8 bg-black/20 p-3">Use good lighting</div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 p-3">Keep the item centered</div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 p-3">Move slowly</div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 p-3">Follow the cue</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-[#febd69] font-bold mb-2">Current pass</p>
+                    <h3 className="text-[18px] sm:text-[20px] font-semibold text-white leading-tight">{currentPhase.label}</h3>
+                    <p className="text-[13px] text-[#b7c4d9] mt-2 leading-relaxed">{currentPhase.hint}</p>
+                    <div className="mt-4 rounded-2xl bg-black/25 border border-white/8 p-3">
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-white/50 mb-1">What to do now</p>
+                      <p className="text-[15px] font-semibold text-white">{currentPhase.motion}</p>
+                    </div>
+                  </>
+                )}
+              </div>
 
-      <div className="bg-[#0c1a3a] px-4 py-2 text-center z-20">
-        {phase === "intro" ? (
-          <p className="text-[12px] text-[#93c5fd]">
-            🎬 You'll be guided through {SCAN_PHASES.length} motions — keep the product in frame throughout
-          </p>
-        ) : (
-          <div>
-            <p className="text-[13px] font-bold text-white">
-              {currentPhase.icon} {currentPhase.label}
-            </p>
-            <p className="text-[11px] text-[#93c5fd] mt-0.5">{currentPhase.hint}</p>
-          </div>
-        )}
-      </div>
+              <div className="rounded-[24px] border border-white/8 bg-[#09111f] p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[11px] uppercase tracking-[0.26em] text-white/45 font-bold">Coverage path</p>
+                  <p className="text-[12px] font-semibold text-white">{capturedCount}/{SCAN_PHASES.length}</p>
+                </div>
+                <div className="space-y-2.5">
+                  {SCAN_PHASES.map((p, index) => {
+                    const done = !!capturedFrames[p.id];
+                    const active = index === currentPhaseIdx;
+                    return (
+                      <div key={p.id} className={`flex items-center gap-3 rounded-2xl px-3 py-2 border ${done ? "border-[#22c55e]/30 bg-[#05261d]" : active ? "border-[#febd69]/40 bg-[#2d2416]" : "border-white/6 bg-white/[0.03]"}`}>
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${done ? "bg-[#22c55e]/15 text-[#67e8a4]" : active ? "bg-[#febd69]/15 text-[#febd69]" : "bg-white/5 text-[#7b8ca8]"}`}>
+                          {done ? "✓" : p.icon}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-[12px] font-semibold truncate ${done ? "text-[#67e8a4]" : active ? "text-[#febd69]" : "text-white"}`}>{p.label}</p>
+                          <p className="text-[11px] text-[#88a0c0] truncate">{p.motion}</p>
+                        </div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">
+                          {done ? "done" : active ? "now" : "next"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-      <div className="flex-1 relative overflow-hidden" style={{ minHeight: "45vh" }}>
-        <video ref={videoRef} className="w-full h-full object-cover" muted playsInline autoPlay />
-        {phase === "recording" && (
-          <MotionGuide phase={currentPhase} phaseProgress={phaseProgress} isRecording={true} />
-        )}
-        {phase === "intro" && cameraReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10">
-            <div className="text-center px-6">
-              <div className="text-5xl mb-3">🎥</div>
-              <p className="text-[15px] font-bold mb-1">Ready for Live Scan</p>
-              <p className="text-[12px] text-[#94a3b8] max-w-xs">
-                Follow the motion prompts as you slowly move around the product. AI extracts key frames automatically.
-              </p>
+              <div className="hidden lg:block rounded-[24px] border border-white/8 bg-white/[0.03] p-4 sm:p-5 text-[12px] text-[#afbdd2] leading-relaxed">
+                A clean coverage pass is more reliable than fast angle hops. The scan stays slow enough for the camera to lock the object, while still feeling guided.
+              </div>
+            </div>
+
+            <div className="order-1 lg:order-2 min-w-0">
+              <div className="relative overflow-hidden rounded-[28px] border border-white/8 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] min-h-[52vh] sm:min-h-[60vh] lg:min-h-[78vh]">
+                <video ref={videoRef} className="w-full h-full object-cover" muted playsInline autoPlay />
+                <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+                {phase === "recording" && (
+                  <MotionGuide phase={currentPhase} phaseProgress={phaseProgress} capturedCount={capturedCount} totalCount={SCAN_PHASES.length} isRecording={true} />
+                )}
+                {phase === "recording" && (
+                  <div className="absolute inset-x-4 bottom-4 z-10">
+                    <FingerprintHint
+                      status={fingerprintStatus}
+                      prompt={fingerprintPrompt}
+                      missingViews={fingerprintMissingViews}
+                      confidence={fingerprintConfidence}
+                    />
+                  </div>
+                )}
+                {phase === "review" && (
+                  <div className="absolute inset-x-4 bottom-4 z-10 rounded-3xl border border-white/10 bg-black/70 backdrop-blur-md p-4 shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.28em] text-[#febd69] font-bold">Identity check</p>
+                        <p className="text-[14px] font-semibold text-white">
+                          {fingerprintStatus === "matched"
+                            ? "Intended product confirmed"
+                            : fingerprintStatus === "mismatch"
+                            ? "This does not look like the intended product"
+                            : "Waiting for identity review"}
+                        </p>
+                      </div>
+                      <div className={`rounded-full px-3 py-1 text-[11px] font-bold ${fingerprintStatus === "matched" ? "bg-[#05261d] text-[#67e8a4]" : fingerprintStatus === "mismatch" ? "bg-[#3a0f16] text-[#ff9aa9]" : "bg-white/10 text-white/70"}`}>
+                        {fingerprintStatus === "matched" ? "Matched" : fingerprintStatus === "mismatch" ? "Mismatch" : "Pending"}
+                      </div>
+                    </div>
+                    {fingerprintPrompt && <p className="mt-2 text-[12px] leading-6 text-[#d5deeb]">{fingerprintPrompt}</p>}
+                    {fingerprintMissingViews.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {fingerprintMissingViews.map((view) => (
+                          <span key={view} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-white/80">
+                            {view}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {typeof fingerprintConfidence === "number" && (
+                      <p className="mt-2 text-[11px] text-white/50">Confidence {fingerprintConfidence}%</p>
+                    )}
+                    <div className="mt-3">
+                      <DebugPanel data={fingerprintDebugResponse} />
+                    </div>
+                  </div>
+                )}
+                {phase === "intro" && cameraReady && (
+                  <div className="absolute inset-0 flex items-end sm:items-center justify-center bg-black/28 z-10 p-4 sm:p-6">
+                    <div className="max-w-md w-full rounded-[28px] border border-white/10 bg-black/45 backdrop-blur-md p-5 sm:p-6 text-center shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+                      <div className="mx-auto w-16 h-16 rounded-full bg-[#febd69]/15 border border-[#febd69]/20 flex items-center justify-center text-2xl mb-3">🎥</div>
+                      <p className="text-[17px] font-semibold mb-1">Ready to begin</p>
+                      <p className="text-[12px] sm:text-[13px] text-[#b7c4d9] leading-relaxed">
+                        The scan will walk you through each side slowly so the object can be captured like a fingerprint.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 rounded-[24px] border border-white/8 bg-[#09111f] p-3 sm:p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <div className="text-[12px] text-[#9fb1cb]">
+                  {phase === "intro" ? (
+                    <span>6 passes · slower motion · full-screen capture</span>
+                  ) : (
+                    <span>Phase {currentPhaseIdx + 1}/{SCAN_PHASES.length} · {currentPhase.motion}</span>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  {onCancel && (
+                    <button onClick={onCancel} className="px-4 py-3 rounded-xl border border-white/10 text-[#c7d3e6] text-[13px] font-semibold hover:bg-white/5 transition-colors">
+                      Cancel
+                    </button>
+                  )}
+                  {phase === "intro" && (
+                    <button
+                      onClick={startRecording}
+                      disabled={!cameraReady}
+                      className="px-5 py-3 rounded-xl font-semibold text-[14px] text-[#0f1111] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
+                      Start scan
+                    </button>
+                  )}
+                  {phase === "recording" && (
+                    <div className="px-5 py-3 rounded-xl bg-[#111827] text-center text-[13px] text-white font-semibold border border-white/8 min-w-[12rem]">
+                      {currentPhase.label}
+                    </div>
+                  )}
+                  {phase === "review" && (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={fingerprintStatus !== "matched" || capturedCount < 2}
+                      className="px-5 py-3 rounded-xl font-semibold text-[14px] text-[#0f1111] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                      style={{ backgroundColor: accentColor }}
+                    >
+                      {fingerprintStatus === "pending"
+                        ? "Verifying identity…"
+                        : fingerprintStatus === "mismatch"
+                        ? "Retake required"
+                        : `Submit scan (${capturedCount} frames)`}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        )}
-      </div>
-
-      <div className="px-4 py-3 bg-[#0f172a] flex gap-3 z-20">
-        {onCancel && (
-          <button
-            onClick={onCancel}
-            className="flex-1 py-3 rounded-xl border border-[#334155] text-[#94a3b8] hover:text-white text-[13px] font-bold"
-          >
-            ← Cancel
-          </button>
-        )}
-        {phase === "intro" && (
-          <button
-            onClick={startRecording}
-            disabled={!cameraReady}
-            className="flex-[2] py-3 rounded-xl font-bold text-[14px] text-[#0f1111] disabled:opacity-50 flex items-center justify-center gap-2"
-            style={{ backgroundColor: accentColor }}
-          >
-            <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
-            Start Live Scan
-          </button>
-        )}
-        {phase === "recording" && (
-          <div className="flex-[2] py-3 rounded-xl bg-[#1e293b] text-center text-[12px] text-[#94a3b8] font-bold">
-            Phase {currentPhaseIdx + 1}/{SCAN_PHASES.length} — {currentPhase.motion}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

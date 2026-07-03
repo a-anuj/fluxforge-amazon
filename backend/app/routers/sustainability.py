@@ -13,6 +13,7 @@ import base64
 import urllib.request
 
 import boto3
+from pydantic import BaseModel
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -218,6 +219,117 @@ def _bytes_to_bedrock_format(raw: bytes, content_type: str) -> tuple[str, bytes]
     return fmt_map.get(content_type.lower(), "jpeg"), raw
 
 
+class FingerprintScanRequest(BaseModel):
+    order_id: int | None = None
+    product_name: str = ""
+    product_category: str = ""
+    frames: list[str] = []
+    scan_context: str = "packaging"
+
+
+def _normalize_fingerprint_result(result: dict, product_name: str, product_category: str) -> dict:
+    matched = bool(result.get("matched", False))
+    confidence = int(result.get("confidence", 0) or 0)
+    coverage_score = int(result.get("coverage_score", 0) or 0)
+    missing_views = result.get("missing_views", []) or []
+    if not isinstance(missing_views, list):
+        missing_views = [str(missing_views)]
+
+    next_prompt = str(result.get("recommended_next_prompt", "") or "").strip()
+    if not next_prompt:
+        next_prompt = "Move the product slowly so I can see what is still missing."
+
+    observed = str(result.get("observed_product_type", "") or product_name or product_category).strip()
+
+    return {
+        "matched": matched,
+        "confidence": max(0, min(100, confidence)),
+        "coverage_score": max(0, min(100, coverage_score)),
+        "observed_product_type": observed,
+        "missing_views": missing_views[:5],
+        "recommended_next_prompt": next_prompt,
+        "reason": str(result.get("reason", "") or "").strip(),
+    }
+
+
+def _assess_scan_fingerprint(
+    frame_urls: list[str],
+    product_name: str,
+    product_category: str,
+    scan_context: str = "packaging",
+) -> dict:
+    """
+    Ask Nova Lite to verify whether the captured frames plausibly show the intended product
+    and which coverage gaps still remain.
+    """
+    coverage_prompt = f"""You are a product fingerprint verifier for Amazon circular commerce.
+
+Context: {scan_context}
+Claimed product:
+  Product: "{product_name or 'unknown'}"
+  Category: "{product_category or 'unknown'}"
+
+You are given a small set of keyframes from a guided scan. Your job is to decide:
+1. Does the scan plausibly show the intended product?
+2. How confident are you?
+3. What coverage is still missing?
+4. What should the user capture next?
+
+Rules:
+- Be strict enough to reject obvious mismatches (selfies, random objects, unrelated products).
+- Be practical: accept unusual angles, partial occlusions, and poor lighting if the item still appears to be the claimed product.
+- Prefer a high-confidence match only when the frames together clearly describe the intended item.
+- If the item is a backpack or bag, look for straps, seams, zippers, logo/tag, opening, side profile, and back panel.
+- If the item is electronics, look for front, ports, branding, edges, labels/serials, and back panel.
+- If the item is apparel, look for front, back, tag/label, texture, seams, and size markers.
+
+Return ONLY valid JSON in this exact shape:
+{{
+    "matched": true,
+    "confidence": 0,
+    "coverage_score": 0,
+    "observed_product_type": "",
+    "missing_views": [""],
+    "recommended_next_prompt": "",
+    "reason": ""
+}}"""
+
+    content_blocks = []
+    for frame in frame_urls[:6]:
+        raw, fmt = _load_image_bytes_from_url(frame)
+        content_blocks.append({"image": {"format": fmt, "source": {"bytes": raw}}})
+
+    content_blocks.append({"text": coverage_prompt})
+
+    try:
+        client = _get_bedrock_client()
+        response = client.converse(
+            modelId=MODEL_ID,
+            messages=[{"role": "user", "content": content_blocks}],
+            inferenceConfig={"maxTokens": 500, "temperature": 0.1},
+        )
+        parsed = _parse_json_response(response)
+        return _normalize_fingerprint_result(parsed, product_name, product_category)
+    except Exception as exc:
+        logger.warning(f"Fingerprint verification — Bedrock failed, using fallback: {exc}")
+        first_frame = frame_urls[0]
+        raw, fmt = _load_image_bytes_from_url(first_frame)
+        try:
+            is_match, reason = _verify_product_match(raw, fmt, product_name, product_category)
+        except Exception:
+            is_match, reason = False, "Unable to verify product identity"
+
+        return {
+            "matched": is_match,
+            "confidence": 52 if is_match else 18,
+            "coverage_score": min(80, 30 + len(frame_urls) * 12),
+            "observed_product_type": product_name or product_category or "unknown",
+            "missing_views": ["branding/tag", "one more side profile", "close detail"],
+            "recommended_next_prompt": "Rotate the product slowly and capture the branding/tag plus one clear side profile.",
+            "reason": reason,
+        }
+
+
 # ── Product identity verification ─────────────────────────────────────────────
 
 def _verify_product_match(
@@ -355,6 +467,55 @@ async def verify_product(
 
     logger.info(f"Product verified successfully")
     return {"matched": True, "reason": reason}
+
+
+@router.post("/fingerprint")
+async def verify_fingerprint(request: FingerprintScanRequest, db: Session = Depends(get_db)):
+    """
+    Verify that captured scan frames plausibly show the intended product and
+    return an adaptive prompt describing what still needs capture.
+    """
+    if not request.frames:
+        raise HTTPException(status_code=422, detail="At least one scan frame is required.")
+
+    product_name = request.product_name.strip()
+    product_category = request.product_category.strip()
+
+    if request.order_id is not None and (not product_name or not product_category):
+        order = db.query(Order).filter(Order.id == request.order_id).first()
+        if order and order.product:
+            if not product_name:
+                product_name = order.product.name or ""
+            if not product_category:
+                product_category = order.product.category or ""
+
+    result = _assess_scan_fingerprint(
+        frame_urls=request.frames,
+        product_name=product_name,
+        product_category=product_category,
+        scan_context=request.scan_context,
+    )
+
+    result["order_id"] = request.order_id
+    result["product_name"] = product_name
+    result["product_category"] = product_category
+    result["scan_context"] = request.scan_context
+
+    if not result["matched"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "type": "scan_mismatch",
+                "message": "The captured scan does not appear to match the intended product.",
+                "reason": result.get("reason", ""),
+                "missing_views": result.get("missing_views", []),
+                "recommended_next_prompt": result.get("recommended_next_prompt", ""),
+                "confidence": result.get("confidence", 0),
+                "coverage_score": result.get("coverage_score", 0),
+            },
+        )
+
+    return JSONResponse(content=result)
 
 
 @router.post("/assess")

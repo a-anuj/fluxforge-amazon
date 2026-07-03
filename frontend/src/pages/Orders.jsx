@@ -102,6 +102,12 @@ export default function Orders() {
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const getOrderSortTime = (order) => {
+    const rawTimestamp = order?.placed_at || order?.created_at || order?.sold_at;
+    const timeValue = rawTimestamp ? new Date(rawTimestamp).getTime() : 0;
+    return Number.isNaN(timeValue) ? 0 : timeValue;
+  };
+
   useEffect(() => {
     if (!currentUser) return;
     setLoading(true);
@@ -122,10 +128,13 @@ export default function Orders() {
         }));
 
         const allData = [...standardOrders, ...commOrders];
-        // Sort numerically descending so newest orders appear first
+        // Sort by the newest timestamp first so recently placed orders appear at the top
         allData.sort((a, b) => {
-          const aNum = parseInt(a.id) || 0;
-          const bNum = parseInt(b.id) || 0;
+          const timeDiff = getOrderSortTime(b) - getOrderSortTime(a);
+          if (timeDiff !== 0) return timeDiff;
+
+          const aNum = Number.parseInt(a.id, 10) || 0;
+          const bNum = Number.parseInt(b.id, 10) || 0;
           return bNum - aNum;
         });
         setOrders(allData);
@@ -317,7 +326,7 @@ export default function Orders() {
                         {order.status === "placed" && !order.is_community && (
                           <p className="text-[11px] text-[#1a6bb5]/80 mb-1 flex items-center gap-1">
                             <span>🚚</span>
-                            Your delivery agent will verify this product with a live scan before it appears as delivered
+                            Your packaging operator will verify this product with a live scan before it appears as delivered
                           </p>
                         )}
                         <p className="text-[14px] text-amazon-link hover:text-amazon-link-hover">
@@ -378,7 +387,7 @@ export default function Orders() {
                             if (order.status === "placed") {
                               return (
                                 <span className="inline-flex items-center gap-1 text-[11px] bg-[#ebf2fb] border border-[#1a6bb5]/30 text-[#1a6bb5] px-2.5 py-1 rounded font-bold">
-                                  🔒 Return available after delivery verification
+                                  🔒 Return available after packaging verification
                                 </span>
                               );
                             }

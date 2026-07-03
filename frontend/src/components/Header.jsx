@@ -53,6 +53,12 @@ export default function Header() {
     }
   };
 
+  const handleProfileSwitch = async (userId) => {
+    await switchUser(userId);
+    navigate("/");
+    window.location.reload();
+  };
+
   const levelEmoji = currentUser ? (LEVEL_EMOJIS[currentUser.level] || "") : "";
 
   return (
@@ -60,7 +66,7 @@ export default function Header() {
       {/* Top Nav */}
       <div className="flex items-center justify-between px-4 py-2 gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center pt-1 pb-1 px-2 border border-transparent hover:border-white rounded-sm">
+        <Link to="/" className="flex items-center pt-1 pb-1 px-2 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
           <svg viewBox="0 0 90 22" className="h-6" xmlns="http://www.w3.org/2000/svg">
             <text x="0" y="15" fill="white" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15" letterSpacing="-0.03em">amazon</text>
             <text x="55" y="15" fill="#febd69" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="14">.in</text>
@@ -73,12 +79,12 @@ export default function Header() {
         {!isAdminMode && (
           <div 
             onClick={() => setShowLocModal(true)}
-            className="hidden md:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer"
+            className="group hidden md:flex flex-col px-3 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-white/5"
           >
-            <span className="text-[12px] text-[#ccc] leading-tight ml-4">
+            <span className="text-[12px] text-[#ccc] leading-tight ml-4 transition-colors group-hover:text-white/90">
               Delivering to {currentUser?.city || "Select"} {currentUser?.pincode || "Location"}
             </span>
-            <span className="text-[14px] font-bold flex items-center gap-1">
+            <span className="text-[14px] font-bold flex items-center gap-1 transition-colors">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -128,10 +134,9 @@ export default function Header() {
           </div>
 
           {/* User Switcher (Hackathon feature) */}
-          {!isAdminMode && (
-            <div className="group relative px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
-              <Link to="/profile" className="flex flex-col">
-                <span className="text-[12px] text-white hover:underline flex items-center gap-1">
+          <div className="group relative px-3 py-1.5 pb-2 rounded-md cursor-pointer transition-colors hover:bg-white/5">
+              <Link to="/profile" className="flex flex-col no-underline hover:no-underline">
+                <span className="text-[12px] text-white/95 flex items-center gap-1 transition-colors group-hover:text-white">
                   Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}
                   {currentUser?.role === "employee" && (
                     <span className="text-[9px] bg-[#c7511f] text-white px-1.5 py-0.5 rounded font-bold leading-none">STAFF</span>
@@ -140,11 +145,11 @@ export default function Header() {
                     <span className="text-[9px] bg-purple-700 text-white px-1.5 py-0.5 rounded font-bold leading-none">ADMIN</span>
                   )}
                 </span>
-                <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
+                <span className="text-[14px] font-bold flex items-center gap-1 no-underline group-hover:no-underline">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
               </Link>
               
               {/* Dropdown menu */}
-              <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-[260px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
+              <div className="hidden group-hover:block absolute right-0 top-full mt-0 w-[260px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
                 <div className="p-3 border-b border-amazon-border bg-[#f0f2f2]">
                   <p className="font-bold text-[14px]">Demo Profiles</p>
                   <p className="text-[11px] text-amazon-text-secondary">Switch user to test different roles</p>
@@ -155,7 +160,7 @@ export default function Header() {
                   {users.filter(u => u.role === "customer" || (!u.role && !u.is_admin)).map(u => (
                     <button 
                       key={u.id} 
-                      onClick={() => switchUser(u.id)}
+                      onClick={() => handleProfileSwitch(u.id)}
                       className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
                     >
                       <span>{u.name}</span>
@@ -167,7 +172,7 @@ export default function Header() {
                   {users.filter(u => u.role === "employee").map(u => (
                     <button 
                       key={u.id} 
-                      onClick={() => switchUser(u.id)}
+                      onClick={() => handleProfileSwitch(u.id)}
                       className={`w-full text-left px-4 py-2 text-[13px] hover:bg-orange-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#fff8f0] text-[#c7511f]' : ''}`}
                     >
                       <div>
@@ -184,7 +189,7 @@ export default function Header() {
                       {users.filter(u => u.is_admin || u.role === "admin").map(u => (
                         <button 
                           key={u.id} 
-                          onClick={() => switchUser(u.id)}
+                          onClick={() => handleProfileSwitch(u.id)}
                           className={`w-full text-left px-4 py-2 text-[13px] hover:bg-purple-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#faf5ff] text-[#6b21a8]' : ''}`}
                         >
                           <span>{u.name}</span>
@@ -196,18 +201,17 @@ export default function Header() {
                 </div>
               </div>
             </div>
-          )}
-
+          
           {!isAdminMode && (
             <>
-              <Link to="/orders" className="hidden lg:flex flex-col px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer">
+              <Link to="/orders" className="hidden lg:flex flex-col px-3 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-white/5 no-underline hover:no-underline">
                 <span className="text-[12px] text-white leading-tight">Returns</span>
                 <span className="text-[14px] font-bold">& Orders</span>
               </Link>
 
               {/* Green Credits Wallet Icon */}
               {currentUser && (
-                <Link to="/profile" className="flex items-center gap-2 px-2 py-1 border border-transparent hover:border-white rounded-sm transition-colors">
+                <Link to="/profile" className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
                   <div className="flex flex-col items-center">
                     <span className="text-[18px] leading-none mb-[1px]">{levelEmoji}</span>
                   </div>
@@ -218,7 +222,7 @@ export default function Header() {
                 </Link>
               )}
 
-              <Link to="/cart" className="flex items-center px-2 py-1 border border-transparent hover:border-white rounded-sm cursor-pointer relative">
+              <Link to="/cart" className="flex items-center px-3 py-1.5 rounded-md cursor-pointer relative transition-colors hover:bg-white/5 no-underline hover:no-underline">
                 <span className="text-[32px] leading-none mt-1">🛒</span>
                 <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">{currentUser ? cart.length : 0}</span>
                 <span className="hidden sm:block text-[14px] font-bold mt-3">Cart</span>
@@ -252,27 +256,27 @@ export default function Header() {
       <div className="bg-amazon-navy-light px-4 py-1.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap text-[14px]">
         {!isAdminMode ? (
           <>
-            <Link to="/" className="flex items-center gap-1 font-bold hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white">
+            <Link to="/" className="flex items-center gap-1 font-bold px-2 py-1 rounded-md text-white transition-colors hover:bg-white/5 no-underline hover:no-underline">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
               All
             </Link>
-            <Link to="/feed" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#00e5a0] font-bold flex items-center gap-1">
+            <Link to="/feed" className="px-2 py-1 rounded-md text-[#00e5a0] font-bold flex items-center gap-1 transition-colors hover:bg-white/5 no-underline hover:no-underline">
               Circular Commerce
             </Link>
-            <Link to="/neardrop" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold flex items-center gap-1">
+            <Link to="/neardrop" className="px-2 py-1 rounded-md text-white font-bold flex items-center gap-1 transition-colors hover:bg-white/5 no-underline hover:no-underline">
               <span className="text-[#00e5a0]">📍</span> NearDrop
             </Link>
           </>
         ) : (
-          <Link to="/dashboard" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-white font-bold">
+          <Link to="/dashboard" className="px-2 py-1 rounded-md text-white font-bold transition-colors hover:bg-white/5 no-underline hover:no-underline">
             KPI Dashboard
           </Link>
         )}
-        {currentUser?.role === "employee" && (
-          <Link to="/employee-scan" className="hover:outline hover:outline-1 hover:outline-white p-1 rounded-sm text-[#febd69] font-bold flex items-center gap-1">
-            <span>📦</span> Delivery Scan
+        {(currentUser?.role === "employee" || currentUser?.role === "admin") && (
+          <Link to="/employee-scan" className="px-2 py-1 rounded-md text-[#febd69] font-bold flex items-center gap-1 transition-colors hover:bg-white/5 no-underline hover:no-underline">
+            <span>📦</span> {currentUser?.role === "admin" ? "Packaging Scan" : "Delivery Scan"}
           </Link>
         )}
       </div>

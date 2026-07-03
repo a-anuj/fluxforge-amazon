@@ -486,10 +486,13 @@ export default function NewReturn() {
       <div className="fixed inset-0 z-50 bg-[#030712] flex flex-col">
         <LiveVideoScanner
           title="Return Product Scan"
-          subtitle="Follow motion guides — AI compares against delivery baseline"
+          subtitle="A slower fingerprint-style pass compared against the recorded baseline"
           accentColor="#067d62"
           onComplete={handleScanComplete}
           onCancel={() => setScanPhase("form")}
+          orderId={selectedOrder ? Number(selectedOrder) : null}
+          productName={selectedProduct?.name || ""}
+          productCategory={selectedProduct?.category || ""}
         />
       </div>
     );
