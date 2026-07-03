@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { verifyScanFingerprint } from "../api/client";
+import { verifyScanFingerprint, verifyLiveMatch } from "../api/client";
 import { captureVideoFrame } from "../utils/videoUtils";
 
 /**
@@ -294,7 +294,8 @@ export default function LiveVideoScanner({
   useEffect(() => {
     if (phase !== "recording") return;
 
-    const frames = SCAN_PHASES.map((p) => capturedFrames[p.id]).filter(Boolean);
+    const frames = [];
+    frames.push(...SCAN_PHASES.map((p) => capturedFrames[p.id]).filter(Boolean));
     if (!frames.length) return;
 
     const requestSeq = ++fingerprintRequestSeq.current;
@@ -308,6 +309,23 @@ export default function LiveVideoScanner({
       })
         .then((result) => {
           if (requestSeq !== fingerprintRequestSeq.current) return;
+          
+          if (!result.matched && result.confidence >= 50) {
+            if (recorderRef.current && recorderRef.current.state === "recording") {
+               recorderRef.current.stop();
+            }
+            if (timerRef.current) clearInterval(timerRef.current);
+            if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
+            
+            setFingerprintStatus("mismatch");
+            setFingerprintPrompt(result.recommended_next_prompt || `Wrong product: Detected ${result.observed_product_type}`);
+            setFingerprintMissingViews(Array.isArray(result.missing_views) ? result.missing_views : []);
+            setFingerprintConfidence(result.confidence);
+            setFingerprintDebugResponse(result);
+            setPhase("aborted");
+            return;
+          }
+
           setFingerprintStatus(result.matched ? "matched" : "mismatch");
           setFingerprintPrompt(result.recommended_next_prompt || "");
           setFingerprintMissingViews(Array.isArray(result.missing_views) ? result.missing_views : []);
@@ -448,6 +466,45 @@ export default function LiveVideoScanner({
 
     timerRef.current = setInterval(() => {
       setRecordingElapsed((e) => e + 0.1);
+    }, 100);
+
+    // Capture 10 fast frames to verify immediately
+    let initialFramesCount = 0;
+    const initialFrames = [];
+    const initialCaptureInterval = setInterval(() => {
+      if (videoRef.current && videoRef.current.videoWidth) {
+        const frame = captureVideoFrame(videoRef.current);
+        initialFrames.push(frame);
+      }
+      initialFramesCount++;
+
+      if (initialFramesCount >= 10) {
+        clearInterval(initialCaptureInterval);
+        if (initialFrames.length > 0) {
+          verifyLiveMatch({
+            order_id: orderId,
+            product_name: productName,
+            product_category: productCategory,
+            scan_context: "live_capture",
+            frames: initialFrames,
+          }).then((result) => {
+            if (!result.matched) {
+              if (recorderRef.current && recorderRef.current.state === "recording") {
+                recorderRef.current.stop();
+              }
+              if (timerRef.current) clearInterval(timerRef.current);
+              if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
+
+              setFingerprintStatus("mismatch");
+              setFingerprintPrompt(result.recommended_next_prompt || `Wrong product: Detected ${result.observed_product_type}`);
+              setFingerprintMissingViews(Array.isArray(result.missing_views) ? result.missing_views : []);
+              setFingerprintConfidence(result.confidence);
+              setFingerprintDebugResponse(result);
+              setPhase("aborted");
+            }
+          }).catch(console.error);
+        }
+      }
     }, 100);
 
     setTimeout(() => runPhaseTimer(), 320);
@@ -734,6 +791,38 @@ export default function LiveVideoScanner({
                     )}
                     <div className="mt-3">
                       <DebugPanel data={fingerprintDebugResponse} />
+                    </div>
+                  </div>
+                )}
+                {phase === "aborted" && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10 p-4 sm:p-6">
+                    <div className="max-w-md w-full rounded-[28px] border border-red-500/30 bg-black/60 backdrop-blur-md p-6 text-center shadow-[0_18px_60px_rgba(220,38,38,0.2)]">
+                      <div className="mx-auto w-16 h-16 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center text-3xl mb-4">🚫</div>
+                      <p className="text-[20px] font-bold text-white mb-2">Wrong Product</p>
+                      <p className="text-[14px] text-red-200 mb-6">
+                        {fingerprintPrompt || "The scanned product does not match the expected order."}
+                      </p>
+                      <div className="mt-3 text-left bg-black/40 p-4 rounded-xl mb-6 text-[12px] text-white/70 overflow-auto max-h-32">
+                         <p><strong>Expected:</strong> {productName}</p>
+                         <p className="mt-1"><strong>Detected:</strong> {fingerprintDebugResponse?.observed_product_type || "Unknown"}</p>
+                         {fingerprintDebugResponse?.reason && (
+                           <p className="mt-1 leading-relaxed"><strong>Reason:</strong> {fingerprintDebugResponse.reason}</p>
+                         )}
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={onCancel}
+                          className="flex-1 py-3 rounded-xl font-bold bg-white/10 hover:bg-white/20 text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleRetake}
+                          className="flex-1 py-3 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white transition-colors shadow-lg"
+                        >
+                          Scan Again
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

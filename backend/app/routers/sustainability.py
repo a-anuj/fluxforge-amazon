@@ -227,10 +227,29 @@ class FingerprintScanRequest(BaseModel):
     scan_context: str = "packaging"
 
 
+def _to_percent(value) -> int:
+    """
+    Coerce a model-returned score to an integer in [0, 100].
+
+    Bedrock models sometimes return confidence/coverage as a 0-1 float
+    (e.g. 0.85) instead of an integer (85). int(0.85) silently truncates
+    to 0, causing the UI to always show 0%. This helper detects the 0-1
+    range and scales it to 0-100.
+    """
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    # If the model returned a 0-1 fraction, scale up
+    if 0.0 < v <= 1.0:
+        v = v * 100
+    return max(0, min(100, int(round(v))))
+
+
 def _normalize_fingerprint_result(result: dict, product_name: str, product_category: str) -> dict:
     matched = bool(result.get("matched", False))
-    confidence = int(result.get("confidence", 0) or 0)
-    coverage_score = int(result.get("coverage_score", 0) or 0)
+    confidence    = _to_percent(result.get("confidence",    0))
+    coverage_score = _to_percent(result.get("coverage_score", 0))
     missing_views = result.get("missing_views", []) or []
     if not isinstance(missing_views, list):
         missing_views = [str(missing_views)]
@@ -243,8 +262,8 @@ def _normalize_fingerprint_result(result: dict, product_name: str, product_categ
 
     return {
         "matched": matched,
-        "confidence": max(0, min(100, confidence)),
-        "coverage_score": max(0, min(100, coverage_score)),
+        "confidence":     confidence,
+        "coverage_score": coverage_score,
         "observed_product_type": observed,
         "missing_views": missing_views[:5],
         "recommended_next_prompt": next_prompt,
@@ -277,25 +296,28 @@ You are given a small set of keyframes from a guided scan. Your job is to decide
 
 Rules:
 - Be strict enough to reject obvious mismatches (selfies, random objects, unrelated products).
+- IMPORTANT FOR FAST FAILURES: If the first 1 or 2 frames clearly show a completely different product (e.g. a phone instead of a shoe, or a person's face), return `matched=false` and set `confidence` to a HIGH value (e.g. 80-100). Do not keep confidence low just because there are few frames if the object is clearly the wrong category.
 - Be practical: accept unusual angles, partial occlusions, and poor lighting if the item still appears to be the claimed product.
 - Prefer a high-confidence match only when the frames together clearly describe the intended item.
 - If the item is a backpack or bag, look for straps, seams, zippers, logo/tag, opening, side profile, and back panel.
 - If the item is electronics, look for front, ports, branding, edges, labels/serials, and back panel.
 - If the item is apparel, look for front, back, tag/label, texture, seams, and size markers.
 
-Return ONLY valid JSON in this exact shape:
+Return ONLY valid JSON in this exact shape (no markdown fences, no extra keys):
 {{
     "matched": true,
-    "confidence": 0,
-    "coverage_score": 0,
-    "observed_product_type": "",
-    "missing_views": [""],
-    "recommended_next_prompt": "",
-    "reason": ""
-}}"""
+    "confidence": 72,
+    "coverage_score": 65,
+    "observed_product_type": "<what you see>",
+    "missing_views": ["back panel", "serial label"],
+    "recommended_next_prompt": "<one sentence instruction for the next capture>",
+    "reason": "<one sentence explanation>"
+}}
+
+IMPORTANT: "confidence" and "coverage_score" MUST be plain integers between 0 and 100 (not decimals like 0.72 — write 72, not 0.72)."""
 
     content_blocks = []
-    for frame in frame_urls[:6]:
+    for frame in frame_urls[:10]:
         raw, fmt = _load_image_bytes_from_url(frame)
         content_blocks.append({"image": {"format": fmt, "source": {"bytes": raw}}})
 
@@ -321,7 +343,7 @@ Return ONLY valid JSON in this exact shape:
 
         return {
             "matched": is_match,
-            "confidence": 52 if is_match else 18,
+            "confidence": 52 if is_match else 90,
             "coverage_score": min(80, 30 + len(frame_urls) * 12),
             "observed_product_type": product_name or product_category or "unknown",
             "missing_views": ["branding/tag", "one more side profile", "close detail"],
@@ -501,20 +523,70 @@ async def verify_fingerprint(request: FingerprintScanRequest, db: Session = Depe
     result["product_category"] = product_category
     result["scan_context"] = request.scan_context
 
-    if not result["matched"]:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "type": "scan_mismatch",
-                "message": "The captured scan does not appear to match the intended product.",
-                "reason": result.get("reason", ""),
-                "missing_views": result.get("missing_views", []),
-                "recommended_next_prompt": result.get("recommended_next_prompt", ""),
-                "confidence": result.get("confidence", 0),
-                "coverage_score": result.get("coverage_score", 0),
-            },
-        )
+    # Always return 200 — matched=false is a normal advisory state during an
+    # in-progress scan. The frontend's state machine handles it gracefully.
+    # Raising 409 caused the frontend to treat every mid-scan non-match as an
+    # error and log repeated failures.
+    return JSONResponse(content=result)
 
+def _assess_live_match(frame_urls: list[str], product_name: str, product_category: str) -> dict:
+    content_blocks = []
+    for frame in frame_urls[:10]:
+        raw, fmt = _load_image_bytes_from_url(frame)
+        content_blocks.append({"image": {"format": fmt, "source": {"bytes": raw}}})
+
+    prompt = f"""You are an immediate fail-fast product-verification assistant.
+The expected product is '{product_name}' (Category: '{product_category}').
+
+You are given several rapid frames from the very beginning of a video scan.
+Identify the primary object shown in these frames.
+
+Rules:
+- If the object is CLEARLY a completely different category (e.g., you see a mug but the expected category is a bag, or you see a phone but expected is a shoe), return "matched": false and "confidence": 90.
+- If the object is the correct category '{product_category}', or if it is too blurry or close to tell for sure, return "matched": true and "confidence": 50.
+
+Return ONLY valid JSON in this exact shape:
+{{
+    "matched": true,
+    "confidence": 50,
+    "observed_product_type": "<what you actually see>"
+}}"""
+
+    try:
+        client = _get_bedrock_client()
+        response = client.converse(
+            modelId=MODEL_ID,
+            messages=[{"role": "user", "content": [*content_blocks, {"text": prompt}]}],
+            inferenceConfig={"maxTokens": 100, "temperature": 0.1},
+        )
+        parsed = _parse_json_response(response)
+        logger.info(f"Verify Live Match Bedrock Output: {parsed}")
+        return {
+            "matched": bool(parsed.get("matched", True)),
+            "confidence": int(parsed.get("confidence", 50)),
+            "observed_product_type": str(parsed.get("observed_product_type", "unknown")),
+        }
+    except Exception as exc:
+        logger.warning(f"Live match Bedrock failed: {exc}")
+        return {"matched": True, "confidence": 0, "observed_product_type": "error"}
+
+@router.post("/verify_live_match")
+async def verify_live_match(request: FingerprintScanRequest, db: Session = Depends(get_db)):
+    if not request.frames:
+        raise HTTPException(status_code=422, detail="At least one scan frame is required.")
+
+    product_name = request.product_name.strip()
+    product_category = request.product_category.strip()
+
+    if request.order_id is not None and (not product_name or not product_category):
+        order = db.query(Order).filter(Order.id == request.order_id).first()
+        if order and order.product:
+            if not product_name:
+                product_name = order.product.name or ""
+            if not product_category:
+                product_category = order.product.category or ""
+
+    result = _assess_live_match(request.frames, product_name, product_category)
     return JSONResponse(content=result)
 
 

@@ -163,6 +163,12 @@ export const verifyScanFingerprint = (data) =>
     body: JSON.stringify(data),
   });
 
+export const verifyLiveMatch = (data) =>
+  request("/sustainability/verify_live_match", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 // Baseline Scan (Employee)
 const multipartRequest = async (path, formData) => {
   const url = `${BASE_URL}${path}`;
@@ -170,16 +176,25 @@ const multipartRequest = async (path, formData) => {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `API error: ${res.status}`);
+    const message = typeof err.detail === "string"
+      ? err.detail
+      : err?.detail?.message || err.message || `API error: ${res.status}`;
+    const error = new Error(message);
+    error.detail = err.detail;
+    error.status = res.status;
+    throw error;
   }
 
   return res.json();
 };
 
-export const submitBaselineScan = (orderId, employeeId, videoBlob) => {
+export const submitBaselineScan = (orderId, employeeId, videoBlob, snapshotBlob) => {
   const form = new FormData();
   form.append("employee_id", employeeId);
   form.append("video", videoBlob, "scan.webm");
+  if (snapshotBlob) {
+    form.append("snapshot", snapshotBlob, "snapshot.jpg");
+  }
   return multipartRequest(`/baseline/${orderId}/scan`, form);
 };
 

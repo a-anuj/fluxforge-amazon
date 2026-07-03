@@ -113,11 +113,17 @@ export default function EmployeeScan() {
       .finally(() => setLoadingOrders(false));
   }, [currentUser, canScan]);
 
-  const handleScanComplete = async ({ videoBlob }) => {
+  const handleScanComplete = async ({ videoBlob, frames }) => {
     if (!selectedOrder || !videoBlob) return;
     setSubmitting(true);
     setError(null);
     try {
+      let snapshotBlob = null;
+      if (frames && frames.length > 0) {
+        const res = await fetch(frames[0]);
+        snapshotBlob = await res.blob();
+      }
+
       let res;
       if (selectedOrder.is_return) {
         res = await submitPickupScan(selectedOrder.return_id, currentUser.id, videoBlob);
@@ -126,12 +132,16 @@ export default function EmployeeScan() {
         res.employee = currentUser.name;
         res.is_return = true;
       } else {
-        res = await submitBaselineScan(selectedOrder.order_id, currentUser.id, videoBlob);
+        res = await submitBaselineScan(selectedOrder.order_id, currentUser.id, videoBlob, snapshotBlob);
       }
       setResult(res);
       setPhase("done");
     } catch (err) {
-      setError(err.message || "Failed to submit scan. Please try again.");
+      if (err.detail && err.detail.type === "product_mismatch") {
+        setError(`Product mismatch detected: ${err.detail.detected_product}. ${err.detail.reason}`);
+      } else {
+        setError(err.message || "Failed to submit scan. Please try again.");
+      }
       setPhase("pick");
     } finally {
       setSubmitting(false);

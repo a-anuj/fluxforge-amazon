@@ -7,7 +7,9 @@ the Order and later used by the AI to compare against return photos —
 detecting damage that occurred after the product left packaging.
 
 Endpoints:
-    POST /baseline/{order_id}/scan     — operator uploads baseline scan video
+    POST /baseline/{order_id}/scan     — operator uploads baseline scan video + snapshot image.
+                                         AI verifies the snapshot matches the ordered product
+                                         before the scan is accepted.
     GET  /baseline/{order_id}          — get baseline scan info for an order
     GET  /baseline/pending/list        — list orders pending a baseline scan
 """
@@ -26,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Order, User, Product
+from app.services.product_verifier import verify_product_identity
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/baseline", tags=["baseline-scan"])
@@ -84,40 +87,93 @@ async def submit_baseline_scan(
     order_id: int,
     employee_id: int = Form(...),
     video: UploadFile = File(...),
+    snapshot: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
     """
     Operator submits a packaging baseline scan before the item is packed.
-    Accepts a video file upload for the guided live scan.
+
+    Accepts:
+        video    — full live-scan video recording (webm/mp4)
+        snapshot — a still-frame image captured from the live scan.
+                   This snapshot is passed to Bedrock vision to verify the
+                   scanned product matches the ordered product before the
+                   scan is accepted.
     """
-    # Validate order
+    # ── Validate order ─────────────────────────────────────────────────
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    # Validate employee
+    # ── Validate employee ──────────────────────────────────────────────
     employee = db.query(User).filter(User.id == employee_id).first()
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     if employee.role not in {"employee", "admin"}:
         raise HTTPException(status_code=403, detail="Only operators can submit baseline scans")
 
-    # Validate video
+    # ── Validate file types ────────────────────────────────────────────
     if not video.content_type.startswith("video/"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Video expected.")
+        raise HTTPException(status_code=400, detail="Invalid file type for 'video'. Video expected.")
+    if not snapshot.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type for 'snapshot'. Image (JPEG/PNG/WebP) expected.")
 
-    # Check if baseline already exists
+    # ── Check for duplicate scan ───────────────────────────────────────
     if order.baseline_scan_urls:
         raise HTTPException(
             status_code=409,
             detail="Baseline scan already recorded for this order. Cannot overwrite."
         )
 
-    # Read video and upload to S3 (or save locally)
+    # ── AI Product Identity Verification ──────────────────────────────
+    product = db.query(Product).filter(Product.id == order.product_id).first()
+
+    snapshot_bytes = await snapshot.read()
+    verification = {"verified": True, "ai_unavailable": True}  # default: pass if product unknown
+
+    if product:
+        verification = verify_product_identity(
+            image_bytes=snapshot_bytes,
+            image_content_type=snapshot.content_type,
+            expected_product_name=product.name,
+            expected_category=product.category or "General",
+        )
+        logger.info(
+            f"Product verification for order {order_id}: "
+            f"verified={verification['verified']}, "
+            f"detected='{verification.get('detected_product')}', "
+            f"confidence={verification.get('confidence')}"
+        )
+
+        # Block the scan when AI is confident the WRONG product is being packed
+        confident_mismatch = (
+            not verification["verified"]
+            and verification.get("confidence") in {"high", "medium"}
+            and not verification.get("ai_unavailable")
+        )
+        if confident_mismatch:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "type": "product_mismatch",
+                    "message": (
+                        f"The scanned item does not match the ordered product. "
+                        f"Expected: '{product.name}' (category: {product.category}). "
+                        f"Detected: '{verification.get('detected_product')}'. "
+                        f"Reason: {verification.get('reason')}"
+                    ),
+                    "expected_product": product.name,
+                    "expected_category": product.category,
+                    "detected_product": verification.get("detected_product"),
+                    "confidence": verification.get("confidence"),
+                    "reason": verification.get("reason"),
+                },
+            )
+
+    # ── Upload video to S3 (or local fallback) ─────────────────────────
     raw_bytes = await video.read()
     key = f"baseline-scans/order-{order_id}/video-{uuid.uuid4().hex[:8]}.webm"
-    
-    # Try S3, else fallback to something dummy since we don't have local storage mapping built in
+
     try:
         bucket = os.getenv("AWS_S3_BUCKET_NAME")
         if bucket:
@@ -136,23 +192,24 @@ async def submit_baseline_scan(
             region = os.getenv("AWS_REGION", "us-east-1")
             url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
         else:
-            url = f"/local-video/{key}" # Fallback
+            url = f"/local-video/{key}"
     except Exception as e:
         logger.warning(f"S3 upload failed: {e}")
-        url = f"/local-video/{key}" # Fallback
+        url = f"/local-video/{key}"
 
-    # Save to order
+    # ── Persist scan ───────────────────────────────────────────────────
     order.baseline_scan_urls = url
     order.baseline_scan_at = datetime.now(timezone.utc)
     order.baseline_scan_employee_id = employee_id
 
-    # Mark order as delivered (if not already)
     if order.status == "placed":
         order.status = "delivered"
 
     db.commit()
 
-    product = db.query(Product).filter(Product.id == order.product_id).first()
+    ai_note = None
+    if verification.get("ai_unavailable"):
+        ai_note = "AI product verification was unavailable; scan recorded without identity check."
 
     return {
         "success": True,
@@ -160,7 +217,11 @@ async def submit_baseline_scan(
         "baseline_scan_at": order.baseline_scan_at.isoformat(),
         "employee": employee.name,
         "product": product.name if product else f"Product #{order.product_id}",
-        "message": f"Live video baseline scan recorded successfully.",
+        "product_verified": verification.get("verified"),
+        "detected_product": verification.get("detected_product"),
+        "verification_confidence": verification.get("confidence"),
+        "message": "Live video baseline scan recorded successfully.",
+        **(  {"ai_warning": ai_note} if ai_note else {}  ),
     }
 
 
