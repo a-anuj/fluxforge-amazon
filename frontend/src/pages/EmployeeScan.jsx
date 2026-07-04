@@ -75,6 +75,12 @@ function SuccessScreen({ result, onReset, isAdmin }) {
           <div className="flex justify-between"><span className="text-[#94a3b8]">Type</span><span className="text-white font-bold">{result?.is_return ? "Return Pickup" : "Delivery Baseline"}</span></div>
           <div className="flex justify-between"><span className="text-[#94a3b8]">Operator</span><span className="text-white">{result?.employee}</span></div>
           <div className="flex justify-between"><span className="text-[#94a3b8]">Time</span><span className="text-white">{new Date(result?.baseline_scan_at).toLocaleTimeString()}</span></div>
+          {result?.frame_count > 0 && (
+            <div className="flex justify-between">
+              <span className="text-[#94a3b8]">Frames Stored</span>
+              <span className="text-[#6ee7b7] font-bold">✓ {result.frame_count} angles in S3</span>
+            </div>
+          )}
         </div>
       </div>
       <button
@@ -113,7 +119,7 @@ export default function EmployeeScan() {
       .finally(() => setLoadingOrders(false));
   }, [currentUser, canScan]);
 
-  const handleScanComplete = async ({ videoBlob, frames }) => {
+  const handleScanComplete = async ({ videoBlob, frames, phases }) => {
     if (!selectedOrder || !videoBlob) return;
     setSubmitting(true);
     setError(null);
@@ -124,6 +130,15 @@ export default function EmployeeScan() {
         snapshotBlob = await res.blob();
       }
 
+      // Build a phase-keyed map of data URLs for angle-matched S3 storage
+      // phases = [{id, label, frame}, ...] from LiveVideoScanner
+      const framesMap = {};
+      if (phases && phases.length > 0) {
+        for (const p of phases) {
+          if (p.id && p.frame) framesMap[p.id] = p.frame;
+        }
+      }
+
       let res;
       if (selectedOrder.is_return) {
         res = await submitPickupScan(selectedOrder.return_id, currentUser.id, videoBlob);
@@ -132,7 +147,7 @@ export default function EmployeeScan() {
         res.employee = currentUser.name;
         res.is_return = true;
       } else {
-        res = await submitBaselineScan(selectedOrder.order_id, currentUser.id, videoBlob, snapshotBlob);
+        res = await submitBaselineScan(selectedOrder.order_id, currentUser.id, videoBlob, snapshotBlob, framesMap);
       }
       setResult(res);
       setPhase("done");
@@ -194,7 +209,7 @@ export default function EmployeeScan() {
   }
 
   return (
-    <div className="min-h-screen bg-[#030712] flex flex-col text-white">
+    <div className="h-screen bg-[#030712] flex flex-col text-white overflow-hidden">
       <div className="bg-[#131921] border-b border-[#1e293b] px-4 py-3 flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-[#febd69] flex items-center justify-center text-xl flex-shrink-0">
           📦

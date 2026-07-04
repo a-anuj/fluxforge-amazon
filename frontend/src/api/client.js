@@ -188,13 +188,15 @@ const multipartRequest = async (path, formData) => {
   return res.json();
 };
 
-export const submitBaselineScan = (orderId, employeeId, videoBlob, snapshotBlob) => {
+export const submitBaselineScan = (orderId, employeeId, videoBlob, snapshotBlob, framesMap = {}) => {
   const form = new FormData();
   form.append("employee_id", employeeId);
   form.append("video", videoBlob, "scan.webm");
   if (snapshotBlob) {
     form.append("snapshot", snapshotBlob, "snapshot.jpg");
   }
+  // Send labeled phase frames for angle-matched baseline storage
+  form.append("frames_json", JSON.stringify(framesMap));
   return multipartRequest(`/baseline/${orderId}/scan`, form);
 };
 
