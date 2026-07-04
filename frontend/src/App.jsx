@@ -13,11 +13,13 @@ import NearDrop from "./pages/NearDrop";
 import Dashboard from "./pages/Dashboard";
 import EmployeeScan from "./pages/EmployeeScan";
 import DeliveryDashboard from "./pages/DeliveryDashboard";
+import HackathonPopup from "./components/HackathonPopup";
 
 export default function App() {
   return (
     <BrowserRouter>
       <UserProvider>
+        <HackathonPopup />
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
