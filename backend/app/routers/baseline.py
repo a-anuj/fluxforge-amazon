@@ -88,6 +88,7 @@ async def submit_baseline_scan(
     employee_id: int = Form(...),
     video: UploadFile = File(...),
     snapshot: UploadFile = File(...),
+    frames_json: str = Form("{}"),  # JSON: {"front_anchor": "data:image/...", ...}
     db: Session = Depends(get_db),
 ):
     """
@@ -197,10 +198,27 @@ async def submit_baseline_scan(
         logger.warning(f"S3 upload failed: {e}")
         url = f"/local-video/{key}"
 
+    # ── Upload labeled phase frames to S3 ─────────────────────────────
+    frame_s3_urls: dict = {}
+    try:
+        raw_frames: dict = json.loads(frames_json) if frames_json else {}
+    except (json.JSONDecodeError, TypeError):
+        raw_frames = {}
+
+    for phase_id, data_url in raw_frames.items():
+        if not data_url:
+            continue
+        frame_key = f"baseline-frames/order-{order_id}/{phase_id}.jpg"
+        stored_url = _try_upload_to_s3(data_url, frame_key)
+        frame_s3_urls[phase_id] = stored_url
+        logger.info(f"Stored baseline frame '{phase_id}' for order {order_id}: {stored_url[:80]}")
+
     # ── Persist scan ───────────────────────────────────────────────────
     order.baseline_scan_urls = url
     order.baseline_scan_at = datetime.now(timezone.utc)
     order.baseline_scan_employee_id = employee_id
+    if frame_s3_urls:
+        order.baseline_frame_urls = json.dumps(frame_s3_urls)
 
     if order.status == "placed":
         order.status = "delivered"
@@ -220,6 +238,8 @@ async def submit_baseline_scan(
         "product_verified": verification.get("verified"),
         "detected_product": verification.get("detected_product"),
         "verification_confidence": verification.get("confidence"),
+        "frames_stored": list(frame_s3_urls.keys()),
+        "frame_count": len(frame_s3_urls),
         "message": "Live video baseline scan recorded successfully.",
         **(  {"ai_warning": ai_note} if ai_note else {}  ),
     }

@@ -228,6 +228,15 @@ def seed():
             repair_cost_estimate=180, avg_lifespan_months=24,
             return_period_days=7, has_no_return_policy=False,
         ),
+        Product(
+            name="Google Pixel 6a", category="electronics", brand="Google",
+            size="One Size", price=29999,
+            description="5G Android smartphone with Google Tensor chip, 12.2MP dual camera, 6.1\" OLED display, and 5-year security updates.",
+            image_url="https://images.unsplash.com/photo-1598327105666-5b89351aff97?w=400",
+            co2_impact=70.0, ewaste_impact=1.2, water_impact=500.0,
+            repair_cost_estimate=2500, avg_lifespan_months=36,
+            return_period_days=10, has_no_return_policy=False,
+        ),
     ]
     db.add_all(products)
     db.commit()
