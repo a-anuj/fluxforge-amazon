@@ -6,6 +6,13 @@ const BASE_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD ? "/api" : `http://${window.location.hostname}:8000/api`);
 
+export const getMediaUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  const host = BASE_URL.replace(/\/api$/, "");
+  return `${host}${path}`;
+};
+
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
   const config = {
@@ -188,15 +195,13 @@ const multipartRequest = async (path, formData) => {
   return res.json();
 };
 
-export const submitBaselineScan = (orderId, employeeId, videoBlob, snapshotBlob, framesMap = {}) => {
+export const submitBaselineScan = (orderId, employeeId, videoBlob, snapshotBlob) => {
   const form = new FormData();
   form.append("employee_id", employeeId);
   form.append("video", videoBlob, "scan.webm");
   if (snapshotBlob) {
     form.append("snapshot", snapshotBlob, "snapshot.jpg");
   }
-  // Send labeled phase frames for angle-matched baseline storage
-  form.append("frames_json", JSON.stringify(framesMap));
   return multipartRequest(`/baseline/${orderId}/scan`, form);
 };
 
@@ -211,3 +216,22 @@ export const getBaselineScan = (orderId) => request(`/baseline/${orderId}`);
 
 export const getPendingBaselineOrders = (employeeId) =>
   request(`/baseline/pending/list?employee_id=${employeeId}`);
+
+// Virtual Try-On
+export const uploadBodyPhoto = (userId, file) => {
+  const form = new FormData();
+  form.append("file", file);
+  return multipartRequest(`/tryon/upload-photo?user_id=${userId}`, form);
+};
+
+export const getBodyPhotos = (userId) => request(`/tryon/photos?user_id=${userId}`);
+
+export const generateTryOn = (userId, productId, bodyPhotoId) =>
+  request("/tryon/generate", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: userId,
+      product_id: productId,
+      body_photo_id: bodyPhotoId,
+    }),
+  });

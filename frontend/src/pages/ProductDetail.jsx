@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getProduct, getAlternatives, createOrder, getProductConfidence, getProductImpact, getRefurbishedAlt, getSustainabilityAdvice, getDeliveryOptions, addToWishlist } from "../api/client";
 import { useUser } from "../context/UserContext";
+import TryOnModal from "../components/TryOnModal";
 
 // Same formula as backend credit_engine.py
 const PRODUCT_IMPACT_SCORES = {
@@ -109,6 +110,7 @@ export default function ProductDetail() {
   const [advice, setAdvice] = useState(null);
   const [deliveryOptions, setDeliveryOptions] = useState([]);
   const [selectedDelivery, setSelectedDelivery] = useState("standard");
+  const [showTryOn, setShowTryOn] = useState(false);
 
   const ratingCount = useMemo(() => Math.floor(Math.random() * 500 + 100), [id]);
   const discountPct = useMemo(() => Math.floor(Math.random() * 20 + 5), [id]);
@@ -198,9 +200,20 @@ export default function ProductDetail() {
         )}
 
         <div className="grid md:grid-cols-[400px_1fr_300px] gap-6">
-          {/* Image */}
-          <div className="border border-amazon-border rounded p-4 flex items-center justify-center bg-white self-start">
-            <img src={product.image_url || "https://via.placeholder.com/400"} alt={product.name} className="max-h-[400px] max-w-full object-contain" />
+          {/* Image + Virtual Try-On */}
+          <div className="self-start flex flex-col gap-3">
+            <div className="border border-amazon-border rounded p-4 flex items-center justify-center bg-white">
+              <img src={product.image_url || "https://via.placeholder.com/400"} alt={product.name} className="max-h-[400px] max-w-full object-contain" />
+            </div>
+            {["clothing", "fashion", "apparel", "shirts", "tops", "dresses", "running", "fitness", "sports", "shoes", "footwear"].some(c => (product.category || "").toLowerCase().includes(c)) && (
+              <button
+                onClick={() => setShowTryOn(true)}
+                className="w-full py-2.5 rounded-lg font-bold text-[13px] text-white shadow-md transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
+                style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+              >
+                ✨ Virtual Try-On
+              </button>
+            )}
           </div>
 
           {/* Product Info */}
@@ -372,6 +385,11 @@ export default function ProductDetail() {
           </div>
         )}
       </div>
+
+      {/* Virtual Try-On Modal */}
+      {showTryOn && product && (
+        <TryOnModal product={product} onClose={() => setShowTryOn(false)} />
+      )}
     </div>
   );
 }
