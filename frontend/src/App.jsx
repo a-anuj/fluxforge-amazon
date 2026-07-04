@@ -12,6 +12,7 @@ import Cart from "./pages/Cart";
 import NearDrop from "./pages/NearDrop";
 import Dashboard from "./pages/Dashboard";
 import EmployeeScan from "./pages/EmployeeScan";
+import DeliveryDashboard from "./pages/DeliveryDashboard";
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/cart" element={<Cart />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/employee-scan" element={<EmployeeScan />} />
+            <Route path="/delivery" element={<DeliveryDashboard />} />
           </Route>
         </Routes>
       </UserProvider>
