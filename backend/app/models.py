@@ -96,11 +96,9 @@ class Order(Base):
     no_return_credits_status = Column(String, default="pending")  # "pending" | "vested" | "forfeited"
 
     # ── Delivery Baseline Scan (captured by employee at delivery) ──
-    baseline_scan_urls = Column(String, nullable=True)   # video URL in S3
-    baseline_scan_at = Column(DateTime, nullable=True)   # when the baseline was recorded
+    baseline_scan_urls = Column(String, nullable=True)  # comma-separated image URLs/keys
+    baseline_scan_at = Column(DateTime, nullable=True)  # when the baseline was recorded
     baseline_scan_employee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    # 6 labeled frames stored as JSON: {"front_anchor": "https://s3.../...", "back_anchor": "...", ...}
-    baseline_frame_urls = Column(Text, nullable=True)
 
     user = relationship("User", back_populates="orders", foreign_keys="Order.user_id")
     product = relationship("Product", back_populates="orders")
@@ -325,3 +323,34 @@ class WishlistNotification(Base):
 
     user  = relationship("User")
     match = relationship("WishlistMatch")
+
+
+# ── Virtual Try-On ─────────────────────────────────────────────────────
+
+class UserBodyPhoto(Base):
+    """User-uploaded body/selfie photos for virtual try-on."""
+    __tablename__ = "user_body_photos"
+
+    id         = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    image_key  = Column(String, nullable=False)       # S3 object key
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User")
+
+
+class TryOnCache(Base):
+    """Cache of generated virtual try-on images to avoid redundant GPU calls."""
+    __tablename__ = "tryon_cache"
+
+    id               = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id          = Column(Integer, ForeignKey("users.id"), nullable=False)
+    product_id       = Column(Integer, ForeignKey("products.id"), nullable=False)
+    body_photo_key   = Column(String, nullable=False)   # input body photo S3 key
+    tryon_result_key = Column(String, nullable=False)   # output try-on image S3 key
+    created_at       = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    user    = relationship("User")
+    product = relationship("Product")
+

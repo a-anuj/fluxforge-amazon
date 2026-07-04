@@ -6,7 +6,7 @@ Calculates green credits dynamically using the formula:
 
 Also manages sustainability level progression.
 
-🔌 Core logic — no AI dependency. Ready for production.
+ Core logic — no AI dependency. Ready for production.
 """
 
 # ── Level Tiers ────────────────────────────────────────────────────────
