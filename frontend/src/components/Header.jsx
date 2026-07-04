@@ -13,7 +13,7 @@ const LEVEL_EMOJIS = {
 
 export default function Header() {
   const navigate = useNavigate();
-  const { currentUser, switchUser, updateUserProfile, cart, isAdminMode, setIsAdminMode } = useUser();
+  const { currentUser, switchUser, updateUserProfile, isAdminMode, setIsAdminMode } = useUser();
   const [users, setUsers] = useState([]);
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("q") || "");
@@ -54,10 +54,17 @@ export default function Header() {
   };
 
   const handleProfileSwitch = async (userId) => {
+    const switched = users.find((u) => u.id === userId);
     await switchUser(userId);
-    navigate("/");
+    if (switched?.role === "employee") {
+      navigate("/delivery");
+    } else {
+      navigate("/");
+    }
     window.location.reload();
   };
+
+  const isEmployee = currentUser?.role === "employee";
 
   const levelEmoji = currentUser ? (LEVEL_EMOJIS[currentUser.level] || "") : "";
 
@@ -75,7 +82,7 @@ export default function Header() {
         </Link>
 
         {/* Location (Desktop) */}
-        {!isAdminMode && (
+        {!isAdminMode && !isEmployee && (
           <div 
             onClick={() => setShowLocModal(true)}
             className="group hidden md:flex flex-col px-3 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-white/5"
@@ -94,7 +101,7 @@ export default function Header() {
         )}
 
         {/* Search */}
-        {!isAdminMode && (
+        {!isAdminMode && !isEmployee && (
           <form onSubmit={handleSearch} className="flex-1 hidden sm:flex rounded-md overflow-hidden bg-white">
             <select className="bg-[#f3f3f3] text-[#0f1111] text-[12px] px-3 border-r border-[#cdcdcd] outline-none hover:bg-[#d4d4d4] cursor-pointer">
               <option>All</option>
@@ -132,16 +139,14 @@ export default function Header() {
             </div>
           </div>
 
-          {/* User Switcher (Hackathon feature) */}
+          {/* User Switcher — always visible (employees need to switch back to customer) */}
+          {!isAdminMode && (
           <div className="group relative px-3 py-1.5 pb-2 rounded-md cursor-pointer transition-colors hover:bg-white/5">
               <Link to="/profile" className="flex flex-col no-underline hover:no-underline">
                 <span className="text-[12px] text-white/95 flex items-center gap-1 transition-colors group-hover:text-white">
                   Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}
                   {currentUser?.role === "employee" && (
                     <span className="text-[9px] bg-[#c7511f] text-white px-1.5 py-0.5 rounded font-bold leading-none">STAFF</span>
-                  )}
-                  {(currentUser?.is_admin || currentUser?.role === "admin") && (
-                    <span className="text-[9px] bg-purple-700 text-white px-1.5 py-0.5 rounded font-bold leading-none">ADMIN</span>
                   )}
                 </span>
                 <span className="text-[14px] font-bold flex items-center gap-1 no-underline group-hover:no-underline">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
@@ -162,7 +167,10 @@ export default function Header() {
                       onClick={() => handleProfileSwitch(u.id)}
                       className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
                     >
-                      <span>{u.name}</span>
+                      <div>
+                        <span>{u.name}</span>
+                        <span className="ml-2 text-[10px] bg-gray-100 text-gray-600 border border-gray-200 px-1.5 py-0.5 rounded font-bold">{u.city || 'Location'}</span>
+                      </div>
                       {currentUser?.id === u.id && <span>✓</span>}
                     </button>
                   ))}
@@ -181,27 +189,13 @@ export default function Header() {
                       {currentUser?.id === u.id && <span className="text-[#c7511f]">✓</span>}
                     </button>
                   ))}
-                  {/* Admin profiles */}
-                  {users.filter(u => u.is_admin || u.role === "admin").length > 0 && (
-                    <>
-                      <p className="px-4 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-[#6b21a8]">🔧 Admin</p>
-                      {users.filter(u => u.is_admin || u.role === "admin").map(u => (
-                        <button 
-                          key={u.id} 
-                          onClick={() => handleProfileSwitch(u.id)}
-                          className={`w-full text-left px-4 py-2 text-[13px] hover:bg-purple-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#faf5ff] text-[#6b21a8]' : ''}`}
-                        >
-                          <span>{u.name}</span>
-                          {currentUser?.id === u.id && <span className="text-[#6b21a8]">✓</span>}
-                        </button>
-                      ))}
-                    </>
-                  )}
                 </div>
               </div>
             </div>
+          )}
+
           
-          {!isAdminMode && (
+          {!isAdminMode && !isEmployee && (
             <>
               <Link to="/orders" className="hidden lg:flex flex-col px-3 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-white/5 no-underline hover:no-underline">
                 <span className="text-[12px] text-white leading-tight">Returns</span>
@@ -220,19 +214,13 @@ export default function Header() {
                   </div>
                 </Link>
               )}
-
-              <Link to="/cart" className="flex items-center px-3 py-1.5 rounded-md cursor-pointer relative transition-colors hover:bg-white/5 no-underline hover:no-underline">
-                <span className="text-[32px] leading-none mt-1">🛒</span>
-                <span className="absolute top-1 left-[22px] text-amazon-orange font-bold text-[16px]">{currentUser ? cart.length : 0}</span>
-                <span className="hidden sm:block text-[14px] font-bold mt-3">Cart</span>
-              </Link>
             </>
           )}
         </div>
       </div>
 
       {/* Mobile Search */}
-      {!isAdminMode && (
+      {!isAdminMode && !isEmployee && (
         <div className="sm:hidden px-4 pb-3">
           <form onSubmit={handleSearch} className="flex rounded-md overflow-hidden bg-white h-10">
             <input 
@@ -253,7 +241,12 @@ export default function Header() {
 
       {/* Sub Nav */}
       <div className="bg-amazon-navy-light px-4 py-1.5 flex items-center gap-4 overflow-x-auto whitespace-nowrap text-[14px]">
-        {!isAdminMode ? (
+        {isEmployee ? (
+          /* Employee-only sub-nav: just the delivery link */
+          <Link to="/delivery" className="px-2 py-1 rounded-md text-[#febd69] font-bold flex items-center gap-1 transition-colors hover:bg-white/5 no-underline hover:no-underline">
+            <span>📦</span> My Deliveries
+          </Link>
+        ) : !isAdminMode ? (
           <>
             <Link to="/" className="flex items-center gap-1 font-bold px-2 py-1 rounded-md text-white transition-colors hover:bg-white/5 no-underline hover:no-underline">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -273,9 +266,9 @@ export default function Header() {
             KPI Dashboard
           </Link>
         )}
-        {(currentUser?.role === "employee" || currentUser?.role === "admin") && (
-          <Link to="/employee-scan" className="px-2 py-1 rounded-md text-[#febd69] font-bold flex items-center gap-1 transition-colors hover:bg-white/5 no-underline hover:no-underline">
-            <span>📦</span> {currentUser?.role === "admin" ? "Packaging Scan" : "Delivery Scan"}
+        {!isAdminMode && !isEmployee && currentUser?.role === "employee" && (
+          <Link to="/delivery" className="px-2 py-1 rounded-md text-[#febd69] font-bold flex items-center gap-1 transition-colors hover:bg-white/5 no-underline hover:no-underline">
+            <span>📦</span> Delivery Scan
           </Link>
         )}
       </div>
