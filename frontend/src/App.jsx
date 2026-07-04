@@ -12,11 +12,14 @@ import Cart from "./pages/Cart";
 import NearDrop from "./pages/NearDrop";
 import Dashboard from "./pages/Dashboard";
 import EmployeeScan from "./pages/EmployeeScan";
+import DeliveryDashboard from "./pages/DeliveryDashboard";
+import HackathonPopup from "./components/HackathonPopup";
 
 export default function App() {
   return (
     <BrowserRouter>
       <UserProvider>
+        <HackathonPopup />
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
@@ -30,6 +33,7 @@ export default function App() {
             <Route path="/cart" element={<Cart />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/employee-scan" element={<EmployeeScan />} />
+            <Route path="/delivery" element={<DeliveryDashboard />} />
           </Route>
         </Routes>
       </UserProvider>

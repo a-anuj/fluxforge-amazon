@@ -336,9 +336,14 @@ def get_pending_baseline_orders(employee_id: int, db: Session = Depends(get_db))
             Order.status == "placed",
         ).order_by(Order.id.desc()).limit(20).all()
     else:
-        pending = db.query(Order).filter(
-            (Order.baseline_scan_urls.is_(None) & Order.status.in_(["placed", "delivered"])) |
-            (Order.status == "return_pending")
+        # Delivery agents see only:
+        # 1. "placed" orders with no baseline scan yet (undelivered)
+        # 2. "return_pending" orders that need pickup
+        # 3. Orders matching their assigned employee zone
+        pending = db.query(Order).join(User, Order.user_id == User.id).filter(
+            ((Order.baseline_scan_urls.is_(None) & (Order.status == "placed")) |
+            (Order.status == "return_pending")),
+            User.city == employee.employee_zone
         ).order_by(Order.id.desc()).limit(20).all()
 
     result = []

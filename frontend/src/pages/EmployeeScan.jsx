@@ -114,7 +114,20 @@ export default function EmployeeScan() {
     if (!currentUser || !canScan) return;
     setLoadingOrders(true);
     getPendingBaselineOrders(currentUser.id)
-      .then(setPendingOrders)
+      .then((orders) => {
+        setPendingOrders(orders);
+        // Auto-select an order pre-chosen from the delivery dashboard
+        const preselect = sessionStorage.getItem("preselectOrder");
+        if (preselect) {
+          try {
+            const pre = JSON.parse(preselect);
+            // Find the matching fresh order from the API response
+            const match = orders.find((o) => o.order_id === pre.order_id);
+            if (match) setSelectedOrder(match);
+          } catch { /* ignore */ }
+          sessionStorage.removeItem("preselectOrder");
+        }
+      })
       .catch(() => setPendingOrders([]))
       .finally(() => setLoadingOrders(false));
   }, [currentUser, canScan]);
