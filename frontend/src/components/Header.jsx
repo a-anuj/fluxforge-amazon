@@ -66,13 +66,12 @@ export default function Header() {
       {/* Top Nav */}
       <div className="flex items-center justify-between px-4 py-2 gap-4">
         {/* Logo */}
-        <Link to="/" className="flex items-center pt-1 pb-1 px-2 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
-          <svg viewBox="0 0 90 22" className="h-6" xmlns="http://www.w3.org/2000/svg">
-            <text x="0" y="15" fill="white" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15" letterSpacing="-0.03em">amazon</text>
-            <text x="55" y="15" fill="#febd69" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="14">.in</text>
-            <path d="M 6 17 C 14 20, 29 20, 39 17" fill="none" stroke="#febd69" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M 36 15.5 L 39.5 17 L 38 20.5" fill="none" stroke="#febd69" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <Link to="/" className="flex flex-col items-start pt-1 pb-1 px-2 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
+          <svg viewBox="0 0 90 20" className="h-5" xmlns="http://www.w3.org/2000/svg">
+            <text x="0" y="15" fill="white" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="16" letterSpacing="-0.03em">amazon</text>
+            <text x="59" y="15" fill="#febd69" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15">.in</text>
           </svg>
+          <span className="text-[9px] text-[#febd69] font-bold leading-none mt-1 ml-0.5 tracking-wide">PROTOTYPE FOR HACKON 6.0</span>
         </Link>
 
         {/* Location (Desktop) */}
