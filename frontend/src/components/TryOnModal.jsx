@@ -356,6 +356,7 @@ export default function TryOnModal({ product, onClose }) {
                     style={{
                       maxHeight: "320px", maxWidth: "100%", objectFit: "contain",
                       borderRadius: "10px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                      margin: "0 auto", display: "block",
                     }}
                   />
                 </div>
@@ -370,6 +371,7 @@ export default function TryOnModal({ product, onClose }) {
                       maxHeight: "320px", maxWidth: "100%", objectFit: "contain",
                       borderRadius: "10px", boxShadow: "0 2px 12px rgba(79,70,229,0.2)",
                       border: "2px solid #c7d2fe",
+                      margin: "0 auto", display: "block",
                     }}
                   />
                 </div>
