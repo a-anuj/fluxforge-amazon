@@ -261,6 +261,37 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
     has_scan = bool(order.baseline_scan_urls)
     scan_urls = order.baseline_scan_urls.split(",") if has_scan else []
 
+    import json
+    from urllib.parse import urlparse
+    baseline_frame_urls = {}
+    if order.baseline_frame_urls:
+        try:
+            raw_urls = json.loads(order.baseline_frame_urls)
+            s3 = boto3.client(
+                "s3",
+                region_name=os.getenv("AWS_REGION", "us-east-1"),
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            )
+            for phase_id, url in raw_urls.items():
+                parsed = urlparse(url)
+                if parsed.hostname and '.s3' in parsed.hostname:
+                    bucket = parsed.hostname.split(".")[0]
+                    key = parsed.path.lstrip("/")
+                    try:
+                        presigned = s3.generate_presigned_url(
+                            'get_object',
+                            Params={'Bucket': bucket, 'Key': key},
+                            ExpiresIn=3600
+                        )
+                        baseline_frame_urls[phase_id] = presigned
+                    except Exception as e:
+                        logger.error(f"Failed to presign URL for {phase_id}: {e}")
+                else:
+                    baseline_frame_urls[phase_id] = url
+        except Exception as e:
+            logger.error(f"Failed to parse baseline_frame_urls: {e}")
+
     employee = None
     if order.baseline_scan_employee_id:
         emp = db.query(User).filter(User.id == order.baseline_scan_employee_id).first()
@@ -272,6 +303,7 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
         "has_baseline_scan": has_scan,
         "angles_count": len(scan_urls),
         "scan_urls": scan_urls,          # actual URLs for AI comparison
+        "baseline_frame_urls": baseline_frame_urls,
         "baseline_scan_at": order.baseline_scan_at.isoformat() if order.baseline_scan_at else None,
         "employee": employee,
         "product": {

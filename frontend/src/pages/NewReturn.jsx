@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getOrders, createReturn, getProduct, getBaselineScan } from "../api/client";
+import { getOrders, createReturn, getProduct, getBaselineScan, createCommunityListing } from "../api/client";
 import { useUser } from "../context/UserContext";
 import LiveVideoScanner from "../components/LiveVideoScanner";
 import { dataUrlToBlob } from "../utils/videoUtils";
@@ -92,7 +92,7 @@ export default function NewReturn() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reason, setReason] = useState("size_mismatch");
   const [scanFrames, setScanFrames] = useState([]);
-  const [videoBlob, setVideoBlob] = useState(null);
+  const [scanPhases, setScanPhases] = useState([]);
   const [scanPreview, setScanPreview] = useState(null);
   const [scanPhase, setScanPhase] = useState("form"); // "form" | "scan"
   const [loading, setLoading] = useState(true);
@@ -106,6 +106,8 @@ export default function NewReturn() {
   const [showResults, setShowResults] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [listingCreated, setListingCreated] = useState(false);
+  const [listingCreating, setListingCreating] = useState(false);
 
   const [verifyingImage, setVerifyingImage] = useState(false);
   const [verifiedImage, setVerifiedImage] = useState(null);
@@ -145,9 +147,9 @@ export default function NewReturn() {
 
   // Image verification on the fly is removed as we assess the video natively later.
 
-  const handleScanComplete = ({ frames, videoBlob }) => {
+  const handleScanComplete = ({ frames, phases }) => {
     setScanFrames(frames);
-    setVideoBlob(videoBlob);
+    setScanPhases(phases || []);
     setScanPreview(frames[0] || null);
     setScanPhase("form");
     setMismatchError(null);
@@ -155,7 +157,7 @@ export default function NewReturn() {
 
   const clearScan = () => {
     setScanFrames([]);
-    setVideoBlob(null);
+    setScanPhases([]);
     setScanPreview(null);
     setMismatchError(null);
   };
@@ -177,7 +179,7 @@ export default function NewReturn() {
     setProgressLabel("Initializing AI scanner\u2026");
 
     const form = new FormData();
-    form.append("video", videoBlob, "return-scan.webm");
+    form.append("frames_json", JSON.stringify(scanPhases));
     form.append("order_id", selectedOrder);
     if (selectedProduct) {
       form.append("product_name", selectedProduct.name || "");
@@ -402,79 +404,264 @@ export default function NewReturn() {
                   </div>
                 )}
 
-                {s && (
-                  <div className="border border-[#d0d4d9] rounded-xl overflow-hidden">
-                    <div className="bg-[#f5f6f8] px-5 py-2.5 border-b border-[#d0d4d9]">
-                      <span className="text-[10px] font-semibold text-[#6c7480] uppercase tracking-widest">Raw Bedrock Response &middot; Debug</span>
+                {s?.frame_analyses && Object.keys(s.frame_analyses).length > 0 && (
+                  <div className="border border-[#e3e6ea] rounded-xl overflow-hidden mt-4">
+                    <div className="p-4 bg-[#fafbfc] border-b border-[#e3e6ea] flex items-center gap-2">
+                      <span className="text-[16px]">📸</span>
+                      <p className="text-[13px] font-semibold text-[#0f1923]">Frame-by-Frame Analysis</p>
                     </div>
-                    <pre className="p-5 text-[11px] text-[#2d3748] font-mono bg-[#fafbfc] overflow-x-auto whitespace-pre-wrap leading-relaxed">{JSON.stringify(s, null, 2)}</pre>
+                    <div className="divide-y divide-[#eaecef] bg-white">
+                      {Object.entries(s.frame_analyses).map(([key, analysis]) => {
+                        const baselineUrl = baselineScan?.baseline_frame_urls?.[key];
+                        const returnFrame = scanPhases.find(p => p.id === key)?.frame;
+                        
+                        return (
+                          <div key={key} className="px-4 py-4">
+                            <p className="text-[11px] text-[#1a6bb5] uppercase font-bold tracking-wider mb-3">
+                              {key.replace(/_/g, " ")}
+                            </p>
+                            
+                            <div className="grid grid-cols-2 gap-3 mb-3">
+                              <div className="flex flex-col gap-1.5">
+                                <span className="text-[10px] text-[#6c7480] font-semibold uppercase tracking-wider">Before (Delivery)</span>
+                                {baselineUrl ? (
+                                  <img src={baselineUrl} alt="Baseline" className="w-full h-32 object-cover rounded-md border border-[#e3e6ea] bg-gray-50 shadow-sm" />
+                                ) : (
+                                  <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded-md border border-[#e3e6ea] shadow-sm">
+                                    <span className="text-[11px] text-gray-400 font-medium">Not Available</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <span className="text-[10px] text-[#6c7480] font-semibold uppercase tracking-wider">After (Return)</span>
+                                {returnFrame ? (
+                                  <img src={returnFrame} alt="Return" className="w-full h-32 object-cover rounded-md border border-[#e3e6ea] bg-gray-50 shadow-sm" />
+                                ) : (
+                                  <div className="w-full h-32 flex items-center justify-center bg-gray-100 rounded-md border border-[#e3e6ea] shadow-sm">
+                                    <span className="text-[11px] text-gray-400 font-medium">Not Available</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="bg-[#f8f9fa] p-3 rounded-lg border border-[#eaecef] mt-2">
+                              <p className="text-[13px] text-[#1a1f27] leading-relaxed">
+                                {analysis}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {!mismatchError && (
-            <div className="mt-6 border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
-              {!confirmed ? (
-                <div className="bg-[#fffcf3] px-5 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#fcf8e3] flex items-center justify-center text-[#c09853] flex-shrink-0">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          {/* ── Action Footer: branches on damage_origin ───────────────────── */}
+          {!mismatchError && (() => {
+            const origin = s?.damage_origin; // "none" | "manufacturing_defect" | "user_caused"
+            const isUserCaused = origin === "user_caused";
+            const damagedAngles = s?.damaged_angles || [];
+
+            // ── USER-CAUSED: return blocked, community option offered ──────
+            if (isUserCaused && s) {
+              return (
+                <div className="mt-6 space-y-3">
+                  {/* Neutral block banner */}
+                  <div className="border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
+                    <div className="bg-[#f5f6f8] px-5 py-3 border-b border-[#e3e6ea] flex items-center gap-2">
+                      <span className="text-[18px]">🔍</span>
+                      <p className="text-[13px] font-semibold text-[#0f1923]">Return Eligibility Assessment</p>
+                    </div>
+                    <div className="p-5 space-y-3">
+                      <p className="text-[14px] text-[#1a1f27] leading-relaxed">
+                        Based on the angle-by-angle comparison with the delivery baseline, the AI has identified
+                        physical differences on <strong>{damagedAngles.length > 0 ? damagedAngles.map(a => a.replace(/_/g, " ")).join(", ") : "one or more panels"}</strong> that
+                        were not present at the time of delivery.
+                      </p>
+                      <p className="text-[13px] text-[#6c7480] leading-relaxed">
+                        As per our return policy, items with post-delivery physical changes are not eligible for a standard refund.
+                        We understand this can be frustrating, and we appreciate your understanding.
+                      </p>
+                      {damagedAngles.length > 0 && (
+                        <div className="bg-[#fafbfc] border border-[#e3e6ea] rounded-lg px-4 py-3">
+                          <p className="text-[10px] text-[#6c7480] uppercase font-semibold tracking-wider mb-2">Angles with differences detected</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {damagedAngles.map((a) => (
+                              <span key={a} className="text-[11px] font-semibold bg-[#fef3c7] text-[#92400e] border border-[#fde68a] px-2 py-0.5 rounded">
+                                {a.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Community listing CTA */}
+                  {!listingCreated ? (
+                    <div className="border border-[#1a6bb5]/30 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-[#ebf2fb] px-5 py-3 border-b border-[#1a6bb5]/20 flex items-center gap-2">
+                        <span className="text-[18px]">♻️</span>
+                        <div>
+                          <p className="text-[13px] font-semibold text-[#1a3a5c]">Give It a Second Life</p>
+                          <p className="text-[11px] text-[#1a3a5c]/70 mt-0.5">List it on the Community Marketplace — someone nearby may want it</p>
+                        </div>
+                      </div>
+                      <div className="p-5 space-y-3">
+                        <p className="text-[13px] text-[#1a1f27] leading-relaxed">
+                          Instead of it sitting unused, you can list this product on our Community Marketplace.
+                          After a quick refurbish, it could find a new owner and you'll earn <strong className="text-[#1a6bb5]">Green Credits</strong> for the circular action.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 text-[12px]">
+                          <div className="bg-[#f2fbf7] border border-[#067d62]/20 rounded-lg px-3 py-2 text-center">
+                            <p className="font-bold text-[#067d62] text-[16px]">+{s.green_credits_earned ?? 30}</p>
+                            <p className="text-[#067d62]/80">Green Credits earned</p>
+                          </div>
+                          <div className="bg-[#f0f9ff] border border-[#1a6bb5]/20 rounded-lg px-3 py-2 text-center">
+                            <p className="font-bold text-[#1a6bb5] text-[16px]">{conditionScore}%</p>
+                            <p className="text-[#1a6bb5]/80">Current condition score</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            disabled={listingCreating}
+                            onClick={async () => {
+                              if (!currentUser || !selectedProduct) return;
+                              setListingCreating(true);
+                              try {
+                                const suggestedPrice = selectedProduct.price
+                                  ? Math.round(selectedProduct.price * (conditionScore / 100) * 0.75)
+                                  : 999;
+                                await createCommunityListing({
+                                  seller_id: currentUser.id,
+                                  title: `${selectedProduct.name} — Post-Return`,
+                                  description: `${s.damage_assessment || "Pre-owned item"}. Condition: ${s.classification}.`,
+                                  category: selectedProduct.category || "electronics",
+                                  brand: selectedProduct.brand || "",
+                                  asking_price: suggestedPrice,
+                                  suggested_price: suggestedPrice,
+                                  condition: conditionScore >= 75 ? "good" : conditionScore >= 50 ? "fair" : "poor",
+                                  ai_condition_summary: s.damage_assessment || "",
+                                  city: currentUser.city || "",
+                                  pincode: currentUser.pincode || "",
+                                });
+                                setListingCreated(true);
+                                refreshUser();
+                              } catch (err) {
+                                alert(`Could not create listing: ${err.message}`);
+                              } finally {
+                                setListingCreating(false);
+                              }
+                            }}
+                            className="flex-1 bg-[#1a6bb5] hover:bg-[#155a9c] disabled:opacity-50 text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg shadow-sm transition-colors"
+                          >
+                            {listingCreating ? "Creating listing…" : "📦 List on Community Marketplace"}
+                          </button>
+                          <button
+                            onClick={() => { setShowResults(false); setSustainResult(null); clearScan(); }}
+                            className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-4 py-2.5 rounded-lg"
+                          >
+                            Not now
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border border-[#067d62]/30 rounded-xl bg-[#f2fbf7] px-5 py-5 flex flex-col items-center text-center gap-2 animate-fade-in">
+                      <div className="w-12 h-12 rounded-full bg-[#e6f4ea] flex items-center justify-center text-[#137333] mb-1">
+                        <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      </div>
+                      <p className="text-[18px] font-bold text-[#137333]">Listing Created!</p>
+                      <p className="text-[13px] text-[#137333]/90 max-w-[480px] leading-relaxed">
+                        Your product has been listed on the Community Marketplace. A buyer near you will be notified.
+                        Once sold, your <strong>Green Credits</strong> will be credited.
+                      </p>
+                      <div className="flex gap-2 mt-3">
+                        <Link to="/feed" className="bg-[#1a6bb5] hover:bg-[#155a9c] text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg shadow-sm">
+                          View in Marketplace
+                        </Link>
+                        <Link to="/orders" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
+                          Back to Orders
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // ── DEFAULT (none / manufacturing_defect): normal confirm flow ─
+            return (
+              <div className="mt-6 border border-[#d0d4d9] rounded-xl overflow-hidden shadow-sm">
+                {origin === "manufacturing_defect" && (
+                  <div className="bg-[#f0fdf4] px-5 py-3 border-b border-[#22c55e]/30 flex items-center gap-2">
+                    <span className="text-[16px]">🏭</span>
+                    <p className="text-[13px] font-semibold text-[#15803d]">
+                      Manufacturing defect confirmed — full return approved
+                    </p>
+                  </div>
+                )}
+                {!confirmed ? (
+                  <div className="bg-[#fffcf3] px-5 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#fcf8e3] flex items-center justify-center text-[#c09853] flex-shrink-0">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-[14px] font-semibold text-[#8a6d3b]">Are you sure you want to return this item?</p>
+                        <p className="text-[12px] text-[#8a6d3b]/90">Please confirm if you accept the circular intelligence disposition strategy and the credits to be rewarded.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleConfirmReturn}
+                        disabled={confirming}
+                        className="bg-[#e47911] hover:bg-[#d56e0c] disabled:opacity-50 text-white font-semibold text-[13px] px-5 py-2 rounded-lg shadow-sm"
+                      >
+                        {confirming ? "Confirming..." : "Confirm Return"}
+                      </button>
+                      <button
+                        onClick={() => { setShowResults(false); setSustainResult(null); clearScan(); }}
+                        className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2 rounded-lg"
+                      >
+                        Keep Item &amp; Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-[#f2fbf7] px-5 py-5 flex flex-col items-center text-center gap-2 animate-fade-in">
+                    <div className="w-12 h-12 rounded-full bg-[#e6f4ea] flex items-center justify-center text-[#137333] mb-1">
+                      <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                       </svg>
                     </div>
-                    <div>
-                      <p className="text-[14px] font-semibold text-[#8a6d3b]">Are you sure you want to return this item?</p>
-                      <p className="text-[12px] text-[#8a6d3b]/90">Please confirm if you accept the circular intelligence disposition strategy and the credits to be rewarded.</p>
+                    <p className="text-[18px] font-bold text-[#137333]">Return Successfully Confirmed!</p>
+                    <p className="text-[13px] text-[#137333]/90 max-w-[550px] leading-relaxed">
+                      Your return request has been submitted. The AI circularity classification has been registered, and your <b>+{greenCredits} Green Credits</b> have been added to your account balance.
+                    </p>
+                    <div className="flex gap-2 mt-4">
+                      <Link to="/orders" className="bg-[#0f1923] hover:bg-[#1a2b3c] text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg shadow-sm">
+                        Go to Your Orders
+                      </Link>
+                      <Link to="/feed" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
+                        Browse Second Life
+                      </Link>
+                      <Link to="/profile" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
+                        View Green Dashboard
+                      </Link>
                     </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={handleConfirmReturn} 
-                      disabled={confirming}
-                      className="bg-[#e47911] hover:bg-[#d56e0c] disabled:opacity-50 text-white font-semibold text-[13px] px-5 py-2 rounded-lg shadow-sm"
-                    >
-                      {confirming ? "Confirming..." : "Confirm Return"}
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setShowResults(false);
-                        setSustainResult(null);
-                        clearScan();
-                      }}
-                      className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2 rounded-lg"
-                    >
-                      Keep Item &amp; Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-[#f2fbf7] px-5 py-5 flex flex-col items-center text-center gap-2 animate-fade-in">
-                  <div className="w-12 h-12 rounded-full bg-[#e6f4ea] flex items-center justify-center text-[#137333] mb-1">
-                    <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                  </div>
-                  <p className="text-[18px] font-bold text-[#137333]">Return Successfully Confirmed!</p>
-                  <p className="text-[13px] text-[#137333]/90 max-w-[550px] leading-relaxed">
-                    Your return request has been submitted. The AI circularity classification has been registered, and your <b>+{greenCredits} Green Credits</b> have been added to your account balance.
-                  </p>
-                  <div className="flex gap-2 mt-4">
-                    <Link to="/orders" className="bg-[#0f1923] hover:bg-[#1a2b3c] text-white font-semibold text-[13px] px-5 py-2.5 rounded-lg shadow-sm">
-                      Go to Your Orders
-                    </Link>
-                    <Link to="/feed" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
-                      Browse Second Life
-                    </Link>
-                    <Link to="/profile" className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-semibold text-[13px] px-5 py-2.5 rounded-lg">
-                      View Green Dashboard
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
     );
@@ -671,12 +858,12 @@ export default function NewReturn() {
               )}
               <button
                 type="submit"
-                disabled={submitting || !selectedOrder || !videoBlob}
+                disabled={submitting || !selectedOrder || scanPhases.length === 0}
                 className="btn-amazon-primary w-full py-2.5 text-[14px] font-semibold disabled:opacity-50"
               >
                 {submitting
                   ? "Processing\u2026"
-                  : !videoBlob
+                  : scanPhases.length === 0
                   ? "Complete live scan to continue"
                   : "Submit & Get AI Assessment"}
               </button>
