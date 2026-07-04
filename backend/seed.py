@@ -20,12 +20,7 @@ from app.services.credit_engine import get_level
 
 def seed():
     # Drop & recreate all tables for a clean seed.
-    # Use raw SQL with CASCADE to handle PostgreSQL FK dependencies.
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.commit()
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()

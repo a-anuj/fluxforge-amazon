@@ -208,8 +208,7 @@ export default function ProductDetail() {
             {["clothing", "fashion", "apparel", "shirts", "tops", "dresses", "running", "fitness", "sports", "shoes", "footwear"].some(c => (product.category || "").toLowerCase().includes(c)) && (
               <button
                 onClick={() => setShowTryOn(true)}
-                className="w-full py-2.5 rounded-lg font-bold text-[13px] text-white shadow-md transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
-                style={{ background: "linear-gradient(135deg, #4f46e5, #7c3aed)" }}
+                className="btn-amazon-primary w-full py-2.5 rounded-lg font-bold text-[13px] shadow-md transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
               >
                 ✨ Virtual Try-On
               </button>

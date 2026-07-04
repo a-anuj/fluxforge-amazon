@@ -21,6 +21,9 @@ export default function TryOnModal({ product, onClose }) {
   const [resultUrl, setResultUrl] = useState(null);
   const [error, setError] = useState(null);
   const [tipIdx, setTipIdx] = useState(0);
+  const [saveForFuture, setSaveForFuture] = useState(false);
+  const [temporaryFile, setTemporaryFile] = useState(null);
+  const [temporaryPreview, setTemporaryPreview] = useState(null);
   const fileRef = useRef(null);
   const overlayRef = useRef(null);
 
@@ -61,35 +64,49 @@ export default function TryOnModal({ product, onClose }) {
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !currentUser) return;
-    setUploading(true);
-    setError(null);
-    try {
-      const res = await uploadBodyPhoto(currentUser.id, file);
-      const newPhoto = {
-        id: res.id,
-        image_key: res.image_key,
-        image_url: res.image_url,
-        is_default: res.is_default,
-      };
-      setPhotos((prev) => [newPhoto, ...prev]);
-      setSelectedPhoto(newPhoto);
-    } catch (err) {
-      setError("Upload failed: " + err.message);
+    
+    if (saveForFuture) {
+      setUploading(true);
+      setError(null);
+      try {
+        const res = await uploadBodyPhoto(currentUser.id, file);
+        const newPhoto = {
+          id: res.id,
+          image_key: res.image_key,
+          image_url: res.image_url,
+          is_default: res.is_default,
+        };
+        setPhotos((prev) => [newPhoto, ...prev]);
+        setSelectedPhoto(newPhoto);
+        setTemporaryFile(null);
+        setTemporaryPreview(null);
+      } catch (err) {
+        setError("Upload failed: " + err.message);
+      }
+      setUploading(false);
+    } else {
+      setTemporaryFile(file);
+      setTemporaryPreview(URL.createObjectURL(file));
+      setSelectedPhoto(null);
     }
-    setUploading(false);
   };
 
   const handleGenerate = async () => {
-    if (!currentUser || !selectedPhoto || !product) return;
+    if (!currentUser || product == null) return;
+    const hasImage = selectedPhoto != null || temporaryFile != null;
+    if (!hasImage) return;
+
     setGenerating(true);
     setError(null);
     setResultUrl(null);
     setTipIdx(0);
     try {
+      // Use client.js generateTryOn which will handle FormData if temporaryFile is provided
       const res = await generateTryOn(
         currentUser.id,
         product.id,
-        selectedPhoto.id
+        selectedPhoto?.id,
+        temporaryFile
       );
       setResultUrl(res.tryon_url);
     } catch (err) {
@@ -128,8 +145,8 @@ export default function TryOnModal({ product, onClose }) {
           100% { background-position: 200% 0 }
         }
         @keyframes pulseGlow {
-          0%, 100% { box-shadow: 0 0 20px rgba(99,102,241,0.3) }
-          50% { box-shadow: 0 0 40px rgba(99,102,241,0.6) }
+          0%, 100% { box-shadow: 0 0 20px rgba(249, 153, 0, 0.3) }
+          50% { box-shadow: 0 0 40px rgba(249, 153, 0, 0.6) }
         }
       `}</style>
 
@@ -144,7 +161,7 @@ export default function TryOnModal({ product, onClose }) {
         {/* Header */}
         <div
           style={{
-            background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
+            background: "linear-gradient(135deg, #232f3e, #37475a)",
             padding: "20px 24px", borderRadius: "16px 16px 0 0",
             display: "flex", alignItems: "center", justifyContent: "space-between",
           }}
@@ -180,13 +197,31 @@ export default function TryOnModal({ product, onClose }) {
             </p>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              {temporaryFile && (
+                <div
+                  style={{
+                    width: "72px", height: "72px", borderRadius: "12px",
+                    border: "3px solid #f90", overflow: "hidden", flexShrink: 0,
+                  }}
+                >
+                  <img
+                    src={temporaryPreview}
+                    alt="Temporary photo"
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+              )}
               {photos.map((p) => (
                 <div
                   key={p.id}
-                  onClick={() => setSelectedPhoto(p)}
+                  onClick={() => {
+                    setSelectedPhoto(p);
+                    setTemporaryFile(null);
+                    setTemporaryPreview(null);
+                  }}
                   style={{
                     width: "72px", height: "72px", borderRadius: "12px",
-                    border: selectedPhoto?.id === p.id ? "3px solid #4f46e5" : "2px solid #d5d9d9",
+                    border: selectedPhoto?.id === p.id ? "3px solid #f90" : "2px solid #d5d9d9",
                     overflow: "hidden", cursor: "pointer", flexShrink: 0,
                     transition: "border 0.15s, transform 0.15s",
                     transform: selectedPhoto?.id === p.id ? "scale(1.05)" : "scale(1)",
@@ -210,7 +245,7 @@ export default function TryOnModal({ product, onClose }) {
                   transition: "border 0.15s, background 0.15s", flexShrink: 0,
                   background: "#fafafa",
                 }}
-                onMouseOver={(e) => { e.currentTarget.style.borderColor = "#4f46e5"; e.currentTarget.style.background = "#f0f0ff"; }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = "#f90"; e.currentTarget.style.background = "#fffbf0"; }}
                 onMouseOut={(e) => { e.currentTarget.style.borderColor = "#a7acb2"; e.currentTarget.style.background = "#fafafa"; }}
               >
                 {uploading ? (
@@ -230,8 +265,42 @@ export default function TryOnModal({ product, onClose }) {
                 onChange={handleUpload}
               />
             </div>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "12px", fontSize: "13px", color: "#0f1111", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={saveForFuture} 
+                onChange={async (e) => {
+                  const checked = e.target.checked;
+                  setSaveForFuture(checked);
+                  
+                  // If they checked the box and we already have a temporary file, upload it now!
+                  if (checked && temporaryFile && currentUser) {
+                    setUploading(true);
+                    setError(null);
+                    try {
+                      const res = await uploadBodyPhoto(currentUser.id, temporaryFile);
+                      const newPhoto = {
+                        id: res.id,
+                        image_key: res.image_key,
+                        image_url: res.image_url,
+                        is_default: res.is_default,
+                      };
+                      setPhotos((prev) => [newPhoto, ...prev]);
+                      setSelectedPhoto(newPhoto);
+                      setTemporaryFile(null);
+                      setTemporaryPreview(null);
+                    } catch (err) {
+                      setError("Upload failed: " + err.message);
+                    }
+                    setUploading(false);
+                  }
+                }} 
+                style={{ cursor: "pointer", accentColor: "#f90" }} 
+              />
+              Save this photo for future uses
+            </label>
 
-            {photos.length === 0 && !uploading && (
+            {photos.length === 0 && !temporaryFile && !uploading && (
               <p style={{ fontSize: "12px", color: "#565959", marginTop: "8px" }}>
                 Upload a full-body or half-body photo for the best results.
               </p>
@@ -271,29 +340,29 @@ export default function TryOnModal({ product, onClose }) {
           {/* Generate Button */}
           <button
             onClick={handleGenerate}
-            disabled={!selectedPhoto || generating}
+            disabled={(!selectedPhoto && !temporaryFile) || generating}
             style={{
-              width: "100%", padding: "14px", border: "none", borderRadius: "12px",
-              background: !selectedPhoto
+              width: "100%", padding: "14px", border: "none", borderRadius: "8px",
+              background: (!selectedPhoto && !temporaryFile)
                 ? "#d5d9d9"
                 : generating
-                ? "linear-gradient(90deg, #818cf8, #6366f1, #818cf8)"
-                : "linear-gradient(135deg, #4f46e5, #7c3aed)",
+                ? "linear-gradient(90deg, #fcd200, #f90, #fcd200)"
+                : "linear-gradient(135deg, #fcd200, #f90)",
               backgroundSize: generating ? "200% 100%" : "100% 100%",
               animation: generating ? "shimmer 1.5s linear infinite" : "none",
-              color: "#fff", fontSize: "15px", fontWeight: 700,
-              cursor: !selectedPhoto || generating ? "not-allowed" : "pointer",
+              color: "#0f1111", fontSize: "15px", fontWeight: 700,
+              cursor: (!selectedPhoto && !temporaryFile) || generating ? "not-allowed" : "pointer",
               transition: "transform 0.15s, box-shadow 0.15s",
-              boxShadow: !selectedPhoto ? "none" : "0 4px 14px rgba(79,70,229,0.4)",
+              boxShadow: (!selectedPhoto && !temporaryFile) ? "none" : "0 4px 14px rgba(249, 153, 0, 0.3)",
             }}
             onMouseOver={(e) => {
-              if (selectedPhoto && !generating) e.currentTarget.style.transform = "translateY(-1px)";
+              if ((selectedPhoto || temporaryFile) && !generating) e.currentTarget.style.transform = "translateY(-1px)";
             }}
             onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; }}
           >
             {generating
               ? "⏳ Generating your look…"
-              : !selectedPhoto
+              : (!selectedPhoto && !temporaryFile)
               ? "Upload a photo first"
               : "✨ Generate Virtual Try-On"}
           </button>
@@ -303,19 +372,19 @@ export default function TryOnModal({ product, onClose }) {
             <div
               style={{
                 marginTop: "16px", textAlign: "center", padding: "20px",
-                background: "linear-gradient(135deg, #ede9fe, #e0e7ff)", borderRadius: "12px",
+                background: "linear-gradient(135deg, #fffbf0, #ffedd5)", borderRadius: "12px",
               }}
             >
               <div style={{
                 width: "48px", height: "48px", margin: "0 auto 12px",
-                border: "4px solid #c7d2fe", borderTop: "4px solid #4f46e5",
+                border: "4px solid #fed7aa", borderTop: "4px solid #f90",
                 borderRadius: "50%", animation: "spin 0.8s linear infinite",
               }} />
               <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-              <p style={{ fontSize: "14px", color: "#4338ca", fontWeight: 600, margin: 0 }}>
+              <p style={{ fontSize: "14px", color: "#c2410c", fontWeight: 600, margin: 0 }}>
                 {LOADING_TIPS[tipIdx]}
               </p>
-              <p style={{ fontSize: "11px", color: "#6366f1", marginTop: "6px" }}>
+              <p style={{ fontSize: "11px", color: "#f97316", marginTop: "6px" }}>
                 This usually takes 10–20 seconds
               </p>
             </div>
@@ -351,7 +420,7 @@ export default function TryOnModal({ product, onClose }) {
                 <div style={{ textAlign: "center" }}>
                   <p style={{ fontSize: "11px", color: "#565959", marginBottom: "8px", fontWeight: 600 }}>YOUR PHOTO</p>
                   <img
-                    src={selectedPhoto?.image_url ? getMediaUrl(selectedPhoto.image_url) : ""}
+                    src={selectedPhoto?.image_url ? getMediaUrl(selectedPhoto.image_url) : temporaryPreview}
                     alt="Your photo"
                     style={{
                       maxHeight: "320px", maxWidth: "100%", objectFit: "contain",
@@ -363,14 +432,14 @@ export default function TryOnModal({ product, onClose }) {
 
                 {/* Try-on result */}
                 <div style={{ textAlign: "center" }}>
-                  <p style={{ fontSize: "11px", color: "#4f46e5", marginBottom: "8px", fontWeight: 600 }}>✨ TRY-ON RESULT</p>
+                  <p style={{ fontSize: "11px", color: "#c2410c", marginBottom: "8px", fontWeight: 600 }}>✨ TRY-ON RESULT</p>
                   <img
-                    src={getMediaUrl(resultUrl)}
+                    src={resultUrl?.startsWith("data:") ? resultUrl : getMediaUrl(resultUrl)}
                     alt="Virtual try-on"
                     style={{
                       maxHeight: "320px", maxWidth: "100%", objectFit: "contain",
-                      borderRadius: "10px", boxShadow: "0 2px 12px rgba(79,70,229,0.2)",
-                      border: "2px solid #c7d2fe",
+                      borderRadius: "10px", boxShadow: "0 2px 12px rgba(249, 153, 0, 0.2)",
+                      border: "2px solid #fed7aa",
                       margin: "0 auto", display: "block",
                     }}
                   />
@@ -393,9 +462,9 @@ export default function TryOnModal({ product, onClose }) {
                 <button
                   onClick={() => { setResultUrl(null); setError(null); }}
                   style={{
-                    flex: 1, padding: "10px", border: "none", borderRadius: "10px",
-                    background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
-                    color: "#fff", fontSize: "13px", fontWeight: 600,
+                    flex: 1, padding: "10px", border: "1px solid #c2410c", borderRadius: "10px",
+                    background: "#fdf8ec",
+                    color: "#c2410c", fontSize: "13px", fontWeight: 600,
                     cursor: "pointer", transition: "transform 0.15s",
                   }}
                   onMouseOver={(e) => (e.currentTarget.style.transform = "translateY(-1px)")}

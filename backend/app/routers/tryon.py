@@ -13,8 +13,13 @@ import tempfile
 import urllib.request
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"))
+load_dotenv() # Fallback to cwd
+
+
 import boto3
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -39,28 +44,35 @@ def _get_gradio_client():
     return _gradio_client
 
 
-# ── Local Storage setup ───────────────────────────────────────────────────
-# We use the data/tryon folder inside the backend directory.
-BASE_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "tryon")
-PHOTOS_DIR = os.path.join(BASE_DATA_DIR, "photos")
-OUTPUTS_DIR = os.path.join(BASE_DATA_DIR, "outputs")
+# ── S3 Storage setup ───────────────────────────────────────────────────
+def _get_s3_client():
+    return boto3.client(
+        "s3",
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        region_name=os.getenv("AWS_REGION", "us-east-1"),
+    )
 
-os.makedirs(PHOTOS_DIR, exist_ok=True)
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
+def _upload_to_s3(data: bytes, key: str, content_type: str = "image/jpeg") -> str:
+    bucket = os.getenv("AWS_S3_BUCKET_NAME")
+    if not bucket:
+        raise ValueError("AWS_S3_BUCKET_NAME not set")
+    s3 = _get_s3_client()
+    s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)
+    return key
 
-def _save_local_file(directory: str, data: bytes, ext: str = "jpg") -> str:
-    """Save raw bytes to a local file, return the filename."""
-    filename = f"{uuid.uuid4()}.{ext}"
-    filepath = os.path.join(directory, filename)
-    with open(filepath, "wb") as f:
-        f.write(data)
-    return filename
-
-def _get_local_url(directory_name: str, filename: str) -> str:
-    """Return the URL to access the local file via our API."""
-    # directory_name should be "photos" or "outputs"
-    return f"/api/tryon/media/{directory_name}/{filename}"
-
+def _get_s3_presigned_url(key: str, expires_in: int = 3600) -> str:
+    bucket = os.getenv("AWS_S3_BUCKET_NAME")
+    if not bucket:
+        return ""
+    s3 = _get_s3_client()
+    try:
+        return s3.generate_presigned_url(
+            "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in
+        )
+    except Exception as e:
+        logger.error(f"Failed to generate presigned URL: {e}")
+        return ""
 
 # ── Pydantic request/response schemas ───────────────────────────────────
 class TryOnGenerateRequest(BaseModel):
@@ -98,8 +110,14 @@ async def upload_body_photo(
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
     ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
-    filename = _save_local_file(PHOTOS_DIR, raw, ext)
-    url = _get_local_url("photos", filename)
+    key = f"users/{user_id}/body-photos/{uuid.uuid4()}.{ext}"
+    try:
+        _upload_to_s3(raw, key, content_type)
+    except Exception as e:
+        logger.error(f"S3 Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload to S3. Check AWS permissions. Error: {str(e)}")
+        
+    url = _get_s3_presigned_url(key)
 
     # First photo → default
     existing_count = db.query(UserBodyPhoto).filter(UserBodyPhoto.user_id == user_id).count()
@@ -107,7 +125,7 @@ async def upload_body_photo(
 
     photo = UserBodyPhoto(
         user_id=user_id,
-        image_key=filename,
+        image_key=key,
         is_default=is_default,
     )
     db.add(photo)
@@ -116,7 +134,7 @@ async def upload_body_photo(
 
     return {
         "id": photo.id,
-        "image_key": filename,
+        "image_key": key,
         "image_url": url,
         "is_default": photo.is_default,
     }
@@ -134,58 +152,86 @@ def list_body_photos(user_id: int = Query(...), db: Session = Depends(get_db)):
     result = []
     for p in photos:
         out = BodyPhotoOut.model_validate(p)
-        out.image_url = _get_local_url("photos", p.image_key)
+        out.image_url = _get_s3_presigned_url(p.image_key)
         result.append(out)
     return result
 
 
 @router.post("/generate")
-def generate_tryon(payload: TryOnGenerateRequest, db: Session = Depends(get_db)):
+async def generate_tryon(
+    user_id: int = Form(...),
+    product_id: int = Form(...),
+    body_photo_id: Optional[int] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
     """
     Generate a virtual try-on image.
-
-    1. Looks up the user's body photo and the product garment image.
-    2. Checks the cache — returns instantly on a hit.
-    3. On cache miss, calls the Hugging Face IDM-VTON Space via Gradio,
-       uploads the result to S3, and caches it.
     """
     # ── Validate inputs ──
-    user = db.query(User).filter(User.id == payload.user_id).first()
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    body_photo = db.query(UserBodyPhoto).filter(UserBodyPhoto.id == payload.body_photo_id).first()
-    if not body_photo or body_photo.user_id != payload.user_id:
-        raise HTTPException(status_code=404, detail="Body photo not found")
-
-    product = db.query(Product).filter(Product.id == payload.product_id).first()
+    product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     if not product.image_url:
         raise HTTPException(status_code=400, detail="Product has no image to try on")
 
-    # ── Check cache ──
-    cached = (
-        db.query(TryOnCache)
-        .filter(
-            TryOnCache.user_id == payload.user_id,
-            TryOnCache.product_id == payload.product_id,
-            TryOnCache.body_photo_key == body_photo.image_key,
-        )
-        .first()
-    )
-    if cached:
-        return {
-            "tryon_url": _get_local_url("outputs", cached.tryon_result_key),
-            "cached": True,
-            "product_name": product.name,
-        }
+    if not body_photo_id and not file:
+        raise HTTPException(status_code=400, detail="Must provide either body_photo_id or a file")
 
-    # ── Call Hugging Face Space ──
-    body_local_path = os.path.join(PHOTOS_DIR, body_photo.image_key)
-    garment_url = product.image_url
-
+    temp_file = None
+    body_local_path = ""
+    is_temporary = False
+    cache_key = None
+    
     try:
+        if body_photo_id:
+            body_photo = db.query(UserBodyPhoto).filter(UserBodyPhoto.id == body_photo_id).first()
+            if not body_photo or body_photo.user_id != user_id:
+                raise HTTPException(status_code=404, detail="Body photo not found")
+            cache_key = body_photo.image_key
+            
+            # ── Check cache ──
+            cached = (
+                db.query(TryOnCache)
+                .filter(
+                    TryOnCache.user_id == user_id,
+                    TryOnCache.product_id == product_id,
+                    TryOnCache.body_photo_key == cache_key,
+                )
+                .first()
+            )
+            if cached:
+                return {
+                    "tryon_url": _get_s3_presigned_url(cached.tryon_result_key),
+                    "cached": True,
+                    "product_name": product.name,
+                }
+
+            # Download from S3 to temp file for Gradio
+            s3 = _get_s3_client()
+            bucket = os.getenv("AWS_S3_BUCKET_NAME")
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+            body_local_path = temp_file.name
+            temp_file.close()
+            s3.download_file(bucket, cache_key, body_local_path)
+            
+        else:
+            is_temporary = True
+            raw = await file.read()
+            ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
+            body_local_path = temp_file.name
+            with open(body_local_path, "wb") as f:
+                f.write(raw)
+            temp_file.close()
+
+        # ── Call Hugging Face Space ──
+        garment_url = product.image_url
+
         gradio = _get_gradio_client()
         from gradio_client import handle_file
 
@@ -241,45 +287,45 @@ def generate_tryon(payload: TryOnGenerateRequest, db: Session = Depends(get_db))
             resized_img.save(out_buffer, format="PNG")
             output_bytes = out_buffer.getvalue()
 
+        if is_temporary:
+            import base64
+            b64 = base64.b64encode(output_bytes).decode("utf-8")
+            result_url = f"data:image/png;base64,{b64}"
+            return {
+                "tryon_url": result_url,
+                "cached": False,
+                "product_name": product.name,
+            }
+
+        # ── Upload result to S3 and cache ──
+        result_key = f"tryon/outputs/{uuid.uuid4()}.png"
+        _upload_to_s3(output_bytes, result_key, "image/png")
+
+        cache_entry = TryOnCache(
+            user_id=user_id,
+            product_id=product_id,
+            body_photo_key=cache_key,
+            tryon_result_key=result_key,
+        )
+        db.add(cache_entry)
+        db.commit()
+
+        return {
+            "tryon_url": _get_s3_presigned_url(result_key),
+            "cached": False,
+            "product_name": product.name,
+        }
+
     except Exception as e:
         logger.error(f"VTON generation failed: {e}")
         raise HTTPException(
             status_code=502,
             detail=f"Virtual try-on generation failed. The Hugging Face Space may be busy or sleeping. Please try again in a moment. Error: {str(e)[:200]}",
         )
-
-    # ── Upload result locally and cache ──
-    result_filename = _save_local_file(OUTPUTS_DIR, output_bytes, "png")
-    result_url = _get_local_url("outputs", result_filename)
-
-    cache_entry = TryOnCache(
-        user_id=payload.user_id,
-        product_id=payload.product_id,
-        body_photo_key=body_photo.image_key, # we now store local filename
-        tryon_result_key=result_filename,
-    )
-    db.add(cache_entry)
-    db.commit()
-
-    return {
-        "tryon_url": result_url,
-        "cached": False,
-        "product_name": product.name,
-    }
-
-
-from fastapi.responses import FileResponse
-
-@router.get("/media/{directory}/{filename}")
-def get_tryon_media(directory: str, filename: str):
-    """Serve locally saved body photos and try-on results."""
-    if directory not in ["photos", "outputs"]:
-        raise HTTPException(status_code=400, detail="Invalid directory")
-    
-    target_dir = PHOTOS_DIR if directory == "photos" else OUTPUTS_DIR
-    filepath = os.path.join(target_dir, filename)
-    
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="File not found")
         
-    return FileResponse(filepath)
+    finally:
+        if temp_file and os.path.exists(temp_file.name):
+            try:
+                os.remove(temp_file.name)
+            except:
+                pass
