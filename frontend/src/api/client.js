@@ -226,12 +226,12 @@ export const uploadBodyPhoto = (userId, file) => {
 
 export const getBodyPhotos = (userId) => request(`/tryon/photos?user_id=${userId}`);
 
-export const generateTryOn = (userId, productId, bodyPhotoId) =>
-  request("/tryon/generate", {
-    method: "POST",
-    body: JSON.stringify({
-      user_id: userId,
-      product_id: productId,
-      body_photo_id: bodyPhotoId,
-    }),
-  });
+export const generateTryOn = (userId, productId, bodyPhotoId, temporaryFile = null) => {
+  const form = new FormData();
+  form.append("user_id", userId);
+  form.append("product_id", productId);
+  if (bodyPhotoId) form.append("body_photo_id", bodyPhotoId);
+  if (temporaryFile) form.append("file", temporaryFile);
+  
+  return multipartRequest("/tryon/generate", form);
+};
