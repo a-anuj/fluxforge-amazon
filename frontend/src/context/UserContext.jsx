@@ -44,6 +44,8 @@ export function UserProvider({ children }) {
   const switchUser = async (userId) => {
     const user = await getUser(userId);
     setCurrentUser(user);
+    localStorage.setItem("amazon_current_user_id", String(user.id));
+    setIsAdminMode(user.role === "admin");
   };
 
   const refreshUser = async () => {

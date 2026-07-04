@@ -849,9 +849,18 @@ export default function LiveVideoScanner({
                     <div className="max-w-md w-full rounded-[28px] border border-white/10 bg-black/45 backdrop-blur-md p-5 sm:p-6 text-center shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
                       <div className="mx-auto w-16 h-16 rounded-full bg-[#febd69]/15 border border-[#febd69]/20 flex items-center justify-center text-2xl mb-3">🎥</div>
                       <p className="text-[17px] font-semibold mb-1">Ready to begin</p>
-                      <p className="text-[12px] sm:text-[13px] text-[#b7c4d9] leading-relaxed">
+                      <p className="text-[12px] sm:text-[13px] text-[#b7c4d9] leading-relaxed mb-6">
                         The scan will walk you through each side slowly so the object can be captured like a fingerprint.
                       </p>
+                      <button
+                        onClick={startRecording}
+                        disabled={!cameraReady}
+                        className="w-full px-5 py-3.5 rounded-xl font-semibold text-[15px] text-[#0f1111] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                        style={{ backgroundColor: accentColor }}
+                      >
+                        <span className="w-3 h-3 rounded-full bg-red-600 inline-block animate-pulse" />
+                        Start scan
+                      </button>
                     </div>
                   </div>
                 )}
@@ -869,17 +878,6 @@ export default function LiveVideoScanner({
                   {onCancel && (
                     <button onClick={onCancel} className="px-4 py-3 rounded-xl border border-white/10 text-[#c7d3e6] text-[13px] font-semibold hover:bg-white/5 transition-colors">
                       Cancel
-                    </button>
-                  )}
-                  {phase === "intro" && (
-                    <button
-                      onClick={startRecording}
-                      disabled={!cameraReady}
-                      className="px-5 py-3 rounded-xl font-semibold text-[14px] text-[#0f1111] disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                      style={{ backgroundColor: accentColor }}
-                    >
-                      <span className="w-3 h-3 rounded-full bg-red-600 inline-block" />
-                      Start scan
                     </button>
                   )}
                   {phase === "recording" && (

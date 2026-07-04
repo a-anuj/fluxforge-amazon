@@ -130,13 +130,65 @@ Return ONLY valid JSON with no markdown fences or extra text:
   "confidence": 0
 }"""
 
+ANGLE_MATCHED_COMPARISON_PROMPT = """You are an AI Reverse Logistics Inspector for Amazon Returns.
+
+You are given PAIRS of product images — one BASELINE image and one RETURN image — for the SAME angle of the product.
+Each pair is labeled (e.g. "Front Anchor", "Back Panel", "Detail Mark").
+
+Your task:
+- For each labeled angle pair, compare the return image against the baseline.
+- Identify whether any NEW damage, scratches, dents, cracks, or modifications appeared AFTER delivery.
+- Determine whether any damage visible at return was ALREADY present at delivery (manufacturing defect).
+
+Damage Origin Rules:
+- If the SAME damage appears in BOTH baseline AND return for an angle → 'manufacturing_defect'
+- If damage appears in the RETURN but NOT in the baseline for that angle → 'user_caused'
+- If there is no significant damage in either → 'none'
+
+Classification Rules:
+RESALE: Minimal or no new damage.
+REFURBISH: Moderate new damage — user-caused but repairable.
+RECYCLE: Heavy damage, still has recoverable materials.
+DISPOSE: Unsafe, contaminated, or unrecoverable.
+
+Return ONLY valid JSON with no markdown fences or extra text:
+{
+  "product_type": "",
+  "condition_score": 0,
+  "damage_assessment": "",
+  "packaging_condition": "",
+  "estimated_recovery_value": "",
+  "sustainability_reasoning": "",
+  "baseline_comparison": "",
+  "new_damage_detected": false,
+  "damage_origin": "none | manufacturing_defect | user_caused",
+  "damaged_angles": ["list of phase ids where new damage was found, e.g. back_anchor"],
+  "frame_analyses": {
+    "front_anchor": "Brief 1-2 sentence comparison of the front anchor before and after delivery.",
+    "right_sweep": "...",
+    "back_anchor": "...",
+    "left_sweep": "...",
+    "top_detail": "...",
+    "detail_mark": "..."
+  },
+  "classification": "RESALE | REFURBISH | RECYCLE | DISPOSE",
+  "confidence": 0
+}"""
+
 
 def _get_bedrock_client():
+    from botocore.config import Config
+    # Increase the read timeout because video + multiple images takes >60s for Nova Lite
+    retry_config = Config(
+        read_timeout=300,
+        retries={"max_attempts": 3, "mode": "standard"},
+    )
     return boto3.client(
         "bedrock-runtime",
         region_name=os.getenv("AWS_REGION", "us-east-1"),
         aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        config=retry_config,
     )
 
 def _upload_to_s3(file_bytes: bytes, filename: str, content_type: str) -> str:
@@ -182,9 +234,16 @@ def _parse_json_response(response: dict) -> dict:
 
 def _load_image_bytes_from_url(url: str) -> tuple[bytes, str]:
     """
-    Load image bytes from a data URL or HTTP(S) URL.
+    Load image bytes from a data URL, an S3 HTTPS URL, or any public HTTP(S) URL.
     Returns (raw_bytes, format_string for Bedrock).
+
+    S3 URLs are fetched via boto3.get_object (authenticated) so that private
+    objects work without needing public-read ACLs. Supports all S3 URL formats:
+      - https://{bucket}.s3.amazonaws.com/{key}
+      - https://{bucket}.s3.{region}.amazonaws.com/{key}
     """
+    from urllib.parse import urlparse
+
     if url.startswith("data:"):
         if "," not in url:
             raise ValueError("Invalid data URL")
@@ -199,6 +258,30 @@ def _load_image_bytes_from_url(url: str) -> tuple[bytes, str]:
             fmt = "gif"
         return raw, fmt
 
+    # Detect S3 URLs via hostname parsing (handles all regional variants)
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if hostname.endswith(".amazonaws.com") and ".s3" in hostname:
+        # Hostname is always: {bucket}.s3[.{region}].amazonaws.com
+        bucket = hostname.split(".")[0]
+        key = parsed.path.lstrip("/")
+        logger.info(f"Loading S3 object via boto3: bucket={bucket}, key={key[:80]}")
+        s3_client = boto3.client(
+            "s3",
+            region_name=os.getenv("AWS_REGION", "us-east-1"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        )
+        obj = s3_client.get_object(Bucket=bucket, Key=key)
+        raw = obj["Body"].read()
+        fmt = "jpeg"
+        if key.lower().endswith(".png"):
+            fmt = "png"
+        elif key.lower().endswith(".webp"):
+            fmt = "webp"
+        return raw, fmt
+
+    # Fallback: plain public HTTP(S) URL
     with urllib.request.urlopen(url, timeout=10) as resp:
         raw = resp.read()
     fmt = "jpeg"
@@ -592,14 +675,14 @@ async def verify_live_match(request: FingerprintScanRequest, db: Session = Depen
 
 @router.post("/assess")
 async def assess_return(
-    video: UploadFile = File(...),
+    frames_json: str = Form(...),
     order_id: int = Form(...),
     product_name: str = Form(""),
     product_category: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """
-    Accept return product images (from live video scan) and return AI sustainability assessment.
+    Accept return product images (from live video scan frames) and return AI sustainability assessment.
     - Runs quality guardrail checks before Bedrock.
     - Verifies product identity.
     - Compares against delivery baseline scan when available.
@@ -607,7 +690,7 @@ async def assess_return(
     """
     from app.services.media_validator import validate_image as quality_check
 
-    logger.info(f"=== /assess — order_id={order_id}, product_name='{product_name}', file='{image.filename}' ===")
+    logger.info(f"=== /assess — order_id={order_id}, product_name='{product_name}' ===")
 
     # ── Validate order is eligible for return assessment ─────────────────────
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -634,68 +717,124 @@ async def assess_return(
     if not product_category.strip() and product:
         product_category = product.category or ""
 
-    content_type = (video.content_type or "").lower()
-    if not content_type.startswith("video/"):
-        logger.warning(f"Rejected — unsupported MIME type: {content_type}")
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unsupported video type '{content_type}'. Use WEBM or MP4.",
-        )
+    import base64
+    return_frames_map = {}
+    try:
+        frames_list = json.loads(frames_json)
+        for f in frames_list:
+            b64_str = f.get("frame", "")
+            if "," in b64_str:
+                b64_str = b64_str.split(",")[1]
+            if b64_str:
+                b_raw = base64.b64decode(b64_str)
+                return_frames_map[f["id"]] = b_raw
+    except Exception as e:
+        logger.error(f"Failed to parse return frames: {e}")
+        raise HTTPException(status_code=422, detail="Invalid return frames data")
+        
+    logger.info(f"Return frames ready for AI assessment ({len(return_frames_map)} frames)")
 
-    raw_video = await video.read()
-    logger.info(f"Video received — size: {len(raw_video)} bytes, content_type: {content_type}")
+    # ── Step 2: Load baseline for comparison (prefer labeled frames, fall back to video URL) ─────
+    # --- Labeled angle frames (new): a JSON dict of {phase_id: url} ---
+    baseline_frame_map: dict[str, tuple[bytes, str]] = {}   # {phase_id: (raw_bytes, fmt)}
+    baseline_images: list[tuple[bytes, str]] = []            # legacy fallback list
 
-    if len(raw_video) > 20 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Video exceeds the 20 MB size limit.")
-    if not raw_video:
-        raise HTTPException(status_code=422, detail="Uploaded file is empty.")
+    has_labeled_frames = bool(order.baseline_frame_urls)
+    if has_labeled_frames:
+        try:
+            frame_url_map: dict = json.loads(order.baseline_frame_urls)
+            for phase_id, url in frame_url_map.items():
+                try:
+                    b_raw, b_fmt = _load_image_bytes_from_url(url)
+                    baseline_frame_map[phase_id] = (b_raw, b_fmt)
+                    baseline_images.append((b_raw, b_fmt))  # also populate legacy list
+                except Exception as exc:
+                    logger.warning(f"Could not load baseline frame '{phase_id}': {exc}")
+        except (json.JSONDecodeError, TypeError) as exc:
+            logger.warning(f"Could not parse baseline_frame_urls JSON: {exc}")
+            has_labeled_frames = False
 
-    video_format = "webm" if "webm" in content_type else "mp4"
-
-    # Upload video to S3
-    s3_key = _upload_to_s3(raw_video, video.filename or "scan.webm", content_type)
-    logger.info(f"Video securely stored in S3 at: {s3_key}")
-
-    # No pre-flight image validation for video right now; passing directly to AI
-
-    # ── Step 2: Load baseline images for comparison ───────────────────────────
-    baseline_images: list[tuple[bytes, str]] = []
-    has_baseline = bool(order.baseline_scan_urls)
-    if has_baseline:
-        baseline_urls = [u.strip() for u in order.baseline_scan_urls.split(",") if u.strip()]
-        for url in baseline_urls[:4]:  # limit to 4 baseline frames for token budget
+    # Legacy fallback: try baseline_scan_urls (video URL stored as plain string)
+    if not has_labeled_frames and order.baseline_scan_urls:
+        for url in order.baseline_scan_urls.split(",")[:4]:
+            url = url.strip()
+            if not url:
+                continue
             try:
                 b_raw, b_fmt = _load_image_bytes_from_url(url)
                 baseline_images.append((b_raw, b_fmt))
             except Exception as exc:
-                logger.warning(f"Could not load baseline image {url[:60]}...: {exc}")
+                logger.warning(f"Could not load baseline image {url[:60]}: {exc}")
 
-    # ── Step 3: Run full sustainability assessment ────────────────────────────
-    logger.info(f"Step 2: Running assessment — baseline frames: {len(baseline_images)}")
+    # ── Step 3: Build AI prompt ───────────────────────────────────────────────
+    logger.info(f"Step 2: Running assessment — labeled baseline phases: {list(baseline_frame_map.keys())}, legacy frames: {len(baseline_images)}")
+
+    # Phase label map for human-readable labels in the prompt
+    PHASE_LABELS = {
+        "front_anchor": "Front Anchor (center/front)",
+        "right_sweep":  "Right Sweep (right side)",
+        "back_anchor":  "Back Panel (rear)",
+        "left_sweep":   "Left Sweep (left side)",
+        "top_detail":   "Top / Ports",
+        "detail_mark":  "Detail / Branding / Serial",
+    }
 
     content_blocks = []
 
-    if baseline_images:
+    if has_labeled_frames and baseline_frame_map:
+        # Angle-matched comparison: send pairs labeled by phase
+        content_blocks.append({"text": "ANGLE-MATCHED BASELINE vs RETURN COMPARISON:"})
+        content_blocks.append({"text": "The following images are paired by angle. For each pair, the BASELINE was captured at packaging/delivery and the RETURN was captured at pickup."})
+        
+        for phase_id, b_raw in return_frames_map.items():
+            label = PHASE_LABELS.get(phase_id, phase_id.replace("_", " ").title())
+            content_blocks.append({"text": f"\n--- {label} ---"})
+            
+            # Baseline image
+            if phase_id in baseline_frame_map:
+                b_base_raw, b_base_fmt = baseline_frame_map[phase_id]
+                content_blocks.append({"text": "BASELINE (Condition at Delivery):"})
+                content_blocks.append({"image": {"format": b_base_fmt, "source": {"bytes": b_base_raw}}})
+            else:
+                content_blocks.append({"text": "BASELINE: [Not provided]"})
+                
+            # Return image
+            content_blocks.append({"text": "RETURN (Condition at Pickup):"})
+            content_blocks.append({"image": {"format": "jpeg", "source": {"bytes": b_raw}}})
+
+        content_blocks.append({
+            "text": (
+                "Compare the RETURN frame against each corresponding BASELINE frame. "
+                "For each angle where damage appears in return but NOT in baseline, record the phase id in 'damaged_angles'. "
+                "Set damage_origin to 'user_caused' if any new post-delivery damage is found, "
+                "'manufacturing_defect' if damage was already visible in the baseline, or 'none' if no significant damage. "
+                "Return ONLY valid JSON."
+            )
+        })
+        system_prompt = ANGLE_MATCHED_COMPARISON_PROMPT
+    elif baseline_images:
+        # Legacy: unstructured baseline images
         content_blocks.append({"text": "BASELINE DELIVERY IMAGES (captured at delivery by agent):"})
         for b_raw, b_fmt in baseline_images:
             content_blocks.append({"image": {"format": b_fmt, "source": {"bytes": b_raw}}})
-
-    content_blocks.append({"text": "RETURN VIDEO (captured by customer during return):"})
-    content_blocks.append({"video": {"format": video_format, "source": {"bytes": raw_video}}})
-
-    if baseline_images:
+        content_blocks.append({"text": "RETURN IMAGES (captured by customer during return):"})
+        for b_raw in return_frames_map.values():
+            content_blocks.append({"image": {"format": "jpeg", "source": {"bytes": b_raw}}})
         content_blocks.append({
             "text": (
-                "Compare the RETURN video against the BASELINE delivery images. "
+                "Compare the RETURN images against the BASELINE delivery images. "
                 "Detect any NEW damage or wear that occurred after delivery. "
                 "Return the JSON assessment as described in your instructions. Return ONLY valid JSON."
             )
         })
         system_prompt = BASELINE_COMPARISON_PROMPT
     else:
+        content_blocks.append({"text": "RETURN IMAGES (captured by customer during return):"})
+        for b_raw in return_frames_map.values():
+            content_blocks.append({"image": {"format": "jpeg", "source": {"bytes": b_raw}}})
         content_blocks.append({
             "text": (
-                "Analyze this product image and return the JSON assessment "
+                "Analyze these product images and return the JSON assessment "
                 "as described in your instructions. Return ONLY valid JSON."
             )
         })
@@ -728,9 +867,16 @@ async def assess_return(
 
     # Normalise classification to uppercase for consistent badge rendering
     result["classification"] = str(result.get("classification", "")).upper()
-    result["has_baseline_comparison"] = len(baseline_images) > 0
-    result["baseline_frames_used"] = len(baseline_images)
-    result["return_frames_used"] = 1 # One video
+    result["has_baseline_comparison"] = bool(baseline_images)
+    result["has_angle_matched_comparison"] = has_labeled_frames and bool(baseline_frame_map)
+    result["baseline_frames_used"] = len(baseline_frame_map) if baseline_frame_map else len(baseline_images)
+    result["return_frames_used"] = len(return_frames_map)
+    # Ensure damage_origin is always present
+    damage_origin = result.get("damage_origin", "none")
+    if damage_origin not in {"none", "manufacturing_defect", "user_caused"}:
+        damage_origin = "none"
+    result["damage_origin"] = damage_origin
+    result["damaged_angles"] = result.get("damaged_angles") or []
 
     # Calculate circularity/sustainability metadata preview
     category = product.category.lower() if product and product.category else product_category.lower()

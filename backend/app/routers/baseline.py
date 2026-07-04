@@ -88,6 +88,7 @@ async def submit_baseline_scan(
     employee_id: int = Form(...),
     video: UploadFile = File(...),
     snapshot: UploadFile = File(...),
+    frames_json: str = Form("{}"),  # JSON: {"front_anchor": "data:image/...", ...}
     db: Session = Depends(get_db),
 ):
     """
@@ -197,10 +198,27 @@ async def submit_baseline_scan(
         logger.warning(f"S3 upload failed: {e}")
         url = f"/local-video/{key}"
 
+    # ── Upload labeled phase frames to S3 ─────────────────────────────
+    frame_s3_urls: dict = {}
+    try:
+        raw_frames: dict = json.loads(frames_json) if frames_json else {}
+    except (json.JSONDecodeError, TypeError):
+        raw_frames = {}
+
+    for phase_id, data_url in raw_frames.items():
+        if not data_url:
+            continue
+        frame_key = f"baseline-frames/order-{order_id}/{phase_id}.jpg"
+        stored_url = _try_upload_to_s3(data_url, frame_key)
+        frame_s3_urls[phase_id] = stored_url
+        logger.info(f"Stored baseline frame '{phase_id}' for order {order_id}: {stored_url[:80]}")
+
     # ── Persist scan ───────────────────────────────────────────────────
     order.baseline_scan_urls = url
     order.baseline_scan_at = datetime.now(timezone.utc)
     order.baseline_scan_employee_id = employee_id
+    if frame_s3_urls:
+        order.baseline_frame_urls = json.dumps(frame_s3_urls)
 
     if order.status == "placed":
         order.status = "delivered"
@@ -220,6 +238,8 @@ async def submit_baseline_scan(
         "product_verified": verification.get("verified"),
         "detected_product": verification.get("detected_product"),
         "verification_confidence": verification.get("confidence"),
+        "frames_stored": list(frame_s3_urls.keys()),
+        "frame_count": len(frame_s3_urls),
         "message": "Live video baseline scan recorded successfully.",
         **(  {"ai_warning": ai_note} if ai_note else {}  ),
     }
@@ -241,6 +261,37 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
     has_scan = bool(order.baseline_scan_urls)
     scan_urls = order.baseline_scan_urls.split(",") if has_scan else []
 
+    import json
+    from urllib.parse import urlparse
+    baseline_frame_urls = {}
+    if order.baseline_frame_urls:
+        try:
+            raw_urls = json.loads(order.baseline_frame_urls)
+            s3 = boto3.client(
+                "s3",
+                region_name=os.getenv("AWS_REGION", "us-east-1"),
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+            )
+            for phase_id, url in raw_urls.items():
+                parsed = urlparse(url)
+                if parsed.hostname and '.s3' in parsed.hostname:
+                    bucket = parsed.hostname.split(".")[0]
+                    key = parsed.path.lstrip("/")
+                    try:
+                        presigned = s3.generate_presigned_url(
+                            'get_object',
+                            Params={'Bucket': bucket, 'Key': key},
+                            ExpiresIn=3600
+                        )
+                        baseline_frame_urls[phase_id] = presigned
+                    except Exception as e:
+                        logger.error(f"Failed to presign URL for {phase_id}: {e}")
+                else:
+                    baseline_frame_urls[phase_id] = url
+        except Exception as e:
+            logger.error(f"Failed to parse baseline_frame_urls: {e}")
+
     employee = None
     if order.baseline_scan_employee_id:
         emp = db.query(User).filter(User.id == order.baseline_scan_employee_id).first()
@@ -252,6 +303,7 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
         "has_baseline_scan": has_scan,
         "angles_count": len(scan_urls),
         "scan_urls": scan_urls,          # actual URLs for AI comparison
+        "baseline_frame_urls": baseline_frame_urls,
         "baseline_scan_at": order.baseline_scan_at.isoformat() if order.baseline_scan_at else None,
         "employee": employee,
         "product": {
