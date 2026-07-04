@@ -15,8 +15,6 @@ load_dotenv()
 
 from app.database import engine, SessionLocal, Base
 from app.models import User, Product, Order, Return, Listing, GreenCreditTx, GreenChallenge, Redemption, Wishlist
-from app.services.ai_assessment import assess_condition
-from app.services.matching import find_best_match
 from app.services.credit_engine import get_level
 
 
