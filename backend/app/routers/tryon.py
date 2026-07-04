@@ -228,6 +228,19 @@ def generate_tryon(payload: TryOnGenerateRequest, db: Session = Depends(get_db))
         else:
             raise ValueError(f"Unexpected VTON output format: {output_path}")
 
+        # Resize output image to match original body photo
+        from PIL import Image
+        import io
+        
+        with Image.open(body_local_path) as orig_img:
+            orig_size = orig_img.size
+            
+        with Image.open(io.BytesIO(output_bytes)) as gen_img:
+            resized_img = gen_img.resize(orig_size, Image.Resampling.LANCZOS)
+            out_buffer = io.BytesIO()
+            resized_img.save(out_buffer, format="PNG")
+            output_bytes = out_buffer.getvalue()
+
     except Exception as e:
         logger.error(f"VTON generation failed: {e}")
         raise HTTPException(
