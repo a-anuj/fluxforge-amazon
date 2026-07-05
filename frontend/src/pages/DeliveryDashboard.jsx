@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import { getPendingBaselineOrders } from "../api/client";
+import { getPendingBaselineOrders, submitPickupScan } from "../api/client";
 
 /* ─── Stat card ─────────────────────────────────────────────── */
 function StatCard({ icon, label, value, sub, accentBg, accentText }) {
@@ -20,7 +20,7 @@ function StatCard({ icon, label, value, sub, accentBg, accentText }) {
 }
 
 /* ─── Order row ─────────────────────────────────────────────── */
-function OrderRow({ order, onScan }) {
+function OrderRow({ order, onScan, onConfirmPickup, confirmingId }) {
   const placedAt = order.placed_at
     ? new Date(order.placed_at).toLocaleString("en-IN", {
         day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
@@ -28,6 +28,7 @@ function OrderRow({ order, onScan }) {
     : "—";
 
   const isReturn = order.is_return;
+  const isConfirming = confirmingId === order.return_id;
 
   return (
     <div className="flex items-center gap-4 bg-white border border-[#d5d9d9] rounded-lg px-5 py-4 hover:border-[#e77600] hover:shadow-sm transition-all group">
@@ -72,12 +73,22 @@ function OrderRow({ order, onScan }) {
       {/* Time + CTA */}
       <div className="flex flex-col items-end gap-2 flex-shrink-0">
         <span className="text-[11px] text-[#888]">{placedAt}</span>
-        <button
-          onClick={() => onScan(order)}
-          className="text-[12px] bg-[#FFD814] hover:bg-[#F7CA00] border border-[#FCD200] text-[#0f1111] font-bold px-4 py-1.5 rounded shadow-sm transition-colors"
-        >
-          Start Scan →
-        </button>
+        {isReturn ? (
+          <button
+            onClick={() => onConfirmPickup(order)}
+            disabled={isConfirming}
+            className="text-[12px] bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold px-4 py-1.5 rounded shadow-sm transition-colors"
+          >
+            {isConfirming ? "Confirming…" : "✓ Confirm Pickup"}
+          </button>
+        ) : (
+          <button
+            onClick={() => onScan(order)}
+            className="text-[12px] bg-[#FFD814] hover:bg-[#F7CA00] border border-[#FCD200] text-[#0f1111] font-bold px-4 py-1.5 rounded shadow-sm transition-colors"
+          >
+            Start Scan →
+          </button>
+        )}
       </div>
     </div>
   );
@@ -115,6 +126,7 @@ export default function DeliveryDashboard() {
   const [allOrders, setAllOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [confirmingId, setConfirmingId] = useState(null);
 
   const isEmployee = currentUser?.role === "employee";
 
@@ -168,6 +180,20 @@ export default function DeliveryDashboard() {
     navigate("/employee-scan");
   };
 
+  const handleConfirmPickup = async (order) => {
+    if (!order.return_id) return;
+    setConfirmingId(order.return_id);
+    try {
+      await submitPickupScan(order.return_id, currentUser.id);
+      // Remove from list immediately
+      setAllOrders((prev) => prev.filter((o) => o.return_id !== order.return_id));
+    } catch (err) {
+      alert(`Pickup failed: ${err.message}`);
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f0f2f2]">
 
@@ -216,7 +242,7 @@ export default function DeliveryDashboard() {
             icon="↩️"
             label="Return Pickups"
             value={loading ? "—" : totalReturns}
-            sub={totalReturns > 0 ? "Pickup + scan needed" : "None pending"}
+            sub={totalReturns > 0 ? "Confirm pickup to complete" : "None pending"}
             accentBg="bg-purple-100"
             accentText="text-purple-700"
           />
@@ -258,7 +284,7 @@ export default function DeliveryDashboard() {
               emptyIcon="✅"
             >
               {pendingDeliveries.map((o) => (
-                <OrderRow key={o.order_id} order={o} onScan={handleScan} />
+                <OrderRow key={o.order_id} order={o} onScan={handleScan} onConfirmPickup={handleConfirmPickup} confirmingId={confirmingId} />
               ))}
             </Section>
 
@@ -271,7 +297,7 @@ export default function DeliveryDashboard() {
               emptyIcon="↩️"
             >
               {returnPickups.map((o) => (
-                <OrderRow key={o.order_id} order={o} onScan={handleScan} />
+                <OrderRow key={o.order_id} order={o} onScan={handleScan} onConfirmPickup={handleConfirmPickup} confirmingId={confirmingId} />
               ))}
             </Section>
           </div>

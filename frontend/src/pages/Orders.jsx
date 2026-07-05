@@ -210,9 +210,11 @@ export default function Orders() {
   };
 
   const statusStyles = {
-    placed:    { color: "text-[#1a6bb5]", label: "Awaiting Delivery Verification" },
-    delivered: { color: "text-[#067d62]", label: "Delivered" },
-    returned:  { color: "text-amazon-red", label: "Returned" },
+    placed:          { color: "text-[#1a6bb5]",             label: "Awaiting Delivery Verification" },
+    delivered:       { color: "text-[#067d62]",             label: "Delivered" },
+    returned:        { color: "text-amazon-red",            label: "Returned" },
+    return_pending:  { color: "text-[#c7511f]",             label: "Return Requested — Awaiting Pickup" },
+    return_verified: { color: "text-[#8b5cf6]",             label: "Return Verified" },
   };
 
   const pendingCount = orders.filter(
@@ -369,7 +371,7 @@ export default function Orders() {
                             </Link>
                           )}
                           {/* Return button — only shown if product has a return policy and order not yet returned */}
-                          {!order.is_community && order.status !== "returned" && (() => {
+                          {!order.is_community && order.status !== "returned" && order.status !== "return_pending" && order.status !== "return_verified" && (() => {
                             const noReturn = prod?.has_no_return_policy;
                             const returnDays = prod?.return_period_days ?? order.return_period_days ?? 7;
                             const placedAt = order.placed_at ? new Date(order.placed_at) : null;

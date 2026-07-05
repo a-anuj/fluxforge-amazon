@@ -1,11 +1,9 @@
 import { useRef, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getOrders, createReturn, getProduct, getBaselineScan, createCommunityListing } from "../api/client";
+import { getOrders, createReturn, getProduct, getBaselineScan, createCommunityListing, getApiBaseUrl } from "../api/client";
 import { useUser } from "../context/UserContext";
 import LiveVideoScanner from "../components/LiveVideoScanner";
 import { dataUrlToBlob } from "../utils/videoUtils";
-
-const BASE_URL = `http://${window.location.hostname}:8000/api`;
 
 // ── Classification badge config ───────────────────────────────────────────────
 const SUSTAINABILITY_BADGE = {
@@ -190,7 +188,7 @@ export default function NewReturn() {
     setProgress(40);
     const ticker = setInterval(() => setProgress((p) => (p < 92 ? p + 2 : p)), 250);
     try {
-      const res = await fetch(`${BASE_URL}/sustainability/assess`, { method: "POST", body: form });
+      const res = await fetch(`${getApiBaseUrl()}/sustainability/assess`, { method: "POST", body: form });
       clearInterval(ticker);
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({ detail: res.statusText }));
