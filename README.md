@@ -215,85 +215,85 @@ Real-time KPIs from actual database queries:
 All routes prefixed with /api.
 
 ### Users and Profiles
-  GET  /api/users/
-  GET  /api/users/{id}
-  PUT  /api/users/{id}
-  GET  /api/users/{id}/green-credits
-  GET  /api/users/{id}/impact-stats
-  GET  /api/users/{id}/challenges
-  POST /api/users/{id}/challenges/{cid}/complete
+- GET /api/users/
+- GET /api/users/{id}
+- PUT /api/users/{id}
+- GET /api/users/{id}/green-credits
+- GET /api/users/{id}/impact-stats
+- GET /api/users/{id}/challenges
+- POST /api/users/{id}/challenges/{cid}/complete
 
 ### Products
-  GET /api/products/
-  GET /api/products/{id}
-  GET /api/products/{id}/confidence
-  GET /api/products/{id}/impact
-  GET /api/products/{id}/refurbished-alternative
-  GET /api/products/{id}/sustainability-advice
+- GET /api/products/
+- GET /api/products/{id}
+- GET /api/products/{id}/confidence
+- GET /api/products/{id}/impact
+- GET /api/products/{id}/refurbished-alternative
+- GET /api/products/{id}/sustainability-advice
 
 ### Orders
-  POST /api/orders/
-  GET  /api/orders/?user_id=
-  GET  /api/orders/delivery-options
-  POST /api/orders/{id}/vest-credits
+- POST /api/orders/
+- GET /api/orders/?user_id=
+- GET /api/orders/delivery-options
+- POST /api/orders/{id}/vest-credits
 
 ### Returns
-  POST /api/returns/
-  POST /api/returns/{id}/pickup-scan
+- POST /api/returns/
+- POST /api/returns/{id}/pickup-scan
 
 ### Listings and Second Life
-  GET  /api/listings/feed?user_id=
-  GET  /api/listings/all
-  GET  /api/listings/{id}
-  POST /api/listings/{id}/purchase
+- GET /api/listings/feed?user_id=
+- GET /api/listings/all
+- GET /api/listings/{id}
+- POST /api/listings/{id}/purchase
 
 ### Wishlist and NearDrop
-  POST   /api/wishlist/
-  GET    /api/wishlist/?user_id=
-  DELETE /api/wishlist/{id}
-  GET    /api/wishlist/matches?user_id=
-  GET    /api/wishlist/notifications?user_id=
-  POST   /api/wishlist/notifications/read
-  GET    /api/wishlist/journey/{listing_id}
-  POST   /api/wishlist/matches/{id}/purchase
+- POST /api/wishlist/
+- GET /api/wishlist/?user_id=
+- DELETE /api/wishlist/{id}
+- GET /api/wishlist/matches?user_id=
+- GET /api/wishlist/notifications?user_id=
+- POST /api/wishlist/notifications/read
+- GET /api/wishlist/journey/{listing_id}
+- POST /api/wishlist/matches/{id}/purchase
 
 ### Sustainability and AI Assessment
-  POST /api/sustainability/verify
-  POST /api/sustainability/fingerprint
-  POST /api/sustainability/verify_live_match
-  POST /api/sustainability/assess
+- POST /api/sustainability/verify
+- POST /api/sustainability/fingerprint
+- POST /api/sustainability/verify_live_match
+- POST /api/sustainability/assess
 
 ### Baseline Scan
-  POST /api/baseline/{order_id}/scan
-  GET  /api/baseline/{order_id}
-  GET  /api/baseline/pending/list
+- POST /api/baseline/{order_id}/scan
+- GET /api/baseline/{order_id}
+- GET /api/baseline/pending/list
 
 ### Media Validation
-  POST /api/media/validate/image
-  POST /api/media/validate/video
-  POST /api/media/validate/batch
-  GET  /api/media/guidelines
+- POST /api/media/validate/image
+- POST /api/media/validate/video
+- POST /api/media/validate/batch
+- GET /api/media/guidelines
 
 ### Community Marketplace
-  GET  /api/community/listings
-  POST /api/community/listings
-  GET  /api/community/listings/nearby?user_id=
-  GET  /api/community/listings/{id}
-  PUT  /api/community/listings/{id}/buy
-  POST /api/community/price-suggest
-  GET  /api/community/notifications?user_id=
-  GET  /api/community/leaderboard
+- GET /api/community/listings
+- POST /api/community/listings
+- GET /api/community/listings/nearby?user_id=
+- GET /api/community/listings/{id}
+- PUT /api/community/listings/{id}/buy
+- POST /api/community/price-suggest
+- GET /api/community/notifications?user_id=
+- GET /api/community/leaderboard
 
 ### Virtual Try-On
-  POST /api/tryon/upload-photo
-  GET  /api/tryon/photos?user_id=
-  POST /api/tryon/generate
+- POST /api/tryon/upload-photo
+- GET /api/tryon/photos?user_id=
+- POST /api/tryon/generate
 
 ### Redemptions and Analytics
-  GET  /api/redemptions/options
-  POST /api/redemptions/redeem
-  GET  /api/redemptions/history?user_id=
-  GET  /api/analytics/dashboard
+- GET /api/redemptions/options
+- POST /api/redemptions/redeem
+- GET /api/redemptions/history?user_id=
+- GET /api/analytics/dashboard
 
 ---
 

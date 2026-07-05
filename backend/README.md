@@ -120,7 +120,7 @@ Exposes four endpoints backed by AWS Bedrock Nova Lite:
 
 ### baseline.py (Employee Baseline Scan Router)
 
-POST /api/baseline/{order_id}/scan
+- POST /api/baseline/{order_id}/scan
 Accepts a snapshot and frames map. Validates employee role. Runs verify_product_identity (Nova Lite)
 on the snapshot. If verified, uploads frames to S3 and advances order status to delivered.
 

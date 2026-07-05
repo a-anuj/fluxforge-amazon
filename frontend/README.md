@@ -222,36 +222,79 @@ A lightweight fetch wrapper that:
 
 Key exports by group:
 
-  Users: getUsers, getUser, updateUser, getGreenCredits, getImpactStats,
-         getChallenges, completeChallenge
+  **Users:**
+  - getUsers
+  - getUser
+  - updateUser
+  - getGreenCredits
+  - getImpactStats
+  - getChallenges
+  - completeChallenge
 
-  Products: getProducts, getProduct, getProductConfidence, getProductImpact,
-            getRefurbishedAlt, getSustainabilityAdvice
+  **Products:**
+  - getProducts
+  - getProduct
+  - getProductConfidence
+  - getProductImpact
+  - getRefurbishedAlt
+  - getSustainabilityAdvice
 
-  Orders: createOrder, getOrders, getDeliveryOptions, vestNoReturnCredits
+  **Orders:**
+  - createOrder
+  - getOrders
+  - getDeliveryOptions
+  - vestNoReturnCredits
 
-  Returns: createReturn
+  **Returns:**
+  - createReturn
 
-  Listings: getFeed, getAllListings, getListing, purchaseListing
+  **Listings:**
+  - getFeed
+  - getAllListings
+  - getListing
+  - purchaseListing
 
-  Wishlist: getWishlist, addToWishlist, removeFromWishlist, getWishlistMatches,
+  **Wishlist:**
+  - getWishlist
+  - addToWishlist
+  - removeFromWishlist
+  - getWishlistMatches
             getWishlistNotifications, markWishlistNotificationsRead,
-            getProductJourney, purchaseWishlistMatch
+  - getProductJourney
+  - purchaseWishlistMatch
 
-  Community: getCommunityListings, getNearbyListings, getCommunityListing,
+  **Community:**
+  - getCommunityListings
+  - getNearbyListings
+  - getCommunityListing
              createCommunityListing, buyCommunityListing, suggestPrice,
              getNotifications, getUnreadCount, markNotificationsRead,
-             getLeaderboard, createAlert, getAlerts
+  - getLeaderboard
+  - createAlert
+  - getAlerts
 
-  Sustainability: verifyScanFingerprint, verifyLiveMatch
+  **Sustainability:**
+  - verifyScanFingerprint
+  - verifyLiveMatch
 
-  Baseline: submitBaselineScan, submitPickupScan, getBaselineScan, getPendingBaselineOrders
+  **Baseline:**
+  - submitBaselineScan
+  - submitPickupScan
+  - getBaselineScan
+  - getPendingBaselineOrders
 
-  Try-On: uploadBodyPhoto, getBodyPhotos, generateTryOn
+  **Try-On:**
+  - uploadBodyPhoto
+  - getBodyPhotos
+  - generateTryOn
 
-  Analytics: getDashboardMetrics
+  **Analytics:**
+  - getDashboardMetrics
 
-  Redemptions: getRedemptionOptions, redeemCredits, getRedemptions
+  **Redemptions:**
+  - getRedemptionOptions
+  - redeemCredits
+  - getRedemptions
 
 ---
 
