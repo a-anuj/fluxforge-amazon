@@ -199,7 +199,9 @@ export const submitBaselineScan = (orderId, employeeId, snapshotBlob, framesMap)
   const formData = new FormData();
   formData.append("employee_id", employeeId);
   formData.append("snapshot", snapshotBlob, `snapshot-${orderId}.jpg`);
-  formData.append("frames_json", JSON.stringify(framesMap || {}));
+  
+  const framesBlob = new Blob([JSON.stringify(framesMap || {})], { type: "application/json" });
+  formData.append("frames_json", framesBlob, "frames.json");
 
   return multipartRequest(`/baseline/${orderId}/scan`, formData);
 };

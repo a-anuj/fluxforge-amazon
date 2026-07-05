@@ -87,7 +87,7 @@ async def submit_baseline_scan(
     order_id: int,
     employee_id: int = Form(...),
     snapshot: UploadFile = File(...),
-    frames_json: str = Form("{}"),  # JSON: {"front_anchor": "data:image/...", ...}
+    frames_json: UploadFile = File(None),  # JSON file: {"front_anchor": "data:image/...", ...}
     db: Session = Depends(get_db),
 ):
     """
@@ -170,10 +170,15 @@ async def submit_baseline_scan(
 
     # ── Upload labeled phase frames to S3 ─────────────────────────────
     frame_s3_urls: dict = {}
-    try:
-        raw_frames: dict = json.loads(frames_json) if frames_json else {}
-    except (json.JSONDecodeError, TypeError):
-        raw_frames = {}
+    raw_frames: dict = {}
+    
+    if frames_json:
+        try:
+            frames_bytes = await frames_json.read()
+            if frames_bytes:
+                raw_frames = json.loads(frames_bytes.decode("utf-8"))
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            raw_frames = {}
 
     for phase_id, data_url in raw_frames.items():
         if not data_url:
