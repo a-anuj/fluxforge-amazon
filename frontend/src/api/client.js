@@ -199,7 +199,7 @@ export const submitBaselineScan = (orderId, employeeId, snapshotBlob, framesMap)
   const formData = new FormData();
   formData.append("employee_id", employeeId);
   formData.append("snapshot", snapshotBlob, `snapshot-${orderId}.jpg`);
-  
+
   const framesBlob = new Blob([JSON.stringify(framesMap || {})], { type: "application/json" });
   formData.append("frames_json", framesBlob, "frames.json");
 
@@ -235,6 +235,6 @@ export const generateTryOn = (userId, productId, bodyPhotoId, temporaryFile = nu
   form.append("product_id", productId);
   if (bodyPhotoId) form.append("body_photo_id", bodyPhotoId);
   if (temporaryFile) form.append("file", temporaryFile);
-  
+
   return multipartRequest("/tryon/generate", form);
 };

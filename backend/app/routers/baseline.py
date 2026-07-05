@@ -233,8 +233,8 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == order.product_id).first()
     customer = db.query(User).filter(User.id == order.user_id).first()
 
-    has_scan = bool(order.baseline_scan_urls)
-    scan_urls = order.baseline_scan_urls.split(",") if has_scan else []
+    has_scan = bool(order.baseline_scan_at)
+    scan_urls = order.baseline_scan_urls.split(",") if order.baseline_scan_urls else []
 
     import json
     from urllib.parse import urlparse
