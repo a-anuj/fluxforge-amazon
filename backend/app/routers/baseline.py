@@ -276,8 +276,8 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
     return {
         "order_id": order_id,
         "has_baseline_scan": has_scan,
-        "angles_count": len(scan_urls),
-        "scan_urls": scan_urls,          # actual URLs for AI comparison
+        "angles_count": len(baseline_frame_urls) or len(scan_urls),
+        "scan_urls": scan_urls,          # legacy URLs for AI comparison
         "baseline_frame_urls": baseline_frame_urls,
         "baseline_scan_at": order.baseline_scan_at.isoformat() if order.baseline_scan_at else None,
         "employee": employee,
