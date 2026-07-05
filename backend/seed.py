@@ -38,7 +38,7 @@ def seed():
             level="Sapling",
             co2_saved=18.0, ewaste_prevented=5.0, water_saved=120.0,
             products_reused=3, products_repaired=1, products_resold=1,
-            city="Mumbai", pincode="400001",
+            city="Chennai", pincode="600001",
         ),
         User(
             name="Priya Patel",
@@ -74,7 +74,7 @@ def seed():
             level="Green Hero",
             co2_saved=28.0, ewaste_prevented=3.5, water_saved=200.0,
             products_reused=4, products_repaired=2, products_resold=2,
-            city="Mumbai", pincode="400018",
+            city="Chennai", pincode="600018",
         ),
         User(
             name="Vikram Desai",
@@ -86,7 +86,7 @@ def seed():
             level="Seed",
             co2_saved=1.5, ewaste_prevented=0.2, water_saved=10.0,
             products_reused=0, products_repaired=0, products_resold=0,
-            city="Pune", pincode="411001",
+            city="Mumbai", pincode="400601",
         ),
         User(
             name="Admin User",
@@ -114,7 +114,7 @@ def seed():
             products_reused=0, products_repaired=0, products_resold=0,
             city="Mumbai", pincode="400001",
             is_admin=False, role="employee",
-            employee_zone="Mumbai-West",
+            employee_zone="Mumbai",
         ),
         User(
             name="Sneha Delivery Agent",
@@ -126,9 +126,9 @@ def seed():
             level="Sapling",
             co2_saved=3.2, ewaste_prevented=0.3, water_saved=25.0,
             products_reused=0, products_repaired=0, products_resold=0,
-            city="Mumbai", pincode="400015",
+            city="Chennai", pincode="600015",
             is_admin=False, role="employee",
-            employee_zone="Mumbai-Central",
+            employee_zone="Chennai",
         ),
     ]
     db.add_all(users)
