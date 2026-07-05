@@ -195,21 +195,22 @@ const multipartRequest = async (path, formData) => {
   return res.json();
 };
 
-export const submitBaselineScan = (orderId, employeeId, videoBlob, snapshotBlob) => {
-  const form = new FormData();
-  form.append("employee_id", employeeId);
-  form.append("video", videoBlob, "scan.webm");
-  if (snapshotBlob) {
-    form.append("snapshot", snapshotBlob, "snapshot.jpg");
-  }
-  return multipartRequest(`/baseline/${orderId}/scan`, form);
+export const submitBaselineScan = (orderId, employeeId, snapshotBlob, framesMap) => {
+  const formData = new FormData();
+  formData.append("employee_id", employeeId);
+  formData.append("snapshot", snapshotBlob, `snapshot-${orderId}.jpg`);
+  formData.append("frames_json", JSON.stringify(framesMap || {}));
+
+  return multipartRequest(`/baseline/${orderId}/scan`, formData);
 };
 
-export const submitPickupScan = (returnId, employeeId, videoBlob) => {
+export const submitPickupScan = (returnId, employeeId) => {
   const form = new FormData();
   form.append("employee_id", employeeId);
-  form.append("video", videoBlob, "scan.webm");
-  return multipartRequest(`/returns/${returnId}/pickup-scan`, form);
+  return request(`/returns/${returnId}/pickup-scan`, {
+    method: "POST",
+    body: form,
+  });
 };
 
 export const getBaselineScan = (orderId) => request(`/baseline/${orderId}`);
