@@ -402,11 +402,10 @@ All routes prefixed with /api.
 
 ## Team
 
-| Name           | GitHub         |
-|---|---|
-| Anuj A         | a-anuj         |
-| Harish J       | harish1604     |
-| Hari Prasath K | hariPrasathK-Dev |
+| Name | GitHub |
+|------|--------|
+| Anuj A | [@a-anuj](https://github.com/a-anuj) |
+| Harish J | [@harish1604](https://github.com/harish1604) |
+| Hari Prasath K | [@hariPrasathK-Dev](https://github.com/hariPrasathK-Dev) |
 
-Qualified as a top-40 finalist at Amazon HackOn Season 6.0.
-Invited to the in-person finale at Amazon Quila, Bangalore.
+Qualified as a top-30 finalist at Amazon HackOn Season 6.0
