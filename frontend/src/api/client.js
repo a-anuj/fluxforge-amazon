@@ -6,6 +6,8 @@ const BASE_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD ? "/api" : `http://${window.location.hostname}:8000/api`);
 
+export const getApiBaseUrl = () => BASE_URL;
+
 export const getMediaUrl = (path) => {
   if (!path) return "";
   if (path.startsWith("http")) return path;
