@@ -417,7 +417,8 @@ export default function LiveVideoScanner({
         clearInterval(phaseTimerRef.current);
 
         if (videoRef.current && videoRef.current.videoWidth) {
-          const frame = captureVideoFrame(videoRef.current);
+          // Compress main scan frames to 480p at 70% quality to avoid 413 Payload Too Large
+          const frame = captureVideoFrame(videoRef.current, 0.7, 480);
           const phaseId = SCAN_PHASES[idx].id;
           setCapturedFrames((prev) => ({ ...prev, [phaseId]: frame }));
         }
@@ -496,7 +497,8 @@ export default function LiveVideoScanner({
     const initialFrames = [];
     const initialCaptureInterval = setInterval(() => {
       if (videoRef.current && videoRef.current.videoWidth) {
-        const frame = captureVideoFrame(videoRef.current);
+        // Compress rapid frames heavily (360p, 50% quality) since they only need broad object recognition
+        const frame = captureVideoFrame(videoRef.current, 0.5, 360);
         initialFrames.push(frame);
       }
       initialFramesCount++;
