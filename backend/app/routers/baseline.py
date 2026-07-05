@@ -117,7 +117,7 @@ async def submit_baseline_scan(
         raise HTTPException(status_code=400, detail="Invalid file type for 'snapshot'. Image (JPEG/PNG/WebP) expected.")
 
     # ── Check for duplicate scan ───────────────────────────────────────
-    if order.baseline_scan_urls:
+    if order.baseline_scan_at:
         raise HTTPException(
             status_code=409,
             detail="Baseline scan already recorded for this order. Cannot overwrite."
