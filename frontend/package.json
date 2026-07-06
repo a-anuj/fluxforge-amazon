@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@gradio/client": "^2.3.0",
     "@reduxjs/toolkit": "^2.12.0",
     "lucide-react": "^1.18.0",
     "react": "^19.2.6",
