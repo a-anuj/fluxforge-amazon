@@ -4,6 +4,14 @@ import { getProduct, getAlternatives, createOrder, getProductConfidence, getProd
 import { useUser } from "../context/UserContext";
 import TryOnModal from "../components/TryOnModal";
 
+// ── Garment body-placement detection ────────────────────────────────────
+const LOWER_BODY_KW = ["pant","pants","trouser","trousers","jeans","denim","shorts","leggings","skirt","chinos","jogger","joggers","cargo","capri","palazzos","culottes","sweatpants","trackpants","bottoms"];
+const FULL_BODY_KW  = ["dress","jumpsuit","romper","dungaree","dungarees","overalls","gown","saree","kurta","kurti"];
+function isTryOnUnsupported(product) {
+  const t = `${product?.name ?? ""} ${product?.category ?? ""} ${product?.description ?? ""}`.toLowerCase();
+  return FULL_BODY_KW.some(k => t.includes(k)) || LOWER_BODY_KW.some(k => t.includes(k));
+}
+
 // Same formula as backend credit_engine.py
 const PRODUCT_IMPACT_SCORES = {
   electronics: 2.5, running: 1.2, backpacking: 1.0,
@@ -206,12 +214,25 @@ export default function ProductDetail() {
               <img src={product.image_url || "https://via.placeholder.com/400"} alt={product.name} className="max-h-[400px] max-w-full object-contain" />
             </div>
             {["clothing", "fashion", "apparel", "shirts", "tops", "dresses", "running", "fitness", "sports", "shoes", "footwear"].some(c => (product.category || "").toLowerCase().includes(c)) && (
-              <button
-                onClick={() => setShowTryOn(true)}
-                className="btn-amazon-primary w-full py-2.5 rounded-lg font-bold text-[13px] shadow-md transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
-              >
-                ✨ Virtual Try-On
-              </button>
+              isTryOnUnsupported(product) ? (
+                <div style={{
+                  textAlign: "center", padding: "10px 14px",
+                  background: "#fef9ec", border: "1px solid #fcd34d",
+                  borderRadius: "8px", fontSize: "12px", color: "#92400e",
+                  lineHeight: 1.4,
+                }}>
+                  <span style={{ fontSize: "16px" }}>👕</span>&nbsp;
+                  <strong>Virtual Try-On</strong> is available for shirts &amp; tops only.
+                  <br /><span style={{ fontSize: "11px", color: "#b45309" }}>Coming soon for pants &amp; more!</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowTryOn(true)}
+                  className="btn-amazon-primary w-full py-2.5 rounded-lg font-bold text-[13px] shadow-md transition-all hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2"
+                >
+                  ✨ Virtual Try-On
+                </button>
+              )
             )}
           </div>
 
@@ -385,8 +406,8 @@ export default function ProductDetail() {
         )}
       </div>
 
-      {/* Virtual Try-On Modal */}
-      {showTryOn && product && (
+      {/* Virtual Try-On Modal — only for supported upper-body garments */}
+      {showTryOn && product && !isTryOnUnsupported(product) && (
         <TryOnModal product={product} onClose={() => setShowTryOn(false)} />
       )}
     </div>
