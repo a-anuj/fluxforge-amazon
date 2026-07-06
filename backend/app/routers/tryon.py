@@ -60,7 +60,8 @@ def _get_gradio_client():
     global _gradio_client
     if _gradio_client is None:
         from gradio_client import Client
-        _gradio_client = Client(HF_SPACE_ID)
+        hf_token = os.getenv("HF_TOKEN") or None
+        _gradio_client = Client(HF_SPACE_ID, token=hf_token)
     return _gradio_client
 
 
