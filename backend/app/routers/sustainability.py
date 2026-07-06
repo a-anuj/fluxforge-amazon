@@ -593,7 +593,6 @@ async def verify_fingerprint(request: FingerprintScanRequest, db: Session = Depe
                 product_name = order.product.name or ""
             if not product_category:
                 product_category = order.product.category or ""
-
     result = _assess_scan_fingerprint(
         frame_urls=request.frames,
         product_name=product_name,
@@ -625,15 +624,71 @@ You are given several rapid frames from the very beginning of a video scan.
 Identify the primary object shown in these frames.
 
 Rules:
-- If the object is CLEARLY a completely different category (e.g., you see a mug but the expected category is a bag, or you see a phone but expected is a shoe), return "matched": false and "confidence": 90.
-- If the object is the correct category '{product_category}', or if it is too blurry or close to tell for sure, return "matched": true and "confidence": 50.
+- CRITICAL: If you see a HUMAN, PERSON, FACE, BODY, SELFIE, or any living being → ALWAYS return "matched": false with "confidence": 95. This is non-negotiable.
+- If the object is CLEARLY a completely different category (e.g., you see a phone but the expected category is clothing, or you see a shoe but expected is electronics), return "matched": false and "confidence": 90.
+- Only return "matched": true if the object visually belongs to the SAME broad category as '{product_category}'.
 
 Return ONLY valid JSON in this exact shape:
 {{
     "matched": true,
     "confidence": 50,
-    "observed_product_type": "<what you actually see>"
+    "observed_product_type": "<what you actually see, e.g. 'shirt', 'phone', 'shoe', 'human'>"
 }}"""
+
+    # ── Keywords that always mean: NOT a product ───────────────────────────────
+    PERSON_KEYWORDS = {"human", "person", "face", "selfie", "body", "people", "man", "woman", "child", "hand", "skin"}
+
+    # ── Broad category groups — observed word → group ─────────────────────────
+    OBSERVED_GROUPS: dict[str, str] = {
+        # Electronics
+        "phone": "electronics", "smartphone": "electronics", "mobile": "electronics",
+        "tablet": "electronics", "laptop": "electronics", "computer": "electronics",
+        "earbuds": "electronics", "headphones": "electronics", "earphones": "electronics",
+        "headset": "electronics", "watch": "electronics", "smartwatch": "electronics",
+        "camera": "electronics", "remote": "electronics", "charger": "electronics",
+        "cable": "electronics", "speaker": "electronics", "tv": "electronics",
+        "monitor": "electronics", "keyboard": "electronics", "mouse": "electronics",
+        # Clothing / apparel
+        "shirt": "clothing", "tshirt": "clothing", "t-shirt": "clothing",
+        "top": "clothing", "blouse": "clothing", "dress": "clothing",
+        "skirt": "clothing", "pants": "clothing", "trousers": "clothing",
+        "jeans": "clothing", "jacket": "clothing", "hoodie": "clothing",
+        "sweater": "clothing", "coat": "clothing", "uniform": "clothing",
+        "shorts": "clothing", "leggings": "clothing", "socks": "clothing",
+        "underwear": "clothing", "bra": "clothing", "vest": "clothing",
+        # Footwear
+        "shoe": "footwear", "shoes": "footwear", "sneaker": "footwear",
+        "sneakers": "footwear", "boot": "footwear", "boots": "footwear",
+        "sandal": "footwear", "sandals": "footwear", "slipper": "footwear",
+        "heels": "footwear", "flip-flops": "footwear",
+        # Bags / backpacks
+        "bag": "bags", "backpack": "bags", "handbag": "bags", "purse": "bags",
+        "wallet": "bags", "pouch": "bags", "suitcase": "bags", "luggage": "bags",
+        # Sports / fitness
+        "mat": "sports", "yoga": "sports", "dumbbell": "sports", "barbell": "sports",
+        "ball": "sports", "racket": "sports", "helmet": "sports", "gloves": "sports",
+        # Books / stationery
+        "book": "books", "notebook": "books", "pen": "books", "pencil": "books",
+        # Food / kitchen
+        "mug": "kitchen", "cup": "kitchen", "bottle": "kitchen", "food": "kitchen",
+        "plate": "kitchen", "bowl": "kitchen",
+        # Furniture / home
+        "chair": "furniture", "table": "furniture", "lamp": "furniture",
+        "pillow": "furniture", "blanket": "furniture",
+    }
+
+    # Expected product category → broad group
+    CATEGORY_GROUPS: dict[str, str] = {
+        "electronics": "electronics", "mobiles": "electronics", "laptops": "electronics",
+        "earbuds": "electronics", "headphones": "electronics", "wearables": "electronics",
+        "clothing": "clothing", "apparel": "clothing", "fashion": "clothing",
+        "running": "footwear", "footwear": "footwear", "shoes": "footwear", "fitness": "footwear",
+        "backpacking": "bags", "bags": "bags", "luggage": "bags",
+        "yoga": "sports", "sports": "sports",
+        "books": "books",
+        "kitchen": "kitchen",
+        "furniture": "furniture",
+    }
 
     try:
         client = _get_bedrock_client()
@@ -644,10 +699,41 @@ Return ONLY valid JSON in this exact shape:
         )
         parsed = _parse_json_response(response)
         logger.info(f"Verify Live Match Bedrock Output: {parsed}")
+
+        observed_raw = str(parsed.get("observed_product_type", "unknown"))
+        observed = observed_raw.lower().strip()
+        matched = bool(parsed.get("matched", True))
+        confidence = int(parsed.get("confidence", 50))
+
+        # ── Hard override 1: person/human detected ────────────────────────────
+        if any(kw in observed for kw in PERSON_KEYWORDS):
+            logger.warning(f"Live match HARD FAIL — human subject detected: '{observed}'")
+            matched = False
+            confidence = 95
+
+        # ── Hard override 2: category mismatch ───────────────────────────────
+        if matched:  # only run if not already failed
+            expected_group = CATEGORY_GROUPS.get(product_category.lower().strip())
+            observed_group = None
+            for kw, grp in OBSERVED_GROUPS.items():
+                if kw in observed:
+                    observed_group = grp
+                    break
+
+            if expected_group and observed_group and expected_group != observed_group:
+                logger.warning(
+                    f"Live match HARD FAIL — category mismatch: "
+                    f"expected='{product_category}' ({expected_group}), "
+                    f"observed='{observed_raw}' ({observed_group})"
+                )
+                matched = False
+                confidence = 92
+
         return {
-            "matched": bool(parsed.get("matched", True)),
-            "confidence": int(parsed.get("confidence", 50)),
+            "matched": matched,
+            "confidence": confidence,
             "observed_product_type": str(parsed.get("observed_product_type", "unknown")),
+            "reason": f"Detected: {parsed.get('observed_product_type', 'unknown')}",
         }
     except Exception as exc:
         logger.warning(f"Live match Bedrock failed: {exc}")
@@ -758,7 +844,7 @@ async def assess_return(
     if not has_labeled_frames and order.baseline_scan_urls:
         for url in order.baseline_scan_urls.split(",")[:4]:
             url = url.strip()
-            if not url:
+            if not url or url.lower().endswith((".webm", ".mp4", ".mov")):
                 continue
             try:
                 b_raw, b_fmt = _load_image_bytes_from_url(url)

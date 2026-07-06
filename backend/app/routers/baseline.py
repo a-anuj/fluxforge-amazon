@@ -86,9 +86,8 @@ def _try_upload_to_s3(data_url: str, key: str) -> str:
 async def submit_baseline_scan(
     order_id: int,
     employee_id: int = Form(...),
-    video: UploadFile = File(...),
     snapshot: UploadFile = File(...),
-    frames_json: str = Form("{}"),  # JSON: {"front_anchor": "data:image/...", ...}
+    frames_json: UploadFile = File(None),  # JSON file: {"front_anchor": "data:image/...", ...}
     db: Session = Depends(get_db),
 ):
     """
@@ -114,13 +113,11 @@ async def submit_baseline_scan(
         raise HTTPException(status_code=403, detail="Only operators can submit baseline scans")
 
     # ── Validate file types ────────────────────────────────────────────
-    if not video.content_type.startswith("video/"):
-        raise HTTPException(status_code=400, detail="Invalid file type for 'video'. Video expected.")
     if not snapshot.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid file type for 'snapshot'. Image (JPEG/PNG/WebP) expected.")
 
     # ── Check for duplicate scan ───────────────────────────────────────
-    if order.baseline_scan_urls:
+    if order.baseline_scan_at:
         raise HTTPException(
             status_code=409,
             detail="Baseline scan already recorded for this order. Cannot overwrite."
@@ -171,39 +168,17 @@ async def submit_baseline_scan(
                 },
             )
 
-    # ── Upload video to S3 (or local fallback) ─────────────────────────
-    raw_bytes = await video.read()
-    key = f"baseline-scans/order-{order_id}/video-{uuid.uuid4().hex[:8]}.webm"
-
-    try:
-        bucket = os.getenv("AWS_S3_BUCKET_NAME")
-        if bucket:
-            s3 = boto3.client(
-                "s3",
-                region_name=os.getenv("AWS_REGION", "us-east-1"),
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-            )
-            s3.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=raw_bytes,
-                ContentType=video.content_type,
-            )
-            region = os.getenv("AWS_REGION", "us-east-1")
-            url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
-        else:
-            url = f"/local-video/{key}"
-    except Exception as e:
-        logger.warning(f"S3 upload failed: {e}")
-        url = f"/local-video/{key}"
-
     # ── Upload labeled phase frames to S3 ─────────────────────────────
     frame_s3_urls: dict = {}
-    try:
-        raw_frames: dict = json.loads(frames_json) if frames_json else {}
-    except (json.JSONDecodeError, TypeError):
-        raw_frames = {}
+    raw_frames: dict = {}
+    
+    if frames_json:
+        try:
+            frames_bytes = await frames_json.read()
+            if frames_bytes:
+                raw_frames = json.loads(frames_bytes.decode("utf-8"))
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            raw_frames = {}
 
     for phase_id, data_url in raw_frames.items():
         if not data_url:
@@ -214,7 +189,7 @@ async def submit_baseline_scan(
         logger.info(f"Stored baseline frame '{phase_id}' for order {order_id}: {stored_url[:80]}")
 
     # ── Persist scan ───────────────────────────────────────────────────
-    order.baseline_scan_urls = url
+    order.baseline_scan_urls = None
     order.baseline_scan_at = datetime.now(timezone.utc)
     order.baseline_scan_employee_id = employee_id
     if frame_s3_urls:
@@ -258,8 +233,8 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == order.product_id).first()
     customer = db.query(User).filter(User.id == order.user_id).first()
 
-    has_scan = bool(order.baseline_scan_urls)
-    scan_urls = order.baseline_scan_urls.split(",") if has_scan else []
+    has_scan = bool(order.baseline_scan_at)
+    scan_urls = order.baseline_scan_urls.split(",") if order.baseline_scan_urls else []
 
     import json
     from urllib.parse import urlparse
@@ -301,8 +276,8 @@ def get_baseline_scan(order_id: int, db: Session = Depends(get_db)):
     return {
         "order_id": order_id,
         "has_baseline_scan": has_scan,
-        "angles_count": len(scan_urls),
-        "scan_urls": scan_urls,          # actual URLs for AI comparison
+        "angles_count": len(baseline_frame_urls) or len(scan_urls),
+        "scan_urls": scan_urls,          # legacy URLs for AI comparison
         "baseline_frame_urls": baseline_frame_urls,
         "baseline_scan_at": order.baseline_scan_at.isoformat() if order.baseline_scan_at else None,
         "employee": employee,

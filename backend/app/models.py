@@ -96,7 +96,8 @@ class Order(Base):
     no_return_credits_status = Column(String, default="pending")  # "pending" | "vested" | "forfeited"
 
     # ── Delivery Baseline Scan (captured by employee at delivery) ──
-    baseline_scan_urls = Column(String, nullable=True)  # comma-separated image URLs/keys
+    baseline_scan_urls = Column(String, nullable=True)  # comma-separated image URLs/keys (legacy)
+    baseline_frame_urls = Column(String, nullable=True) # JSON dict of phase_id -> URL
     baseline_scan_at = Column(DateTime, nullable=True)  # when the baseline was recorded
     baseline_scan_employee_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 

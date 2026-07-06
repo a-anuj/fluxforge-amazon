@@ -59,7 +59,6 @@ def _scan(client, order_id, employee_id, verifier_return):
             f"/api/baseline/{order_id}/scan",
             data={"employee_id": employee_id},
             files={
-                "video":    ("scan.webm", _fake_video(), "video/webm"),
                 "snapshot": ("frame.png", _png(), "image/png"),
             },
         )
@@ -190,20 +189,7 @@ class TestBaselineScanAccessControl:
 
 class TestBaselineScanFileValidation:
 
-    def test_non_video_upload_for_video_field_returns_400(self, client, db_session):
-        emp = _seed_employee(db_session)
-        order_id = _create_order(client)
 
-        with patch("app.routers.baseline.verify_product_identity", return_value=MATCH_HIGH):
-            resp = client.post(
-                f"/api/baseline/{order_id}/scan",
-                data={"employee_id": emp.id},
-                files={
-                    "video":    ("not_a_video.txt", b"hello", "text/plain"),
-                    "snapshot": ("frame.png", _png(), "image/png"),
-                },
-            )
-        assert resp.status_code == 400
 
     def test_non_image_upload_for_snapshot_field_returns_400(self, client, db_session):
         emp = _seed_employee(db_session)
@@ -214,7 +200,6 @@ class TestBaselineScanFileValidation:
                 f"/api/baseline/{order_id}/scan",
                 data={"employee_id": emp.id},
                 files={
-                    "video":    ("scan.webm", _fake_video(), "video/webm"),
                     "snapshot": ("data.pdf", b"%PDF", "application/pdf"),
                 },
             )

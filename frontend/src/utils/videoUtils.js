@@ -9,10 +9,21 @@ export function dataUrlToBlob(dataUrl) {
 }
 
 /** Capture a JPEG frame from a live video element. */
-export function captureVideoFrame(videoEl, quality = 0.88) {
+export function captureVideoFrame(videoEl, quality = 0.88, maxHeight = null) {
   const canvas = document.createElement("canvas");
-  canvas.width = videoEl.videoWidth || 1280;
-  canvas.height = videoEl.videoHeight || 720;
+  
+  let targetWidth = videoEl.videoWidth || 1280;
+  let targetHeight = videoEl.videoHeight || 720;
+  
+  if (maxHeight && targetHeight > maxHeight) {
+    const ratio = maxHeight / targetHeight;
+    targetHeight = maxHeight;
+    targetWidth = Math.floor(targetWidth * ratio);
+  }
+
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  
   const ctx = canvas.getContext("2d");
   ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", quality);

@@ -132,8 +132,8 @@ export default function EmployeeScan() {
       .finally(() => setLoadingOrders(false));
   }, [currentUser, canScan]);
 
-  const handleScanComplete = async ({ videoBlob, frames, phases }) => {
-    if (!selectedOrder || !videoBlob) return;
+  const handleScanComplete = async ({ frames, phases }) => {
+    if (!selectedOrder) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -154,13 +154,13 @@ export default function EmployeeScan() {
 
       let res;
       if (selectedOrder.is_return) {
-        res = await submitPickupScan(selectedOrder.return_id, currentUser.id, videoBlob);
+        res = await submitPickupScan(selectedOrder.return_id, currentUser.id);
         res.product = selectedOrder.product_name;
         res.baseline_scan_at = new Date().toISOString();
         res.employee = currentUser.name;
         res.is_return = true;
       } else {
-        res = await submitBaselineScan(selectedOrder.order_id, currentUser.id, videoBlob, snapshotBlob, framesMap);
+        res = await submitBaselineScan(selectedOrder.order_id, currentUser.id, snapshotBlob, framesMap);
       }
       setResult(res);
       setPhase("done");

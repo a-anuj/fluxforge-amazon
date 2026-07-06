@@ -231,6 +231,7 @@ export default function LiveVideoScanner({
   const phaseTimerRef = useRef(null);
   const phaseIdxRef = useRef(0);
   const abortedRef = useRef(false);
+  const fastFailedRef = useRef(false);  // hard stop — interrupts all in-flight calls
 
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(null);
@@ -294,6 +295,8 @@ export default function LiveVideoScanner({
 
   useEffect(() => {
     if (phase !== "recording") return;
+    // If fast-fail already triggered, don't run any more fingerprint checks
+    if (fastFailedRef.current) return;
 
     const frames = [];
     frames.push(...SCAN_PHASES.map((p) => capturedFrames[p.id]).filter(Boolean));
@@ -355,6 +358,8 @@ export default function LiveVideoScanner({
 
   useEffect(() => {
     if (phase !== "review" || !videoBlob || fingerprintStatus !== "pending") return;
+    // If fast-fail already triggered, do not run a review-phase check
+    if (fastFailedRef.current) return;
 
     let cancelled = false;
     const frames = SCAN_PHASES.map((p) => capturedFrames[p.id]).filter(Boolean);
@@ -412,7 +417,8 @@ export default function LiveVideoScanner({
         clearInterval(phaseTimerRef.current);
 
         if (videoRef.current && videoRef.current.videoWidth) {
-          const frame = captureVideoFrame(videoRef.current);
+          // Compress main scan frames to 480p at 70% quality to avoid 413 Payload Too Large
+          const frame = captureVideoFrame(videoRef.current, 0.7, 480);
           const phaseId = SCAN_PHASES[idx].id;
           setCapturedFrames((prev) => ({ ...prev, [phaseId]: frame }));
         }
@@ -438,6 +444,7 @@ export default function LiveVideoScanner({
 
     chunksRef.current = [];
     abortedRef.current = false;
+    fastFailedRef.current = false;  // reset fast-fail guard on each new recording
     setCapturedFrames({});
     phaseIdxRef.current = 0;
     setCurrentPhaseIdx(0);
@@ -490,7 +497,8 @@ export default function LiveVideoScanner({
     const initialFrames = [];
     const initialCaptureInterval = setInterval(() => {
       if (videoRef.current && videoRef.current.videoWidth) {
-        const frame = captureVideoFrame(videoRef.current);
+        // Compress rapid frames heavily (360p, 50% quality) since they only need broad object recognition
+        const frame = captureVideoFrame(videoRef.current, 0.5, 360);
         initialFrames.push(frame);
       }
       initialFramesCount++;
@@ -506,7 +514,11 @@ export default function LiveVideoScanner({
             frames: initialFrames,
           }).then((result) => {
             if (!result.matched) {
+              // Mark fast-fail FIRST so every in-flight fingerprint check exits
+              fastFailedRef.current = true;
               abortedRef.current = true;
+              fingerprintRequestSeq.current += 1; // invalidate any pending fingerprint requests
+
               if (recorderRef.current && recorderRef.current.state === "recording") {
                 recorderRef.current.stop();
               }
@@ -514,7 +526,11 @@ export default function LiveVideoScanner({
               if (phaseTimerRef.current) clearInterval(phaseTimerRef.current);
 
               setFingerprintStatus("mismatch");
-              setFingerprintPrompt(result.recommended_next_prompt || `Wrong product: Detected ${result.observed_product_type}`);
+              setFingerprintPrompt(
+                result.reason ||
+                result.recommended_next_prompt ||
+                `Wrong product: Detected "${result.observed_product_type}"`
+              );
               setFingerprintMissingViews(Array.isArray(result.missing_views) ? result.missing_views : []);
               setFingerprintConfidence(result.confidence);
               setFingerprintDebugResponse(result);
