@@ -15,6 +15,7 @@ router = APIRouter(
 def get_metrics_dashboard(db: Session = Depends(get_db)):
     """
     Returns exact KPIs for the AI Return System using ONLY real database queries.
+    Includes Nova Pro confidence gate metrics.
     """
     
     # 1. Total counts
@@ -31,12 +32,14 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
     customer_satisfaction = round((avg_fit_score / 100) * 5, 1) if avg_fit_score else 0.0
 
     # 4. Products Resold (Refurbished/Resold)
-    # Using products_resold instead of products_repaired to align with AI "Refurbish" output
     products_resold = db.query(func.sum(models.User.products_resold)).scalar() or 0
     
     # 5. Cost Savings INR
-    # Calculate exact value generated purely from items successfully diverted to resale, using original price
-    resale_returns = db.query(models.Return, models.Product).join(models.Order, models.Return.order_id == models.Order.id).join(models.Product, models.Order.product_id == models.Product.id).filter(
+    resale_returns = db.query(models.Return, models.Product).join(
+        models.Order, models.Return.order_id == models.Order.id
+    ).join(
+        models.Product, models.Order.product_id == models.Product.id
+    ).filter(
         models.Return.recommended_action.in_(["resell", "refurbish"])
     ).all()
     
@@ -46,24 +49,52 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
             cost_savings += (prod.price * 0.7)
         elif ret.recommended_action == "refurbish":
             cost_savings += (prod.price * 0.5)
-    
     cost_savings = round(cost_savings)
     
     # 6. Carbon Emissions Saved
     co2_saved = db.query(func.sum(models.User.co2_saved)).scalar() or 0.0
     
-    # 7. AI Inspection Accuracy
-    ai_processed = db.query(models.Return).filter(models.Return.condition_score.isnot(None)).count()
-    ai_accuracy = (ai_processed / total_returns * 100) if total_returns > 0 else 0.0
-    
-    # 8. Eco-Delivery Usage (Replacing "Fraud Detection")
+    # 7. AI Inspection Accuracy — proxy: % of Nova Pro assessed returns that were NOT
+    #    confidence-gated (model was confident enough to proceed as-is).
+    ai_assessed = db.query(models.Return).filter(
+        models.Return.assessment_source == "nova_pro"
+    ).count()
+    gate_overridden = db.query(models.Return).filter(
+        models.Return.gate_override == True  # noqa: E712
+    ).count()
+    nova_pro_cleared = max(0, ai_assessed - gate_overridden)
+    ai_accuracy = (nova_pro_cleared / ai_assessed * 100) if ai_assessed > 0 else 0.0
+
+    # ── Confidence gate / disposal KPIs ──────────────────────────────────
+    total_gated = gate_overridden
+
+    try:
+        total_recycle_log = db.query(models.RecycleLog).count()
+        low_confidence_count = db.query(models.RecycleLog).filter(
+            models.RecycleLog.disposed_reason == "low_confidence"
+        ).count()
+        unrepairable_count = db.query(models.RecycleLog).filter(
+            models.RecycleLog.disposed_reason == "unrepairable"
+        ).count()
+        low_confidence_pct = (
+            round(low_confidence_count / total_recycle_log * 100, 1)
+            if total_recycle_log > 0
+            else 0.0
+        )
+    except Exception:
+        # recycle_log table may not exist on very old DBs before migration
+        total_recycle_log = 0
+        low_confidence_count = 0
+        unrepairable_count = 0
+        low_confidence_pct = 0.0
+
+    # 8. Eco-Delivery Usage
     eco_orders = db.query(models.Order).filter(models.Order.delivery_type == "eco").count()
     eco_delivery_rate = (eco_orders / total_orders * 100) if total_orders > 0 else 0.0
 
-    # Static field workaround for processing time
     processing_time_mins = 3.5
 
-    # 9. Historical Trends (Last 6 Months - NO DUMMY DATA)
+    # 9. Historical Trends (Last 6 Months)
     now = datetime.now(timezone.utc)
     trends = []
     
@@ -82,31 +113,20 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
         else:
             end_date = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
             
-        # Count REAL orders placed in this month
         month_orders = db.query(models.Order).filter(
             models.Order.placed_at >= start_date,
             models.Order.placed_at < end_date
         ).count()
         
-        # If no real data exists for this historical month, it correctly outputs 0.
         if month_orders == 0:
-            trends.append({
-                "month": month_name,
-                "returnRate": 0,
-                "aiAccuracy": 0
-            })
+            trends.append({"month": month_name, "returnRate": 0, "aiAccuracy": 0})
         else:
-            # For simplicity, if we have orders, we'll map the current return rate 
-            # to that month (assuming all seeded data falls in the current month).
-            # A true production query would require a `created_at` timestamp on `Return`.
             trends.append({
                 "month": month_name,
                 "returnRate": round(actual_return_rate, 1),
-                "aiAccuracy": round(ai_accuracy, 1)
+                "aiAccuracy": round(ai_accuracy, 1),
             })
 
-    # --- New Metrics ---
-    
     # Category-wise returns
     category_returns = db.query(models.Product.category, func.count(models.Return.id)).join(
         models.Order, models.Return.order_id == models.Order.id
@@ -115,7 +135,7 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
     ).group_by(models.Product.category).all()
     category_data = [{"name": c[0], "value": c[1]} for c in category_returns if c[0]]
 
-    # Brand-wise (Seller-wise) returns
+    # Brand-wise returns
     brand_returns = db.query(models.Product.brand, func.count(models.Return.id)).join(
         models.Order, models.Return.order_id == models.Order.id
     ).join(
@@ -133,7 +153,6 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
 
     # Return reasons
     reason_returns = db.query(models.Return.defects, func.count(models.Return.id)).group_by(models.Return.defects).all()
-    # Handle potentially long comma-separated strings by taking the first primary reason if desired, or just raw
     reason_data = []
     for r in reason_returns:
         raw_reason = r[0]
@@ -141,9 +160,7 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
         if not raw_reason or raw_reason.strip() == "none":
             name = "No Defect / Disliked"
         else:
-            name = raw_reason.split(',')[0].strip().title() # take first for cleaner pie chart
-        
-        # Check if already in list to aggregate
+            name = raw_reason.split(',')[0].strip().title()
         existing = next((item for item in reason_data if item["name"] == name), None)
         if existing:
             existing["value"] += count
@@ -152,7 +169,7 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
 
     # Top returned products
     top_products = db.query(
-        models.Product.name, 
+        models.Product.name,
         models.Product.brand,
         models.Product.category,
         func.count(models.Return.id).label('return_count')
@@ -167,7 +184,7 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
     ).limit(5).all()
     
     top_products_data = [
-        {"name": p[0], "brand": p[1], "category": p[2], "returns": p[3]} 
+        {"name": p[0], "brand": p[1], "category": p[2], "returns": p[3]}
         for p in top_products
     ]
 
@@ -180,14 +197,27 @@ def get_metrics_dashboard(db: Session = Depends(get_db)):
             "processingTimeMinutes": processing_time_mins,
             "costSavingsINR": cost_savings,
             "productsResold": products_resold,
-            "carbonEmissionsSavedKg": round(co2_saved, 1)
+            "carbonEmissionsSavedKg": round(co2_saved, 1),
+        },
+        # ── Nova Pro confidence gate KPIs ──────────────────────────────
+        "confidenceGate": {
+            "totalGatedDisposed": total_gated,
+            "totalRecycleLog": total_recycle_log,
+            "lowConfidenceCount": low_confidence_count,
+            "unrepairableCount": unrepairable_count,
+            "lowConfidencePct": low_confidence_pct,
+            "novaPro": {
+                "totalAssessed": ai_assessed,
+                "gatePassed": nova_pro_cleared,
+                "gateOverridden": gate_overridden,
+            },
         },
         "historicalTrends": trends,
         "categoryReturns": category_data,
         "brandReturns": brand_data,
         "regionReturns": region_data,
         "reasonReturns": reason_data,
-        "topReturnedProducts": top_products_data
+        "topReturnedProducts": top_products_data,
     }
     
     return metrics
