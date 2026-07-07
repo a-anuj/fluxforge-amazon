@@ -7,17 +7,7 @@ export function UserProvider({ children }) {
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState([]);
   const [isAdminMode, setIsAdminMode] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("amazon_cart");
-    if (saved) setCart(JSON.parse(saved));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("amazon_cart", JSON.stringify(cart));
-  }, [cart]);
 
   useEffect(() => {
     getUsers()
@@ -64,10 +54,6 @@ export function UserProvider({ children }) {
     );
   };
 
-  const addToCart = (item) => setCart(prev => [...prev, item]);
-  const removeFromCart = (cartId) => setCart(prev => prev.filter(i => i.cartId !== cartId));
-  const isInCart = (cartId) => cart.some(i => i.cartId === cartId);
-
   return (
     <UserContext.Provider
       value={{ 
@@ -77,10 +63,6 @@ export function UserProvider({ children }) {
         refreshUser, 
         updateUserProfile, 
         loading, 
-        cart, 
-        addToCart, 
-        removeFromCart, 
-        isInCart,
         isAdminMode,
         setIsAdminMode
       }}

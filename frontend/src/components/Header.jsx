@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getUsers } from "../api/client";
 import { useUser } from "../context/UserContext";
@@ -19,6 +19,8 @@ export default function Header() {
   const [search, setSearch] = useState(searchParams.get("q") || "");
   const [showLocModal, setShowLocModal] = useState(false);
   const [locForm, setLocForm] = useState({ city: "", pincode: "" });
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -52,6 +54,27 @@ export default function Header() {
       navigate("/");
     }
   };
+
+  // Close user menu on outside click or Escape
+  useEffect(() => {
+    if (!showUserMenu) return;
+    function handleOutside(e) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false);
+      }
+    }
+    function handleKey(e) {
+      if (e.key === "Escape") setShowUserMenu(false);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [showUserMenu]);
 
   const handleProfileSwitch = async (userId) => {
     const switched = users.find((u) => u.id === userId);
@@ -141,19 +164,23 @@ export default function Header() {
 
           {/* User Switcher — always visible (employees need to switch back to customer) */}
           {!isAdminMode && (
-          <div className="group relative px-3 py-1.5 pb-2 rounded-md cursor-pointer transition-colors hover:bg-white/5">
-              <Link to="/profile" className="flex flex-col no-underline hover:no-underline">
-                <span className="text-[12px] text-white/95 flex items-center gap-1 transition-colors group-hover:text-white">
+          <div ref={userMenuRef} className="relative px-3 py-1.5 pb-2 rounded-md cursor-pointer transition-colors hover:bg-white/5">
+              <button
+                onClick={() => setShowUserMenu(o => !o)}
+                className="flex flex-col text-left w-full focus:outline-none"
+              >
+                <span className="text-[12px] text-white/95 flex items-center gap-1">
                   Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}
                   {currentUser?.role === "employee" && (
                     <span className="text-[9px] bg-[#c7511f] text-white px-1.5 py-0.5 rounded font-bold leading-none">STAFF</span>
                   )}
                 </span>
-                <span className="text-[14px] font-bold flex items-center gap-1 no-underline group-hover:no-underline">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
-              </Link>
-              
+                <span className="text-[14px] font-bold flex items-center gap-1">Accounts & Lists <span className="text-[10px] text-[#a7acb2]">▼</span></span>
+              </button>
+
               {/* Dropdown menu */}
-              <div className="hidden group-hover:block absolute right-0 top-full mt-0 w-[260px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
+              {showUserMenu && (
+              <div className="absolute right-0 top-full mt-0 w-[260px] bg-white text-amazon-text rounded-md shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-amazon-border z-50">
                 <div className="p-3 border-b border-amazon-border bg-[#f0f2f2]">
                   <p className="font-bold text-[14px]">Demo Profiles</p>
                   <p className="text-[11px] text-amazon-text-secondary">Switch user to test different roles</p>
@@ -162,10 +189,10 @@ export default function Header() {
                   {/* Customer profiles */}
                   <p className="px-4 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-amazon-text-secondary">Customers</p>
                   {users.filter(u => u.role === "customer" || (!u.role && !u.is_admin)).map(u => (
-                    <button 
-                      key={u.id} 
-                      onClick={() => handleProfileSwitch(u.id)}
-                      className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
+                    <button
+                      key={u.id}
+                      onClick={() => { handleProfileSwitch(u.id); setShowUserMenu(false); }}
+                      className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-100 active:bg-gray-100 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#f5faff] text-amazon-link' : ''}`}
                     >
                       <div>
                         <span>{u.name}</span>
@@ -177,10 +204,10 @@ export default function Header() {
                   {/* Employee profiles */}
                   <p className="px-4 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-[#c7511f]">🚚 Delivery Employees</p>
                   {users.filter(u => u.role === "employee").map(u => (
-                    <button 
-                      key={u.id} 
-                      onClick={() => handleProfileSwitch(u.id)}
-                      className={`w-full text-left px-4 py-2 text-[13px] hover:bg-orange-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#fff8f0] text-[#c7511f]' : ''}`}
+                    <button
+                      key={u.id}
+                      onClick={() => { handleProfileSwitch(u.id); setShowUserMenu(false); }}
+                      className={`w-full text-left px-4 py-2 text-[13px] hover:bg-orange-50 active:bg-orange-50 flex items-center justify-between ${currentUser?.id === u.id ? 'font-bold bg-[#fff8f0] text-[#c7511f]' : ''}`}
                     >
                       <div>
                         <span>{u.name}</span>
@@ -191,6 +218,7 @@ export default function Header() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
           )}
 

@@ -8,7 +8,6 @@ import NewReturn from "./pages/NewReturn";
 import Feed from "./pages/Feed";
 import ListingDetail from "./pages/ListingDetail";
 import Profile from "./pages/Profile";
-import Cart from "./pages/Cart";
 import NearDrop from "./pages/NearDrop";
 import Dashboard from "./pages/Dashboard";
 import EmployeeScan from "./pages/EmployeeScan";
@@ -30,7 +29,6 @@ export default function App() {
             <Route path="/listings/:id" element={<ListingDetail />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/neardrop" element={<NearDrop />} />
-            <Route path="/cart" element={<Cart />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/employee-scan" element={<EmployeeScan />} />
             <Route path="/delivery" element={<DeliveryDashboard />} />

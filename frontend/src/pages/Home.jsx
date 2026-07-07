@@ -1,7 +1,32 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getProducts, getImpactStats } from "../api/client";
 import { useUser } from "../context/UserContext";
+
+const PAGE_SIZE = 10;
+
+// ── Category meta — icon + display label ─────────────────────────────────
+const CATEGORY_META = {
+  all:         { icon: "🏪", label: "All Departments" },
+  electronics: { icon: "💻", label: "Electronics" },
+  running:     { icon: "👟", label: "Running" },
+  footwear:    { icon: "👞", label: "Footwear" },
+  backpacking: { icon: "🎒", label: "Backpacking" },
+  yoga:        { icon: "🧘", label: "Yoga" },
+  fitness:     { icon: "🏋️", label: "Fitness" },
+  clothing:    { icon: "👕", label: "Clothing" },
+  luggage:     { icon: "🧳", label: "Luggage" },
+  bags:        { icon: "👜", label: "Bags" },
+  kitchen:     { icon: "🍳", label: "Kitchen" },
+  furniture:   { icon: "🛋️", label: "Furniture" },
+  sports:      { icon: "⚽", label: "Sports" },
+};
+function catLabel(cat) {
+  return CATEGORY_META[cat]?.label ?? (cat.charAt(0).toUpperCase() + cat.slice(1));
+}
+function catIcon(cat) {
+  return CATEGORY_META[cat]?.icon ?? "📦";
+}
 
 // ── Slideshow Data ────────────────────────────────────────────────────────
 const slides = [
@@ -59,6 +84,9 @@ export default function Home() {
   const { currentUser } = useUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get("q") || "";
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [catOpen, setCatOpen] = useState(false);
+  const catRef = useRef(null);
 
   // Delivery agents have no business on the product home page
   useEffect(() => {
@@ -86,7 +114,28 @@ export default function Home() {
     return matchesCategory && matchesSearch;
   });
 
-  // ── Slideshow state & logic ────────────────────────────────────────────────
+  // Reset pagination when filter/search changes
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [categoryFilter, searchQuery]);
+
+  // Close category dropdown on outside click / Escape
+  useEffect(() => {
+    if (!catOpen) return;
+    function close(e) {
+      if (catRef.current && !catRef.current.contains(e.target)) setCatOpen(false);
+    }
+    function esc(e) { if (e.key === "Escape") setCatOpen(false); }
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [catOpen]);
+
+  const visibleProducts = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   const [slideIndex, setSlideIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -237,22 +286,78 @@ export default function Home() {
           </div>
         )}
 
-        {/* Category filters */}
-        <div className="flex items-center gap-2 py-4 border-b border-amazon-border mb-4 overflow-x-auto">
-          <span className="text-[13px] text-amazon-text-secondary font-bold flex-shrink-0">Department:</span>
-          {categories.map((cat) => (
+        {/* Category dropdown — Amazon-style */}
+        <div className="flex items-center gap-3 py-4 border-b border-amazon-border mb-4">
+          <span className="text-[13px] text-amazon-text-secondary font-bold flex-shrink-0 hidden sm:block">Department:</span>
+
+          {/* Dropdown trigger */}
+          <div ref={catRef} className="relative">
             <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`text-[13px] px-3 py-1.5 rounded-full whitespace-nowrap transition-colors border ${
-                categoryFilter === cat
-                  ? "bg-amazon-navy text-white border-amazon-navy"
-                  : "bg-white text-amazon-text border-amazon-border hover:bg-[#f0f0f0]"
-              }`}
+              onClick={() => setCatOpen(o => !o)}
+              className="flex items-center gap-2 bg-white border border-[#d5d9d9] rounded-lg px-3.5 py-2 text-[13px] text-amazon-text font-medium shadow-sm hover:bg-[#f7f8f8] active:bg-[#eaeded] transition-colors min-w-[200px] justify-between"
             >
-              {cat === "all" ? "All Departments" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+              <span className="flex items-center gap-2">
+                <span>{catIcon(categoryFilter)}</span>
+                <span>{catLabel(categoryFilter)}</span>
+              </span>
+              <svg
+                className={`w-4 h-4 text-[#565959] transition-transform duration-200 ${catOpen ? "rotate-180" : ""}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
-          ))}
+
+            {/* Dropdown panel */}
+            {catOpen && (
+              <div className="absolute left-0 top-full mt-1 w-[240px] bg-white rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.18)] border border-[#d5d9d9] z-50 overflow-hidden">
+                {/* Header */}
+                <div className="px-4 py-2.5 bg-[#f0f2f2] border-b border-[#d5d9d9]">
+                  <p className="text-[12px] font-bold text-amazon-text uppercase tracking-wide">Shop by Department</p>
+                </div>
+                <div className="py-1 max-h-[340px] overflow-y-auto">
+                  {categories.map((cat) => {
+                    const active = categoryFilter === cat;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => { setCategoryFilter(cat); setCatOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors text-left
+                          ${active
+                            ? "bg-[#fff8ef] text-amazon-orange font-bold border-l-[3px] border-amazon-orange"
+                            : "text-amazon-text hover:bg-[#f0f2f2] border-l-[3px] border-transparent"
+                          }`}
+                      >
+                        <span className="text-[16px] w-6 text-center flex-shrink-0">{catIcon(cat)}</span>
+                        <span className="flex-1">{catLabel(cat)}</span>
+                        {active && (
+                          <svg className="w-4 h-4 text-amazon-orange flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Active filter chip + count */}
+          <div className="flex items-center gap-2 ml-1">
+            {categoryFilter !== "all" && (
+              <button
+                onClick={() => setCategoryFilter("all")}
+                className="flex items-center gap-1 text-[12px] bg-[#fff3cd] text-[#856404] border border-[#ffc107]/40 px-2.5 py-1 rounded-full font-medium hover:bg-[#ffeaa7] transition-colors"
+              >
+                {catIcon(categoryFilter)} {catLabel(categoryFilter)}
+                <span className="ml-0.5 text-[11px] opacity-70">✕</span>
+              </button>
+            )}
+            <span className="text-[12px] text-amazon-text-secondary">
+              {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+            </span>
+          </div>
         </div>
 
         {/* Results header */}
@@ -262,8 +367,8 @@ export default function Home() {
               {searchQuery
                 ? `Found ${filtered.length} result${filtered.length === 1 ? "" : "s"} matching "${searchQuery}"`
                 : filtered.length === products.length
-                ? `Showing 1-${filtered.length} of ${filtered.length} results`
-                : `${filtered.length} results for "${categoryFilter}"`}
+                ? `Showing ${Math.min(visibleCount, filtered.length)} of ${filtered.length} results`
+                : `${filtered.length} results in "${catLabel(categoryFilter)}"`}
             </span>
           </p>
           <select className="text-[13px] bg-[#f0f2f2] border border-[#d5d9d9] rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#e77600]">
@@ -286,52 +391,75 @@ export default function Home() {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
-            {filtered.map((product) => (
-              <Link
-                key={product.id}
-                to={`/products/${product.id}`}
-                className="product-card flex flex-col bg-white p-6 hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-center justify-center h-[240px] mb-4">
-                  <img
-                    src={product.image_url || "https://via.placeholder.com/300"}
-                    alt={product.name}
-                    className="max-h-full max-w-full object-contain mix-blend-multiply"
-                  />
-                </div>
-                <div className="flex-1 flex flex-col">
-                  <h3 className="text-[15px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">
-                    {product.name}
-                  </h3>
-                  <p className="text-[13px] text-amazon-text-secondary mt-1">{product.brand}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="star-rating text-[13px]">★★★★☆</span>
-                    <span className="text-[12px] text-amazon-link">
-                      {Math.floor(Math.random() * 500 + 50)}
-                    </span>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
+              {visibleProducts.map((product) => (
+                <Link
+                  key={product.id}
+                  to={`/products/${product.id}`}
+                  className="product-card flex flex-col bg-white p-6 hover:shadow-lg transition-shadow"
+                >
+                  <div className="flex items-center justify-center h-[240px] mb-4">
+                    <img
+                      src={product.image_url || "https://via.placeholder.com/300"}
+                      alt={product.name}
+                      className="max-h-full max-w-full object-contain mix-blend-multiply"
+                    />
                   </div>
-                  <div className="mt-2">
-                    <span className="text-[24px] font-bold text-amazon-text">
-                      <span className="text-[14px] align-top relative top-[3px] mr-1">₹</span>
-                      {Math.floor(product.price).toLocaleString("en-IN")}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {product.size && product.size !== "One Size" && (
-                      <span className="text-[11px] bg-[#f0f2f2] text-amazon-text-secondary px-1.5 py-0.5 rounded">
-                        Size: {product.size}
+                  <div className="flex-1 flex flex-col">
+                    <h3 className="text-[15px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">
+                      {product.name}
+                    </h3>
+                    <p className="text-[13px] text-amazon-text-secondary mt-1">{product.brand}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="star-rating text-[13px]">★★★★☆</span>
+                      <span className="text-[12px] text-amazon-link">
+                        {Math.floor(Math.random() * 500 + 50)}
                       </span>
-                    )}
-                    <span className="eco-badge">Circular Ready</span>
+                    </div>
+                    <div className="mt-2">
+                      <span className="text-[24px] font-bold text-amazon-text">
+                        <span className="text-[14px] align-top relative top-[3px] mr-1">₹</span>
+                        {Math.floor(product.price).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {product.size && product.size !== "One Size" && (
+                        <span className="text-[11px] bg-[#f0f2f2] text-amazon-text-secondary px-1.5 py-0.5 rounded">
+                          Size: {product.size}
+                        </span>
+                      )}
+                      <span className="eco-badge">Circular Ready</span>
+                    </div>
+                    <p className="text-[12px] text-amazon-text-secondary mt-1.5">
+                      FREE delivery by <b className="text-amazon-text">Tomorrow</b>
+                    </p>
                   </div>
-                  <p className="text-[12px] text-amazon-text-secondary mt-1.5">
-                    FREE delivery by <b className="text-amazon-text">Tomorrow</b>
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
+                </Link>
+              ))}
+            </div>
+
+            {/* Load More */}
+            {hasMore && (
+              <div className="flex flex-col items-center gap-2 mt-8 mb-4">
+                <button
+                  onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
+                  className="flex items-center gap-2 bg-white border border-[#d5d9d9] hover:bg-[#f7f8f8] active:bg-[#eaeded] text-amazon-text text-[14px] font-medium px-8 py-3 rounded-lg shadow-sm transition-colors"
+                >
+                  <svg className="w-4 h-4 text-[#565959]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                  See more results
+                  <span className="text-[12px] text-amazon-text-secondary ml-1">
+                    ({filtered.length - visibleCount} remaining)
+                  </span>
+                </button>
+                <p className="text-[11px] text-amazon-text-secondary">
+                  Showing {visibleCount} of {filtered.length} products
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

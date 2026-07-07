@@ -50,37 +50,63 @@ function ScoreRow({ label, score, sublabel, delay = 0 }) {
   );
 }
 
-/* Clickable credit badge with attached info popup */
+/* Clickable credit badge with attached info popup — mobile-safe */
 function CreditInfoBadge({ label, color, title, reason }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+  const btnRef = useRef(null);
+  const [popupStyle, setPopupStyle] = useState({});
+
+  // Position the popup so it never clips outside the viewport on mobile
+  const updatePosition = () => {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const popupW = Math.min(256, vw - 24); // 240px capped, 12px side margins
+    let left = rect.left;
+    // Push left if it would overflow the right edge
+    if (left + popupW > vw - 12) left = vw - popupW - 12;
+    // Never go negative
+    if (left < 12) left = 12;
+    setPopupStyle({ position: "fixed", top: rect.bottom + 8, left, width: popupW });
+  };
 
   useEffect(() => {
     if (!open) return;
-    function handle(e) {
+    updatePosition();
+    function close(e) {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
   }, [open]);
 
   return (
     <div className="relative inline-block mt-1" ref={ref}>
       <button
+        ref={btnRef}
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1 text-[12px] font-bold hover:underline focus:outline-none"
+        className="flex items-center gap-1 text-[12px] font-bold focus:outline-none"
         style={{ color }}
       >
         {label}
         <span className="text-[10px] font-normal opacity-60 border rounded-full px-1 ml-0.5" style={{ borderColor: color }}>
-          why?
+          ?
         </span>
       </button>
 
       {open && (
         <div
-          className="absolute z-50 left-0 top-full mt-1.5 w-[240px] bg-white rounded-xl shadow-xl border overflow-hidden"
-          style={{ borderColor: color, animation: "fadeSlideDown 0.15s ease" }}
+          className="z-[9999] bg-white rounded-xl shadow-xl border overflow-hidden"
+          style={{ ...popupStyle, borderColor: color, animation: "fadeSlideDown 0.15s ease" }}
         >
           <style>{`@keyframes fadeSlideDown { from { opacity:0; transform:translateY(-4px) } to { opacity:1; transform:translateY(0) } }`}</style>
           <div className="px-3 py-2 text-white text-[12px] font-bold" style={{ backgroundColor: color }}>
@@ -89,7 +115,7 @@ function CreditInfoBadge({ label, color, title, reason }) {
           <p className="px-3 py-2.5 text-[12px] text-[#333] leading-relaxed">{reason}</p>
           <button
             onClick={() => setOpen(false)}
-            className="w-full text-center text-[11px] py-1.5 border-t text-[#888] hover:text-[#444] transition-colors"
+            className="w-full text-center text-[11px] py-1.5 border-t text-[#888] hover:text-[#444] active:text-[#444] transition-colors"
             style={{ borderColor: "#e8e8e8" }}
           >
             Got it
@@ -103,7 +129,7 @@ function CreditInfoBadge({ label, color, title, reason }) {
 
 export default function ProductDetail() {
   const { id } = useParams();
-  const { currentUser, refreshUser, cart, addToCart, removeFromCart, isInCart } = useUser();
+  const { currentUser, refreshUser } = useUser();
   const [product, setProduct] = useState(null);
   const [alternatives, setAlternatives] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -298,7 +324,17 @@ export default function ProductDetail() {
                         <p className="text-[12px] font-bold text-amazon-text">{opt.label} <span className="font-normal text-amazon-text-secondary">({opt.days} day{opt.days > 1 ? "s" : ""})</span></p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="text-[10px] text-amazon-text-secondary">{opt.co2_kg > 0 ? `${opt.co2_kg} kg CO₂` : "Zero carbon"}</span>
-                          {opt.green_credits > 0 && <span className="text-[10px] font-bold text-[#067d62]">+{opt.green_credits} credits</span>}
+                          {opt.green_credits > 0 && (
+                            <>
+                              <span className="text-[10px] font-bold text-[#067d62]">+{opt.green_credits} credits</span>
+                              <CreditInfoBadge
+                                label=""
+                                color="#067d62"
+                                title={`${opt.label} Delivery Credits`}
+                                reason={`Choosing ${opt.label} delivery earns you +${opt.green_credits} Green Credits instantly when you place the order. Lower-carbon delivery options earn more credits.`}
+                              />
+                            </>
+                          )}
                         </div>
                       </div>
                     </label>
@@ -319,6 +355,7 @@ export default function ProductDetail() {
             {/* 🌱 Green Loyalty Credits Incentive */}
             {product && (() => {
               const pendingCredits = computePendingCredits(product.category);
+              const returnDays = product.return_period_days ?? 7;
               return (
                 <div className="border border-[#a5d6a7] rounded-lg p-3 mb-3 bg-gradient-to-br from-[#f1f8e9] to-[#e8f5e9]">
                   <div className="flex items-center justify-between mb-1.5">
@@ -328,14 +365,20 @@ export default function ProductDetail() {
                     <span className="text-[18px] font-bold text-[#2e7d32]">{pendingCredits}</span>
                   </div>
                   <p className="text-[11px] text-[#555] leading-relaxed">
-                    Buy this product and keep it past the <strong>7-day return window</strong> to
+                    Buy this product and keep it past the <strong>{returnDays}-day return window</strong> to
                     earn <strong className="text-[#2e7d32]">{pendingCredits} Green Credits</strong> automatically.
                   </p>
                   <div className="mt-2 flex items-center gap-1.5">
                     <div className="flex-1 bg-[#c8e6c9] rounded-full h-1.5 overflow-hidden">
                       <div className="bg-gradient-to-r from-[#66bb6a] to-[#2e7d32] h-1.5 rounded-full" style={{ width: "0%", transition: "width 1s" }} />
                     </div>
-                    <span className="text-[10px] text-[#777]">Unlocks after day 7</span>
+                    <span className="text-[10px] text-[#777]">Unlocks after day {returnDays}</span>
+                    <CreditInfoBadge
+                      label=""
+                      color="#2e7d32"
+                      title="No-Return Loyalty Credits"
+                      reason={`If you keep this product without returning it for ${returnDays} days, ${pendingCredits} Green Credits will be added to your wallet automatically. Returning the item forfeits these credits.`}
+                    />
                   </div>
                 </div>
               );
@@ -366,15 +409,19 @@ export default function ProductDetail() {
                   />
                 )}
 
-                <Link to="/orders" className="text-[13px] text-amazon-link mt-2 inline-block hover:underline">View your orders ›</Link>
+                <Link
+                  to="/orders"
+                  className="mt-3 flex items-center justify-center gap-1.5 w-full py-2 px-4 rounded-lg text-[13px] font-bold text-white shadow-sm active:scale-[0.98] transition-transform"
+                  style={{ backgroundColor: "#e77600", boxShadow: "0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15)" }}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  View your orders
+                </Link>
               </div>
             ) : (
               <div className="space-y-2">
-                {product && isInCart(`product_${product.id}`) ? (
-                  <button onClick={() => removeFromCart(`product_${product.id}`)} disabled={ordering} className="w-full py-2 text-[13px] border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 transition-colors bg-[#f0f2f2] text-amazon-text border-amazon-border hover:bg-[#e3e6e6]">Remove from Cart</button>
-                ) : (
-                  <button onClick={() => addToCart({ ...product, cartId: `product_${product.id}`, cartType: 'product' })} disabled={ordering} className="w-full btn-amazon-primary py-2 text-[13px] disabled:opacity-50">Add to Cart</button>
-                )}
                 <button onClick={handleOrder} disabled={ordering} className="w-full btn-amazon-orange py-2 text-[13px] disabled:opacity-50">{ordering ? "Placing order..." : "Buy Now"}</button>
                 <button onClick={() => handleAddToWishlist()} className="w-full py-2 text-[12px] border border-[#067d62] text-[#067d62] rounded-full hover:bg-[#f0f9f4] transition-colors mt-1">
                   📍 Add to NearDrop Wishlist
