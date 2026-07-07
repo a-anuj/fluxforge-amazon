@@ -134,6 +134,7 @@ frontend/src/
 
 1. **Purchase** — customer places an `Order`; `Order.status` starts as `"placed"`, shown as "Order Received" in the UI.
 2. **Return** — customer clicks "Return or Replace" on the Orders page. `POST /api/returns/` runs immediately: sets `Return.status = "completed"` and `Order.status = "returned"`, awards Green Credits, forfeits any pending no-return loyalty credits. No scan, no employee action required.
+3. **Damaged Product Routing** — if the AI assesses a product as damaged, we explicitly factor in a logistics cost + repair cost (if the combined cost exceeds 40%, we attempt to donate it provided it's still usable; otherwise it gets recycled).
 
 **Video-scan feature is removed and pending a from-scratch rebuild.** The baseline-scan endpoints (`/api/baseline/`), the pickup-scan endpoint (`POST /api/returns/{id}/pickup-scan`), the employee scan UI (`EmployeeScan.jsx`, `DeliveryDashboard.jsx`), and the return-phase live scanner (`NewReturn.jsx`, `LiveVideoScanner`) are **preserved in the codebase but dormant** — they do not gate the current flow. Do not remove them; they are the foundation for the rebuild.
 
