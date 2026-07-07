@@ -151,6 +151,25 @@ Backend tests use `backend/tests/conftest.py`, which sets up an isolated in-memo
 
 Write tests against the `client` fixture so requests run through the app with the in-memory DB. Run the suite with `pytest` from `backend/`.
 
+## Return status machine
+
+The valid `Order.status` values and their meaning:
+
+| Status | Set by | Meaning |
+|---|---|---|
+| `"placed"` | `create_order` | Order created, shown as "Order Received" |
+| `"returned"` | `create_return` | Customer triggered return; final state |
+
+`"delivered"`, `"return_pending"`, and `"return_verified"` are legacy values from the old video-scan gating flow. They are no longer set by any active code path but may appear in existing database rows. Do not introduce new code that sets or branches on these statuses until the video-scan rebuild is complete.
+
+The valid `Return.status` values:
+
+| Status | Set by | Meaning |
+|---|---|---|
+| `"completed"` | `create_return` | Return finalized immediately |
+
+`"pending_pickup"` is a legacy status from the old pickup-scan step. It is no longer set by active code; the `pickup_scan` endpoint still exists but is dormant until the rebuild.
+
 ## Known characteristics (backend)
 
 The following are **known hackathon characteristics** of the FluxForge codebase. They are documented here for accuracy. Do **not** "fix" them in application code — treat them as existing, intentional behavior:
@@ -159,3 +178,19 @@ The following are **known hackathon characteristics** of the FluxForge codebase.
 - **Role_Field_Auth** — authorization is decided by the `User.role` string field (`"customer" | "employee" | "admin"`, default `"customer"`). There is no password, token, or session-based authentication; callers pass identifiers explicitly.
 - **Duplicated `ai_condition_summary` column** — the `CommunityListing` model in `backend/app/models.py` declares `ai_condition_summary = Column(Text, nullable=True)` twice. This is a known duplicate, not a defect to remove.
 - **Startup `ALTER TABLE` migrations** — schema changes to existing tables are applied at startup through `_safe_add_column` in `main.py` (no migration tool). Add new columns there.
+- **Video-scan code is preserved but dormant** — `backend/app/routers/baseline.py` (baseline scan endpoints), `backend/app/services/ai_assessment.py` (condition assessment stub), and the `pickup_scan` endpoint in `returns.py` are all still in the codebase. None of them gate the current return flow. They are kept intact as the foundation for a future video-analysis rebuild. Do not remove them.
+- **AI assessment stub** — `backend/app/services/ai_assessment.py` `assess_condition()` returns mock data. It is called as a fallback inside `create_return` when no `recommended_action` is passed. It is the single integration point for a future real vision model (e.g. AWS Bedrock / Claude Vision).
+
+## Documentation maintenance rule
+
+**Every time you change a feature, update the docs.** This is not optional — stale docs silently break other team members and agents working from different IDEs.
+
+When you add, change, or remove any feature, endpoint, model field, status value, or user-facing behaviour, you must update the following before closing the task:
+
+1. **`.kiro/steering/product.md`** — if the user-facing flow, roles, or domain concepts changed.
+2. **`.kiro/steering/backend.md`** — if an endpoint, status machine, model, service, or known characteristic changed.
+3. **`.kiro/steering/frontend.md`** — if a page, route, API client function, or UI convention changed.
+4. **`.kiro/steering/tech.md`** — if a dependency, command, or environment variable changed.
+5. **`AGENTS.md`** (repo root) — always sync the "Gotchas / known characteristics" and any flow summaries that changed. This file is the cross-tool source of truth read by Cursor, Claude Code, Copilot, and other agents.
+
+The steering files are the authoritative detail; `AGENTS.md` is the summary. Keep both accurate and consistent with each other.

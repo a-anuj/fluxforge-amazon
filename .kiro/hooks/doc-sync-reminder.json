@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Doc Sync Reminder",
+      "trigger": "PostTaskExec",
+      "description": "After every spec task completes, reminds the agent to keep AGENTS.md and the .kiro/steering/ docs in sync with any feature changes made during the task.",
+      "action": {
+        "type": "agent",
+        "prompt": "## Documentation sync check — required before this task is fully done\n\nYou just completed a task. Before moving on, verify the docs are accurate:\n\n1. Did any **user-facing flow, role, or domain concept** change?\n   → Update `.kiro/steering/product.md`\n\n2. Did any **endpoint, status value, model field, service, or known characteristic** change?\n   → Update `.kiro/steering/backend.md`\n\n3. Did any **page, route, API client function, or UI convention** change?\n   → Update `.kiro/steering/frontend.md`\n\n4. Did any **dependency, CLI command, or environment variable** change?\n   → Update `.kiro/steering/tech.md`\n\n5. Did **any of the above** change?\n   → Update `AGENTS.md` — sync the \"Return lifecycle\", \"Gotchas / known characteristics\", and any flow summaries that reflect the new state. This file is the cross-tool source of truth read by Cursor, Claude Code, Copilot, and other agents.\n\nIf none of those things changed (e.g. the task was a pure bug fix with no behavioural change), explicitly confirm that no doc update is needed and state why.\n\nDo not report the task as complete until you have either updated the relevant docs or confirmed no update is needed."
+      }
+    }
+  ]
+}

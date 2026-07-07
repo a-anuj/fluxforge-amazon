@@ -18,11 +18,16 @@ There are three user roles, backed by the `User.role` field in `backend/app/mode
 
 The end-to-end return journey:
 
-1. **Purchase** — a customer places an `Order`.
-2. **Delivery baseline scan** — at delivery, an employee captures multi-angle images of the product. These are stored on the `Order` in the `baseline_scan_*` fields (for example `baseline_scan_urls`, `baseline_scan_at`, `baseline_scan_employee_id`). This baseline is later compared against return photos.
-3. **Return** — the customer initiates a return, recorded as a `Return` model tied to the order.
-4. **AI assessment** — the returned product's condition is evaluated in `backend/app/services/ai_assessment.py` via `assess_condition()`, producing a condition score, defects, remaining-life percentage, and a recommended action. **Note:** this module is currently a stub that returns mock data — it is the single integration point for a future real vision model (e.g. AWS Bedrock / Claude Vision).
-5. **Outcome** — based on the assessment, the item is routed to a resell or refurbish outcome (recommended actions include `resell`, `refurbish`, `exchange`, `donate`, `recycle`).
+1. **Purchase** — a customer places an `Order`. The order status starts as `"placed"` and is shown to the customer as "Order Received".
+2. **Return** — the customer clicks "Return or Replace" directly on the Orders page. This calls `POST /api/returns/` and immediately sets `Order.status = "returned"` and `Return.status = "completed"`. No delivery scan or employee action is required.
+3. **Outcome** — the `create_return` endpoint assigns a disposition action (`resell`, `refurbish`, `recycle`, `donate`, etc.) either from the caller or via the `assess_condition()` stub fallback, awards Green Credits, and forfeits any pending no-return loyalty credits.
+
+**Video scan feature — removed, pending rebuild.**  
+The pre-packaging baseline scan (employee captures multi-angle delivery images) and the return-phase live video assessment (customer scans returned item) have been **removed from the active return flow**. The underlying code is preserved — `backend/app/routers/baseline.py`, `backend/app/services/ai_assessment.py`, `frontend/src/pages/EmployeeScan.jsx`, `frontend/src/pages/NewReturn.jsx`, and `frontend/src/components/LiveVideoScanner` — but none of it is gating returns. When this feature is rebuilt from scratch, the gate (`order.status == "delivered"` check in `create_return`) and the pickup-scan finalization step will be reintroduced.
+
+The `baseline_scan_*` fields still exist on the `Order` model (`baseline_scan_urls`, `baseline_scan_at`, `baseline_scan_employee_id`, `baseline_frame_urls`) and the baseline/employee endpoints are still mounted, but they are not part of the customer-facing return journey until the rebuild is complete.
+
+**AI assessment note:** `backend/app/services/ai_assessment.py` (`assess_condition()`) returns mock data. It is the single integration point for a future real vision model (e.g. AWS Bedrock / Claude Vision).
 
 ## Green Credits earn-and-redeem flow
 
