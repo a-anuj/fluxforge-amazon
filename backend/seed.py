@@ -19,12 +19,17 @@ from app.services.credit_engine import get_level
 
 
 def seed():
-    # Drop all tables with CASCADE to handle FK dependencies from external tables.
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA public CASCADE"))
-        conn.execute(text("CREATE SCHEMA public"))
-        conn.commit()
+    # Drop all tables, handling both PostgreSQL and SQLite gracefully.
+    from sqlalchemy import text, inspect as sa_inspect
+    db_url = str(engine.url)
+    if db_url.startswith("postgresql"):
+        with engine.connect() as conn:
+            conn.execute(text("DROP SCHEMA public CASCADE"))
+            conn.execute(text("CREATE SCHEMA public"))
+            conn.commit()
+    else:
+        # SQLite: drop every table in reverse dependency order
+        Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
     db = SessionLocal()
@@ -284,6 +289,205 @@ def seed():
             repair_cost_estimate=None, avg_lifespan_months=12,
             return_period_days=15, has_no_return_policy=False,
         ),
+        # ── Additional demo products (AI damage-scan capable) ────────
+        Product(
+            name="Apple iPhone 14", category="electronics", brand="Apple",
+            size="One Size", price=69999,
+            description="6.1\" Super Retina XDR display, A15 Bionic chip, dual 12MP cameras, Crash Detection. A premium device showing well on camera for AI condition scans.",
+            image_url="https://images.unsplash.com/photo-1678685888221-cda773a3dcdb?w=400",
+            co2_impact=70.0, ewaste_impact=1.5, water_impact=520.0,
+            repair_cost_estimate=4500, avg_lifespan_months=48,
+            return_period_days=10, has_no_return_policy=False,
+        ),
+        Product(
+            name="Samsung Galaxy S23", category="electronics", brand="Samsung",
+            size="One Size", price=54999,
+            description="6.1\" Dynamic AMOLED 2X, Snapdragon 8 Gen 2, 50MP triple camera system. Compact flagship with a distinctive glass back.",
+            image_url="https://images.unsplash.com/photo-1678685888221-cda773a3dcdb?w=400",
+            co2_impact=65.0, ewaste_impact=1.3, water_impact=480.0,
+            repair_cost_estimate=3800, avg_lifespan_months=42,
+            return_period_days=10, has_no_return_policy=False,
+        ),
+        Product(
+            name="Apple MacBook Air M2", category="electronics", brand="Apple",
+            size="One Size", price=114900,
+            description="13.6\" Liquid Retina display, M2 chip, fanless design, 18-hour battery. Perfect for demonstrating screen crack and chassis dent detection.",
+            image_url="https://images.unsplash.com/photo-1611186871525-fd7b55c20fa0?w=400",
+            co2_impact=320.0, ewaste_impact=2.5, water_impact=900.0,
+            repair_cost_estimate=18000, avg_lifespan_months=60,
+            return_period_days=15, has_no_return_policy=False,
+        ),
+        Product(
+            name="Sony WH-1000XM5 Headphones", category="electronics", brand="Sony",
+            size="One Size", price=26990,
+            description="Industry-leading noise cancelling headphones with 30-hour battery, multipoint connection, and auto-pause. Ideal for demonstrating hinge, earcup, and cable damage detection.",
+            image_url="https://images.unsplash.com/photo-1583394838336-acd977736f90?w=400",
+            co2_impact=40.0, ewaste_impact=0.8, water_impact=280.0,
+            repair_cost_estimate=2200, avg_lifespan_months=36,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Nikon D3500 DSLR Camera", category="electronics", brand="Nikon",
+            size="One Size", price=34995,
+            description="24.2MP APS-C sensor, 1500-shot battery, Beginner-friendly with Guide Mode. Shows scratches on lens, body scuffs, and LCD damage well for AI scanning.",
+            image_url="https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400",
+            co2_impact=85.0, ewaste_impact=1.8, water_impact=600.0,
+            repair_cost_estimate=5500, avg_lifespan_months=60,
+            return_period_days=10, has_no_return_policy=False,
+        ),
+        Product(
+            name="JBL Charge 5 Bluetooth Speaker", category="electronics", brand="JBL",
+            size="One Size", price=11999,
+            description="Portable waterproof speaker with 20H playtime, IP67 rating, and power bank function. Cylindrical form makes scratches and dents easy to detect.",
+            image_url="https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=400",
+            co2_impact=28.0, ewaste_impact=0.7, water_impact=190.0,
+            repair_cost_estimate=800, avg_lifespan_months=30,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Logitech MX Master 3 Mouse", category="electronics", brand="Logitech",
+            size="One Size", price=8995,
+            description="Advanced wireless mouse with MagSpeed scroll wheel, ergonomic design, and 70-day battery. Scroll wheel wear and button damage visible clearly.",
+            image_url="https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400",
+            co2_impact=18.0, ewaste_impact=0.4, water_impact=130.0,
+            repair_cost_estimate=600, avg_lifespan_months=36,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Nike Air Force 1 '07", category="footwear", brand="Nike",
+            size="9", price=7495,
+            description="Classic low-top sneaker with leather upper and cushioned Air sole unit. White-on-white colorway shows scuff and sole yellowing clearly for damage scans.",
+            image_url="https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=400",
+            co2_impact=14.0, ewaste_impact=0.2, water_impact=95.0,
+            repair_cost_estimate=400, avg_lifespan_months=24,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Adidas Stan Smith Sneakers", category="footwear", brand="Adidas",
+            size="8", price=6999,
+            description="Iconic all-white leather tennis shoe with 3-stripe perforations. Pristine white surface is ideal for demonstrating AI stain and crease detection.",
+            image_url="https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400",
+            co2_impact=12.0, ewaste_impact=0.2, water_impact=85.0,
+            repair_cost_estimate=350, avg_lifespan_months=24,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Woodland High-Ankle Boots", category="footwear", brand="Woodland",
+            size="9", price=4995,
+            description="Full-grain leather hiking boots with water-resistant coating and anti-slip outsole. Leather surface shows cuts, peeling, and sole separation clearly.",
+            image_url="https://images.unsplash.com/photo-1520639888713-7851133b1ed0?w=400",
+            co2_impact=18.0, ewaste_impact=0.2, water_impact=110.0,
+            repair_cost_estimate=550, avg_lifespan_months=36,
+            return_period_days=15, has_no_return_policy=False,
+        ),
+        Product(
+            name="Levi's 511 Slim Fit Jeans", category="clothing", brand="Levi's",
+            size="32x30", price=3499,
+            description="Classic slim-fit jeans in mid-wash indigo denim. 99% cotton. Fabric damage, tears, and fade patterns are highly visible for AI textile assessment.",
+            image_url="https://images.unsplash.com/photo-1542272604-787c3835535d?w=400",
+            co2_impact=9.0, ewaste_impact=0.0, water_impact=130.0,
+            repair_cost_estimate=150, avg_lifespan_months=24,
+            return_period_days=15, has_no_return_policy=False,
+        ),
+        Product(
+            name="Allen Solly Formal Shirt", category="clothing", brand="Allen Solly",
+            size="L", price=1999,
+            description="Wrinkle-resistant cotton-blend formal shirt in solid white. Collar staining, button damage, and fabric tears are easy to detect against the white fabric.",
+            image_url="https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400",
+            co2_impact=5.5, ewaste_impact=0.0, water_impact=65.0,
+            repair_cost_estimate=100, avg_lifespan_months=18,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="American Tourister 68cm Spinner Trolley", category="luggage", brand="American Tourister",
+            size="68cm / Medium", price=5299,
+            description="Hard-shell polycarbonate trolley bag with TSA lock, 4 360° spinner wheels. Shell cracks and wheel damage are prominent in AI damage scanning.",
+            image_url="https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400",
+            co2_impact=22.0, ewaste_impact=0.3, water_impact=140.0,
+            repair_cost_estimate=700, avg_lifespan_months=60,
+            return_period_days=15, has_no_return_policy=False,
+        ),
+        Product(
+            name="Samsonite Laptop Backpack 15.6\"", category="bags", brand="Samsonite",
+            size="One Size", price=3499,
+            description="Water-resistant polyester backpack with dedicated laptop sleeve, padded back panel, and USB port. Zipper damage, strap fraying, and fabric wear are easy to spot.",
+            image_url="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400",
+            co2_impact=10.0, ewaste_impact=0.1, water_impact=70.0,
+            repair_cost_estimate=250, avg_lifespan_months=36,
+            return_period_days=15, has_no_return_policy=False,
+        ),
+        Product(
+            name="Milton Thermosteel Flip Lid Flask 1L", category="kitchen", brand="Milton",
+            size="1 Litre", price=1299,
+            description="Stainless steel insulated bottle keeping beverages hot/cold for 24 hours. Dents, scratches on the steel body, and lid damage are clearly visible.",
+            image_url="https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400",
+            co2_impact=6.0, ewaste_impact=0.1, water_impact=50.0,
+            repair_cost_estimate=None, avg_lifespan_months=60,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Prestige Induction Cooktop 2000W", category="kitchen", brand="Prestige",
+            size="One Size", price=2499,
+            description="Feather-touch induction cooktop with 8 pre-set cooking menus and auto-shutoff. Glass top cracks and control panel damage are ideal for AI assessment demos.",
+            image_url="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400",
+            co2_impact=30.0, ewaste_impact=1.0, water_impact=200.0,
+            repair_cost_estimate=800, avg_lifespan_months=60,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Philips Air Fryer HD9200", category="kitchen", brand="Philips",
+            size="One Size", price=6995,
+            description="3.2L Rapid Air technology air fryer with 1400W, non-stick basket, and 7 pre-set programs. White plastic body shows discolouration and cracks well.",
+            image_url="https://images.unsplash.com/photo-1585515320310-259814833e62?w=400",
+            co2_impact=45.0, ewaste_impact=1.2, water_impact=300.0,
+            repair_cost_estimate=1200, avg_lifespan_months=48,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Godrej Interio Study Chair", category="furniture", brand="Godrej",
+            size="One Size", price=8999,
+            description="Ergonomic mesh office/study chair with lumbar support, adjustable armrests and seat height. Fabric tears, wheel damage, and frame scratches visible for scanning.",
+            image_url="https://images.unsplash.com/photo-1580480055273-228ff5388ef8?w=400",
+            co2_impact=50.0, ewaste_impact=0.5, water_impact=200.0,
+            repair_cost_estimate=1500, avg_lifespan_months=84,
+            return_period_days=15, has_no_return_policy=False,
+        ),
+        Product(
+            name="Ikea LACK Side Table", category="furniture", brand="Ikea",
+            size="55x55 cm", price=1999,
+            description="Minimalist white side table with hollow legs. Simple flat surface makes surface scratch, chip, and stain detection straightforward for AI models.",
+            image_url="https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400",
+            co2_impact=15.0, ewaste_impact=0.1, water_impact=80.0,
+            repair_cost_estimate=200, avg_lifespan_months=60,
+            return_period_days=30, has_no_return_policy=False,
+        ),
+        Product(
+            name="Cello Opalware Dinner Set (18 pcs)", category="kitchen", brand="Cello",
+            size="18 Pieces", price=1799,
+            description="Microwave-safe opalware dinner set — 6 quarter plates, 6 full plates, 6 veg bowls. Chips and cracks on the bright white surface are highly detectable by AI.",
+            image_url="https://images.unsplash.com/photo-1584568694244-14fbdf83bd30?w=400",
+            co2_impact=8.0, ewaste_impact=0.3, water_impact=60.0,
+            repair_cost_estimate=None, avg_lifespan_months=48,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Mi Smart Band 7", category="electronics", brand="Xiaomi",
+            size="One Size", price=3499,
+            description="1.62\" AMOLED display fitness band with 110+ sport modes, blood oxygen, heart rate, and 14-day battery. Band cracking and screen damage are easy to detect.",
+            image_url="https://images.unsplash.com/photo-1575311373937-040b8e1fd5b6?w=400",
+            co2_impact=22.0, ewaste_impact=0.4, water_impact=160.0,
+            repair_cost_estimate=400, avg_lifespan_months=24,
+            return_period_days=7, has_no_return_policy=False,
+        ),
+        Product(
+            name="Casio G-Shock GA-2100", category="electronics", brand="Casio",
+            size="One Size", price=7995,
+            description="CasiOak octagonal carbon-core guard. 200m water resistance, shock resistant, world time in 48 cities. Bezel scratches and strap damage visible for returns scanning.",
+            image_url="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400",
+            co2_impact=20.0, ewaste_impact=0.3, water_impact=120.0,
+            repair_cost_estimate=600, avg_lifespan_months=60,
+            return_period_days=7, has_no_return_policy=False,
+        ),
     ]
     db.add_all(products)
     db.commit()
@@ -447,7 +651,7 @@ def seed():
     db.close()
     print("[OK] Database seeded successfully!")
     print(f"   * {len(users)} users (customers + 2 employees + admin)")
-    print(f"   * {len(products)} products with return period policies (some no-return)")
+    print(f"   * {len(products)} products with return period policies (some no-return) — includes AI demo items")
     print(f"   * {len(orders_data)} orders, 2 returns")
     print(f"   * {len(transactions)} credit transactions")
     print(f"   * {len(challenges)} green challenges")
