@@ -470,10 +470,10 @@ export default function Home() {
 
         {/* Product Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="bg-white p-6 h-[400px] animate-pulse">
-                <div className="bg-[#f5f5f5] h-[240px] mb-4" />
+              <div key={i} className="bg-white p-3 sm:p-6 h-[320px] sm:h-[400px] animate-pulse">
+                <div className="bg-[#f5f5f5] h-[180px] sm:h-[240px] mb-4" />
                 <div className="bg-[#f5f5f5] h-4 mb-2 w-3/4" />
                 <div className="bg-[#f5f5f5] h-5 w-1/3" />
               </div>
@@ -481,14 +481,14 @@ export default function Home() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[1px] bg-amazon-border">
               {visibleProducts.map((product) => (
                 <Link
                   key={product.id}
                   to={`/products/${product.id}`}
-                  className="product-card flex flex-col bg-white p-6 hover:shadow-lg transition-shadow"
+                  className="product-card flex flex-col bg-white p-3 sm:p-6 hover:shadow-lg transition-shadow"
                 >
-                  <div className="flex items-center justify-center h-[240px] mb-4">
+                  <div className="flex items-center justify-center h-[160px] sm:h-[240px] mb-3 sm:mb-4">
                     <img
                       src={product.image_url || "https://via.placeholder.com/300"}
                       alt={product.name}
@@ -496,31 +496,31 @@ export default function Home() {
                     />
                   </div>
                   <div className="flex-1 flex flex-col">
-                    <h3 className="text-[15px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">
+                    <h3 className="text-[13px] sm:text-[15px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">
                       {product.name}
                     </h3>
-                    <p className="text-[13px] text-amazon-text-secondary mt-1">{product.brand}</p>
+                    <p className="text-[11px] sm:text-[13px] text-amazon-text-secondary mt-1">{product.brand}</p>
                     <div className="flex items-center gap-1 mt-1">
-                      <span className="star-rating text-[13px]">★★★★☆</span>
-                      <span className="text-[12px] text-amazon-link">
+                      <span className="star-rating text-[11px] sm:text-[13px]">★★★★☆</span>
+                      <span className="text-[11px] sm:text-[12px] text-amazon-link">
                         {Math.floor(Math.random() * 500 + 50)}
                       </span>
                     </div>
-                    <div className="mt-2">
-                      <span className="text-[24px] font-bold text-amazon-text">
-                        <span className="text-[14px] align-top relative top-[3px] mr-1">₹</span>
+                    <div className="mt-1.5 sm:mt-2">
+                      <span className="text-[18px] sm:text-[24px] font-bold text-amazon-text">
+                        <span className="text-[11px] sm:text-[14px] align-top relative top-[3px] mr-0.5">₹</span>
                         {Math.floor(product.price).toLocaleString("en-IN")}
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-2 mt-3">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">
                       {product.size && product.size !== "One Size" && (
-                        <span className="text-[11px] bg-[#f0f2f2] text-amazon-text-secondary px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] sm:text-[11px] bg-[#f0f2f2] text-amazon-text-secondary px-1.5 py-0.5 rounded">
                           Size: {product.size}
                         </span>
                       )}
                       <span className="eco-badge">Circular Ready</span>
                     </div>
-                    <p className="text-[12px] text-amazon-text-secondary mt-1.5">
+                    <p className="text-[10px] sm:text-[12px] text-amazon-text-secondary mt-1.5">
                       FREE delivery by <b className="text-amazon-text">Tomorrow</b>
                     </p>
                   </div>

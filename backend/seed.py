@@ -207,16 +207,6 @@ def seed():
             return_period_days=7, has_no_return_policy=False,
         ),
         Product(
-            name="Reebok Flexagon Energy TR 4", category="fitness", brand="Reebok",
-            size="6", price=3299,
-            description="Versatile training shoe with Flexweave upper and responsive cushioning.",
-            image_url=imgs("mens-shoes/nike-baseball-cleats", 4)[0],
-            image_urls=imgs("mens-shoes/nike-baseball-cleats", 4)[1],
-            co2_impact=11.0, ewaste_impact=0.3, water_impact=75.0,
-            repair_cost_estimate=280, avg_lifespan_months=18,
-            return_period_days=30, has_no_return_policy=False,
-        ),
-        Product(
             name="Wildcraft Hiking Daypack 20L", category="backpacking", brand="Wildcraft",
             size="One Size", price=1599,
             description="Compact daypack for short hikes. Water-resistant fabric with hydration sleeve.",
@@ -225,16 +215,6 @@ def seed():
             co2_impact=6.0, ewaste_impact=0.15, water_impact=45.0,
             repair_cost_estimate=120, avg_lifespan_months=30,
             return_period_days=0, has_no_return_policy=True,
-        ),
-        Product(
-            name="boAt Rockerz 450 Pro Headphones", category="electronics", brand="boAt",
-            size="One Size", price=1799,
-            description="Over-ear wireless headphones with 70H battery, 40mm drivers, and dual EQ modes.",
-            image_url=imgs("mobile-accessories/apple-airpods-max-silver", 3)[0],
-            image_urls=imgs("mobile-accessories/apple-airpods-max-silver", 3)[1],
-            co2_impact=30.0, ewaste_impact=0.6, water_impact=250.0,
-            repair_cost_estimate=180, avg_lifespan_months=24,
-            return_period_days=7, has_no_return_policy=False,
         ),
         Product(
             name="Apple iPhone 6", category="electronics", brand="Apple",
@@ -265,17 +245,7 @@ def seed():
             co2_impact=5.5, ewaste_impact=0.0, water_impact=60.0,
             repair_cost_estimate=None, avg_lifespan_months=18,
             return_period_days=10, has_no_return_policy=False,
-        ),
-        Product(
-            name="Zara Floral Summer Dress", category="clothing", brand="Zara",
-            size="M", price=2990,
-            description="Lightweight and breathable floral midi dress, perfect for summer days.",
-            image_url=imgs("tops/red-nail-polish", 1)[0],
-            image_urls=None,
-            co2_impact=6.5, ewaste_impact=0.0, water_impact=40.0,
-            repair_cost_estimate=None, avg_lifespan_months=24,
-            return_period_days=15, has_no_return_policy=False,
-        ),
+        ), 
         Product(
             name="Blue & Black Check Shirt", category="clothing", brand="Fashion Trends",
             size="M", price=1799,
@@ -286,17 +256,6 @@ def seed():
             repair_cost_estimate=100, avg_lifespan_months=36,
             return_period_days=15, has_no_return_policy=False,
         ),
-        Product(
-            name="H&M Basic Cotton T-Shirt", category="clothing", brand="H&M",
-            size="S", price=799,
-            description="Soft, organic cotton essential t-shirt. Everyday comfort with a clean minimal look.",
-            image_url=imgs("tops/red-nail-polish", 1)[0],
-            image_urls=None,
-            co2_impact=4.0, ewaste_impact=0.0, water_impact=45.0,
-            repair_cost_estimate=None, avg_lifespan_months=12,
-            return_period_days=15, has_no_return_policy=False,
-        ),
-        # ── Additional demo products (AI damage-scan capable) ────────
         Product(
             name="Apple iPhone 13 Pro", category="electronics", brand="Apple",
             size="One Size", price=69999,
@@ -348,16 +307,6 @@ def seed():
             return_period_days=10, has_no_return_policy=False,
         ),
         Product(
-            name="JBL Charge 5 Bluetooth Speaker", category="electronics", brand="JBL",
-            size="One Size", price=11999,
-            description="Portable waterproof speaker with 20H playtime, IP67 rating, and power bank function. Cylindrical form makes scratches and dents easy to detect.",
-            image_url=imgs("mobile-accessories/amazon-echo-plus", 2)[0],
-            image_urls=imgs("mobile-accessories/amazon-echo-plus", 2)[1],
-            co2_impact=28.0, ewaste_impact=0.7, water_impact=190.0,
-            repair_cost_estimate=800, avg_lifespan_months=30,
-            return_period_days=7, has_no_return_policy=False,
-        ),
-        Product(
             name="Amazon Echo Plus", category="electronics", brand="Amazon",
             size="One Size", price=8999,
             description="Smart speaker with built-in Alexa. Premium sound, smart home hub, 360° audio. Fabric grille tears, power port damage, and housing dents are detectable in AI scans.",
@@ -376,56 +325,6 @@ def seed():
             co2_impact=14.0, ewaste_impact=0.2, water_impact=95.0,
             repair_cost_estimate=400, avg_lifespan_months=24,
             return_period_days=7, has_no_return_policy=False,
-        ),
-        Product(
-            name="Puma Future Rider Trainers", category="footwear", brand="Puma",
-            size="8", price=6999,
-            description="Retro-inspired trainer with modern comfort. Puma SOFT+ foam midsole, clean upper design. Sole separation, upper creasing, and mesh tear are easy to spot on AI return scans.",
-            image_url=imgs("mens-shoes/puma-future-rider-trainers", 3)[0],
-            image_urls=imgs("mens-shoes/puma-future-rider-trainers", 3)[1],
-            co2_impact=12.0, ewaste_impact=0.2, water_impact=85.0,
-            repair_cost_estimate=350, avg_lifespan_months=24,
-            return_period_days=7, has_no_return_policy=False,
-        ),
-        Product(
-            name="Nike Air Jordan 1 High", category="footwear", brand="Nike",
-            size="9", price=12995,
-            description="Iconic high-top basketball sneaker in Red and Black. Leather upper with Air sole. Ankle collar cracking, toe box creasing, and outsole wear are prominent in AI damage scans.",
-            image_url=imgs("mens-shoes/nike-air-jordan-1-red-and-black", 4)[0],
-            image_urls=imgs("mens-shoes/nike-air-jordan-1-red-and-black", 4)[1],
-            co2_impact=18.0, ewaste_impact=0.2, water_impact=110.0,
-            repair_cost_estimate=550, avg_lifespan_months=36,
-            return_period_days=15, has_no_return_policy=False,
-        ),
-        Product(
-            name="Levi's Slim Fit Plaid Shirt", category="clothing", brand="Levi's",
-            size="L", price=2999,
-            description="Versatile plaid shirt in a relaxed slim fit. Machine washable cotton blend. Collar stitching, button, and fabric wear are clearly visible for AI textile assessment.",
-            image_url=imgs("mens-shirts/man-plaid-shirt", 3)[0],
-            image_urls=imgs("mens-shirts/man-plaid-shirt", 3)[1],
-            co2_impact=9.0, ewaste_impact=0.0, water_impact=130.0,
-            repair_cost_estimate=150, avg_lifespan_months=24,
-            return_period_days=15, has_no_return_policy=False,
-        ),
-        Product(
-            name="Allen Solly Check Shirt", category="clothing", brand="Allen Solly",
-            size="L", price=1999,
-            description="Classic check-pattern formal shirt in blue and black. Collar staining, button damage, and fabric tears are clearly visible for AI textile assessment.",
-            image_url=imgs("mens-shirts/blue-&-black-check-shirt", 4)[0],
-            image_urls=imgs("mens-shirts/blue-&-black-check-shirt", 4)[1],
-            co2_impact=5.5, ewaste_impact=0.0, water_impact=65.0,
-            repair_cost_estimate=100, avg_lifespan_months=18,
-            return_period_days=7, has_no_return_policy=False,
-        ),
-        Product(
-            name="American Tourister 68cm Spinner Trolley", category="luggage", brand="American Tourister",
-            size="68cm / Medium", price=5299,
-            description="Hard-shell polycarbonate trolley bag with TSA lock, 4 360° spinner wheels. Shell cracks and wheel damage are prominent in AI damage scanning.",
-            image_url=imgs("womens-bags/blue-women's-handbag", 3)[0],
-            image_urls=imgs("womens-bags/blue-women's-handbag", 3)[1],
-            co2_impact=22.0, ewaste_impact=0.3, water_impact=140.0,
-            repair_cost_estimate=700, avg_lifespan_months=60,
-            return_period_days=15, has_no_return_policy=False,
         ),
         Product(
             name='Samsonite Laptop Backpack 15.6"', category="bags", brand="Samsonite",
@@ -488,16 +387,6 @@ def seed():
             return_period_days=30, has_no_return_policy=False,
         ),
         Product(
-            name="Cello Opalware Dinner Set (18 pcs)", category="kitchen", brand="Cello",
-            size="18 Pieces", price=1799,
-            description="Microwave-safe opalware dinner set — 6 quarter plates, 6 full plates, 6 veg bowls. Chips and cracks on the bright white surface are highly detectable by AI.",
-            image_url=imgs("kitchen-accessories/bamboo-spatula", 1)[0],
-            image_urls=None,
-            co2_impact=8.0, ewaste_impact=0.3, water_impact=60.0,
-            repair_cost_estimate=None, avg_lifespan_months=48,
-            return_period_days=7, has_no_return_policy=False,
-        ),
-        Product(
             name="Mi Smart Band 7", category="electronics", brand="Xiaomi",
             size="One Size", price=3499,
             description='1.62" AMOLED display fitness band with 110+ sport modes, blood oxygen, heart rate, and 14-day battery. Band cracking and screen damage are easy to detect.',
@@ -540,14 +429,20 @@ def seed():
     db.commit()
 
     # ── Sample Returns ────────────────────────────────────────────
+    # image_urls reference the same CDN images as the products being returned
+    CDN = "https://cdn.dummyjson.com/product-images"  # already defined above but redeclare for clarity here
     return1 = Return(
-        order_id=2, image_urls="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400",
+        order_id=2,
+        # order 2 = product 3 = Decathlon Yoga Mat (sports-accessories/baseball-ball)
+        image_urls=f"{CDN}/sports-accessories/baseball-ball/1.webp",
         condition_score=82.5, defects="Minor surface scratches on the left side",
         remaining_life_pct=78, recommended_action="resell", status="assessed",
         green_credits_earned=80,
     )
     return2 = Return(
-        order_id=3, image_urls="https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?w=400",
+        order_id=3,
+        # order 3 = product 4 = Noise ColorFit Pro 5 Max (mens-watches/brown-leather-belt-watch)
+        image_urls=f"{CDN}/mens-watches/brown-leather-belt-watch/1.webp,{CDN}/mens-watches/brown-leather-belt-watch/2.webp",
         condition_score=71.0, defects="Slight color fading on the exterior",
         remaining_life_pct=65, recommended_action="refurbish", status="assessed",
         green_credits_earned=60,
