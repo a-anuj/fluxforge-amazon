@@ -1,47 +1,34 @@
 # AGENTS.md — FluxForge / Amazon Circular Intelligence Platform
 
-FluxForge — internally branded the **"Amazon Green Credits Ecosystem"** (the FastAPI `title` in `backend/app/main.py`) — is a circular-commerce and Green Credits sustainability platform. It turns product returns into an opportunity to reuse, refurbish, and resell goods, and rewards customers for sustainable behavior (buying refurbished, reselling, repairing, donating, recycling, choosing eco delivery) with an in-app **Green Credits** currency. It also supports peer-to-peer community resale, radius-based wishlist matching, and virtual apparel try-on, and tracks environmental impact metrics (CO₂ saved, e-waste prevented, water saved).
+FluxForge — internally branded the **"Amazon Green Credits Ecosystem"** (the FastAPI `title` in `backend/app/main.py`) — is a circular-commerce and Green Credits sustainability platform. It turns product returns into an opportunity to reuse, refurbish, and resell goods, and rewards customers for sustainable behavior (buying refurbished, reselling, repairing, donating, recycling, choosing eco delivery) with an in-app **Green Credits** currency. It also supports peer-to-peer community resale with AI-verified ownership proofs, radius-based wishlist matching (NearDrop), and virtual apparel try-on.
 
 ## Source of truth
 
-This is a cross-tool guide following the [AGENTS.md](https://agents.md) convention so teammates using different IDEs/agents (Cursor, Claude Code, Copilot, Kiro, etc.) share one root guide. It mirrors the **essentials**; the richer, authoritative detail lives in the Kiro steering docs under `.kiro/steering/`, which Kiro auto-loads by context. When something here is not enough, read those files:
+This is a cross-tool guide following the [AGENTS.md](https://agents.md) convention so teammates using different IDEs/agents (Cursor, Claude Code, Copilot, Kiro, etc.) share one root guide. The richer authoritative detail lives in `.kiro/steering/`:
 
 | Steering file | Covers |
 | --- | --- |
-| `.kiro/steering/product.md` | Product overview, user roles, return lifecycle, Green Credits, community resale + wishlist, virtual try-on |
-| `.kiro/steering/tech.md` | Tech stack, persistence, command reference, environment variables |
+| `.kiro/steering/product.md` | Product overview, user roles, return lifecycle, community listing split flow, NearDrop redesign, virtual try-on |
+| `.kiro/steering/tech.md` | Tech stack, persistence, seed script, command reference, environment variables |
 | `.kiro/steering/structure.md` | Monorepo map, backend layering, naming conventions, entry points |
-| `.kiro/steering/backend.md` | Backend recipes (router/endpoint/model/service), migrations, AWS degradation, pytest patterns |
-| `.kiro/steering/frontend.md` | Frontend recipes (page/route/API), `client.js`, `UserContext`, Tailwind |
-| `.kiro/steering/skills.md` | End-to-end full-stack feature and endpoint-wiring workflows (pull in with `#skills`) |
+| `.kiro/steering/backend.md` | Backend recipes, migration pattern, Bedrock models, invoice verification gates, status machines, known characteristics |
+| `.kiro/steering/frontend.md` | Frontend recipes, route table, key API functions, UI patterns (Home grid, ProductDetail gallery, SellItem, NearDrop) |
+| `.kiro/steering/skills.md` | End-to-end full-stack feature workflows |
 
 ## Tech stack
 
-**Backend** (FastAPI app; deps in `backend/requirements.txt`):
+**Backend** (FastAPI; deps in `backend/requirements.txt`):
+- FastAPI, SQLAlchemy 2.x, Pydantic 2.x, Uvicorn, boto3, Pillow, python-multipart, python-dotenv, gradio_client
+- pytest + httpx for testing; psycopg2-binary for PostgreSQL
 
-- FastAPI — web framework and routing
-- SQLAlchemy 2.x — ORM for models and queries
-- Pydantic 2.x — request/response validation
-- Uvicorn (`uvicorn[standard]`) — ASGI server
-- boto3 — AWS SDK (Amazon Bedrock + S3)
-- Pillow — image processing
-- python-multipart — multipart/form-data (file uploads)
-- python-dotenv — loads env vars from `.env`
-- gradio_client — client for Gradio-hosted model endpoints
+**Frontend** (React 19 + Vite; deps in `frontend/package.json`):
+- React 19, Vite, react-router-dom 7, Tailwind CSS 4, Redux Toolkit, Recharts, lucide-react
 
-(`pytest` + `httpx` for testing; `psycopg2-binary` for PostgreSQL.)
+**Persistence:** SQLite in dev, PostgreSQL in prod — `DATABASE_URL` env var.
 
-**Frontend** (React + Vite; deps in `frontend/package.json`):
-
-- React 19 (`react`, `react-dom`)
-- Vite — dev server and build tool
-- react-router-dom 7 — client-side routing
-- Tailwind CSS 4 (`tailwindcss`, `@tailwindcss/vite`)
-- Redux Toolkit (`@reduxjs/toolkit`)
-- Recharts — charts and data visualization
-- lucide-react — icons
-
-**Persistence:** SQLite in dev (`sqlite:///./circular_intelligence.db`), PostgreSQL in prod — selected via the `DATABASE_URL` environment variable (`backend/app/database.py`).
+**Bedrock models:**
+- `amazon.nova-lite-v1:0` — community image check, AI price suggestion, product identity
+- `amazon.nova-pro-v1:0` — invoice OCR/verification, serial cross-check, return photo assessment
 
 ## Commands
 
@@ -57,120 +44,114 @@ This is a cross-tool guide following the [AGENTS.md](https://agents.md) conventi
 
 ## Project structure
 
-Monorepo layout:
-
 ```
 .
 ├── backend/            # FastAPI application
 ├── frontend/           # React 19 + Vite application
-├── docker-compose.yml  # Full-stack container orchestration
-└── DEPLOY.md           # Deployment guide
+├── docker-compose.yml
+└── DEPLOY.md
 ```
 
 Backend (`backend/app/`):
-
 ```
-backend/app/
-├── routers/      # HTTP endpoints, one module per domain
-├── services/     # Business and AI logic, one module per capability
-├── models.py     # SQLAlchemy ORM table definitions
-├── schemas.py    # Pydantic request/response schemas
-├── database.py   # Engine, SessionLocal, and the get_db dependency
-└── main.py       # FastAPI app, router registration, startup migrations
+routers/      # HTTP endpoints, one module per domain
+services/     # Business and AI logic
+models.py     # SQLAlchemy ORM table definitions
+schemas.py    # Pydantic request/response schemas
+database.py   # Engine, SessionLocal, get_db dependency
+main.py       # FastAPI app, router registration, lifespan migrations
 ```
 
 Frontend (`frontend/src/`):
-
 ```
-frontend/src/
-├── api/          # API client (client.js)
-├── components/   # Reusable PascalCase components
-├── context/      # React context providers (e.g. UserContext.jsx)
-├── pages/        # PascalCase route-level page components
-├── utils/        # Shared helpers
-├── App.jsx       # Route table
-├── main.jsx      # React root render
-└── index.css     # Global styles / Tailwind entry
+api/          # client.js — all HTTP calls
+components/   # Reusable PascalCase components
+context/      # UserContext.jsx — user + auth state (no cart)
+pages/        # PascalCase route-level pages
+App.jsx       # Route table
 ```
 
-**Backend layering rule:** requests flow one direction — `routers → services → models`. Routers stay thin (HTTP concerns, validation, dependency injection); services hold business/AI logic; models are the SQLAlchemy persistence layer.
+**Backend layering:** `routers → services → models`. Routers stay thin.
+
+## Return lifecycle (current)
+
+1. **Purchase** — `Order.status = "placed"`, shown as "Order Received"
+2. **Return** — customer taps "Return or Replace" on Orders page → `POST /api/returns/` → `Order.status = "returned"`, `Return.status = "completed"` immediately. Green Credits awarded. No scan, no employee action.
+
+**Video-scan removed, pending rebuild.** `baseline.py`, `pickup_scan`, `EmployeeScan.jsx`, `DeliveryDashboard.jsx`, `NewReturn.jsx` (old version), `LiveVideoScanner` are dormant but preserved.
+
+**Nova Pro return flow:** `NewReturn.jsx` now implements a 3-step photo-based return via `POST /api/returns/with-photo`.
+
+## Community listing split flow
+
+"+ Post a Community Listing" navigates to **`/community/sell`** (`SellItem.jsx`) — a dedicated multi-step page, not a modal.
+
+**Amazon path:** order picker → details (condition, price, description) → product photo → done. Listing gets `purchase_source="amazon"` + `amazon_order_id`. Buyer sees **"Amazon Verified Purchase"** badge.
+
+**Non-Amazon path:** product info + invoice upload → 5-gate verification → details → product photo → done. Listing gets `purchase_source="non_amazon"` + all invoice extraction fields. Buyer sees **"Invoice Verified"** badge.
+
+**Invoice verification gates (all in `POST /api/community/verify-invoice`):**
+1. File type + size (JPEG/PNG/WebP/PDF, 15 MB max)
+2. Nova Pro OCR — extracts product name, store, date, total, serial/IMEI; validates against claimed product
+3. Confidence gate — `low` blocks; `medium` warns
+4. Price cross-validation — `asking > 5× invoice total` blocks; `asking > 1.1× invoice` warns
+5. Serial/IMEI cross-check for electronics — Nova Pro looks for invoice serial in product photo (warning only)
+
+## NearDrop wishlist flow
+
+`/neardrop` — "Add to Wishlist" opens a full-screen `ProductPicker` (2-col product grid, search, category pills). Tapping Watch opens `WatchConfigModal` (max-price + radius sliders). "My Wishlist" tab shows product-card grid with NearDrop metrics strip per item.
+
+## Key model fields added (recent)
+
+- `Product.image_urls` — comma-separated CDN image URLs for multi-angle gallery
+- `CommunityListing`: `purchase_source`, `amazon_order_id`, `invoice_image_url`, `invoice_verified`, `invoice_product_name`, `invoice_store`, `invoice_date`
+- `Return`: `condition_note`, `confidence`, `assessment_source`, `original_recommended_action`, `gate_override`
+- `Listing.condition_note`
+- New models: `Donation`, `RecycleLog`
+
+## Gotchas / known characteristics
+
+- **No real auth.** `User.role` string (`"customer" | "employee" | "admin"`) — no tokens or sessions.
+- **CORS fully open.** `allow_origins=["*"]`.
+- **Schema changes at startup.** `_safe_add_column(engine, ...)` in `main.py` lifespan — takes the engine object, not a connection. No migration tool.
+- **Duplicated column.** `CommunityListing.ai_condition_summary` declared twice — known, do not remove.
+- **Cart removed.** `UserContext` no longer has `cart`, `addToCart`, `removeFromCart`, `isInCart`. `/cart` route is gone.
+- **AWS optional in dev.** Missing `AWS_S3_BUCKET_NAME` causes community image uploads to fail (S3 required). Bedrock degrades gracefully.
+- **AI assessment stub.** `assess_condition()` in `ai_assessment.py` returns mock data. Fallback in `create_return` when no `recommended_action` supplied.
+- **Video-scan code dormant.** `baseline.py`, `ai_assessment.py`, `pickup_scan` in `returns.py`, and the old scan UI files are intact but not gating any active flow.
+- **Frontend dev API base.** `BASE_URL` targets `http://{hostname}:8000/api` in dev unless `VITE_API_URL` is set.
+- **Seed script is SQLite-safe.** Uses `Base.metadata.drop_all()` for SQLite instead of `DROP SCHEMA PUBLIC CASCADE`.
+- **Product images use DummyJSON CDN.** `cdn.dummyjson.com` — permanent URLs, no API key, 2–4 angles per product.
+- **`_safe_add_column` signature.** Takes `(db_engine, table, column, col_type, default=None)` — the engine, not a connection. Each call opens its own connection internally.
 
 ## Conventions
 
 **Backend**
-
-- **Routers** — one module per domain in `backend/app/routers/` (e.g. `users.py`, `community.py`), each exposing `router = APIRouter(prefix=..., tags=[...])`. Inject the DB session with `Depends(get_db)`.
-- **Services** — one module per capability in `backend/app/services/` (e.g. `ai_assessment.py`, `credit_engine.py`).
-- **Models** — PascalCase SQLAlchemy classes in `backend/app/models.py`, each with a snake_case `__tablename__`.
-- **Register a router** — import it in `backend/app/main.py` and mount under `/api`: `app.include_router(<name>.router, prefix="/api")`. So a router with `prefix="/<name>"` is served at `/api/<name>`.
-
-**Frontend**
-
-- **Pages** — PascalCase components in `frontend/src/pages/` (e.g. `Home.jsx`, `Dashboard.jsx`), default-exported.
-- **Components** — PascalCase components in `frontend/src/components/` (e.g. `Layout.jsx`).
-- **API functions** — named exports in `frontend/src/api/client.js` (e.g. `getUsers`, `createOrder`) that call the `request(path, options)` wrapper (or `multipartRequest` for uploads). `BASE_URL` already includes the `/api` prefix, so paths start **after** `/api` — use `/users/` (resolves to `/api/users/`), not `/api/users/`.
-
-## Environment variables (names only)
-
-**Backend**
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | Selects the DB connection (SQLite in dev, PostgreSQL in prod) |
-| `AWS_REGION` | AWS region for Bedrock and S3 clients |
-| `AWS_ACCESS_KEY_ID` | AWS credential identifier |
-| `AWS_SECRET_ACCESS_KEY` | AWS credential secret |
-| `AWS_S3_BUCKET_NAME` | Target S3 bucket for uploads; when unset, uploads fall back to a non-fatal path |
-
-`S3_AWS_REGION` and `AWS_DEFAULT_REGION` are also observed as region fallbacks (names only).
+- One router module per domain in `backend/app/routers/`; expose `router = APIRouter(prefix=..., tags=[...])`.
+- One service module per capability in `backend/app/services/`.
+- PascalCase SQLAlchemy models in `backend/app/models.py`, snake_case `__tablename__`.
+- Mount routers: `app.include_router(r.router, prefix="/api")`.
 
 **Frontend**
-
-- `VITE_API_URL` — if set, used directly as the API base URL.
-- Otherwise, `BASE_URL` resolves to `/api` in a production build.
-- Otherwise (development), `http://{window.location.hostname}:8000/api` — the dev frontend auto-targets port `8000` on the current hostname unless `VITE_API_URL` is set.
-
-## Return lifecycle (current)
-
-1. **Purchase** — customer places an `Order`; `Order.status` starts as `"placed"`, shown as "Order Received" in the UI.
-2. **Return** — customer clicks "Return or Replace" on the Orders page. `POST /api/returns/` runs immediately: sets `Return.status = "completed"` and `Order.status = "returned"`, awards Green Credits, forfeits any pending no-return loyalty credits. No scan, no employee action required.
-3. **Damaged Product Routing** — if the AI assesses a product as damaged, we explicitly factor in a logistics cost + repair cost (if the combined cost exceeds 40%, we attempt to donate it provided it's still usable; otherwise it gets recycled).
-
-**Video-scan feature is removed and pending a from-scratch rebuild.** The baseline-scan endpoints (`/api/baseline/`), the pickup-scan endpoint (`POST /api/returns/{id}/pickup-scan`), the employee scan UI (`EmployeeScan.jsx`, `DeliveryDashboard.jsx`), and the return-phase live scanner (`NewReturn.jsx`, `LiveVideoScanner`) are **preserved in the codebase but dormant** — they do not gate the current flow. Do not remove them; they are the foundation for the rebuild.
-
-Legacy `Order.status` values (`"delivered"`, `"return_pending"`, `"return_verified"`) and `Return.status = "pending_pickup"` may exist in the database but are no longer set by active code paths.
-
-## Gotchas / known characteristics
-
-These are existing, intentional hackathon characteristics. Work **with** them — do not "fix" them in application code:
-
-- **No real auth.** Access is gated only by the `User.role` string (`"customer" | "employee" | "admin"`, default `"customer"`) — no password, token, or session auth. Pass `user_id` explicitly where the acting user matters.
-- **CORS is fully open.** `backend/app/main.py` sets `allow_origins=["*"]`.
-- **Schema changes at startup.** New columns are applied at startup via `_safe_add_column` in `backend/app/main.py` (idempotent `ALTER TABLE ... ADD COLUMN` in try/except, called in `lifespan` after `Base.metadata.create_all`) — there is no migration tool. Add new columns there.
-- **Duplicated column.** `CommunityListing` in `backend/app/models.py` declares `ai_condition_summary` twice — a known duplicate, not a defect to remove.
-- **AWS is optional in dev.** Without `AWS_S3_BUCKET_NAME`, the S3 upload helper in `backend/app/routers/baseline.py` falls back to returning a data URL; Bedrock and Gradio calls degrade gracefully rather than crashing a request.
-- **AI assessment is a stub.** `backend/app/services/ai_assessment.py` (`assess_condition()`) returns mock data — it is the single integration point for a future real vision model (e.g. AWS Bedrock / Claude Vision). Called as a fallback in `create_return` when no `recommended_action` is supplied.
-- **Video-scan code is dormant, not deleted.** `baseline.py`, `ai_assessment.py`, `pickup_scan` in `returns.py`, `EmployeeScan.jsx`, `DeliveryDashboard.jsx`, `NewReturn.jsx`, and `LiveVideoScanner` are all intact but not part of the active return flow. See "Return lifecycle" above.
-- **Frontend dev API base.** `BASE_URL` in `frontend/src/api/client.js` auto-targets `http://{window.location.hostname}:8000/api` in development unless `VITE_API_URL` is set.
+- PascalCase pages in `frontend/src/pages/`, default-exported.
+- API functions as named exports in `frontend/src/api/client.js`.
+- `BASE_URL` already includes `/api` — paths start after it: `/users/` not `/api/users/`.
+- File uploads use raw `fetch` + `FormData`, not the `request()` wrapper.
 
 ## Documentation maintenance rule
 
-**Every time you change a feature, you must update the docs before closing the task.** Stale docs silently break teammates and other agents working from different IDEs.
+Every time a feature changes, update docs **before closing the task**:
 
-For any change to a feature, endpoint, model field, status value, UI behaviour, or known characteristic, update the relevant files:
-
-| What changed | Update these files |
+| What changed | Files to update |
 |---|---|
-| User-facing flow, roles, domain concepts | `.kiro/steering/product.md` |
-| Endpoint, status machine, model, service, known characteristic | `.kiro/steering/backend.md` |
-| Page, route, API client function, UI convention | `.kiro/steering/frontend.md` |
-| Dependency, command, environment variable | `.kiro/steering/tech.md` |
-| Any of the above | `AGENTS.md` (this file) — always sync the gotchas and flow summaries |
+| User-facing flow, roles, domain | `.kiro/steering/product.md` |
+| Endpoint, model, status, service | `.kiro/steering/backend.md` |
+| Page, route, API function, UI pattern | `.kiro/steering/frontend.md` |
+| Dependency, command, env var | `.kiro/steering/tech.md` |
+| Anything above | `AGENTS.md` — always sync gotchas and flow summaries |
 
-The steering files are the authoritative detail; `AGENTS.md` is the cross-tool summary. Keep both accurate and consistent with each other. The Kiro PostTaskExec hook enforces this as an automated reminder.
+The PostTaskExec hook enforces this as an automated reminder.
 
 ## For agents
 
-Keep changes minimal and consistent with the existing patterns above. Follow the backend layering (`routers → services → models`) and the frontend conventions. Documentation and spec artifacts live under `.kiro/` — prefer the `.kiro/steering/*.md` files for deeper, authoritative detail.
-
-**After every task that changes system behaviour, update the docs** (see Documentation maintenance rule above). Do not mark a task complete without verifying the steering files and `AGENTS.md` reflect the new state.
+Keep changes minimal and consistent with existing patterns. Follow the backend layering (`routers → services → models`) and frontend conventions. After every task that changes system behaviour, update the docs. Do not mark a task complete without verifying the steering files and `AGENTS.md` reflect the new state.

@@ -14,23 +14,19 @@ Create a new module `backend/app/routers/<name>.py` and expose a `router`:
 ```python
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-
 from app.database import get_db
 
 router = APIRouter(prefix="/<name>", tags=["<name>"])
-
 
 @router.get("/")
 def list_items(db: Session = Depends(get_db)):
     ...
 ```
 
-- Use `APIRouter(prefix="/<name>", tags=["<name>"])`, one module per domain (matching existing routers like `users.py`, `community.py`).
+- Use `APIRouter(prefix="/<name>", tags=["<name>"])`, one module per domain.
 - Inject the database session with `Depends(get_db)` (from `app.database`).
 
 ## Add an endpoint (recipe)
-
-Add a path operation to an existing `router`:
 
 ```python
 from app.schemas import SomeCreate, SomeResponse
@@ -44,153 +40,145 @@ def create_item(payload: SomeCreate, db: Session = Depends(get_db)):
     return obj
 ```
 
-- Use Pydantic schemas from `backend/app/schemas.py` for request bodies and response models.
-- Query and mutate through the injected `Session`.
-
 ## Add a model (recipe)
-
-Add a SQLAlchemy class to `backend/app/models.py`:
 
 ```python
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-
 from app.database import Base
-
 
 class Thing(Base):
     __tablename__ = "things"
-
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User")
 ```
 
-- Subclass `Base`, set `__tablename__` (snake_case), and declare `Column`s and `relationship`s.
-- Tables are auto-created at startup via `Base.metadata.create_all` (called in the `lifespan` handler in `main.py`). There is no migration tool — see the Safe column migration pattern below for adding columns to existing tables.
+Tables are auto-created at startup via `Base.metadata.create_all` in the `lifespan` handler. There is no migration tool — use `_safe_add_column` for existing tables (see below).
 
 ## Add a service (recipe)
 
-Put business or AI logic in `backend/app/services/<name>.py` (one module per capability, matching existing services such as `ai_assessment.py`, `credit_engine.py`). Keep routers thin and have them call into the service:
-
-```python
-# backend/app/services/<name>.py
-def do_work(...):
-    ...
-```
-
-```python
-# in a router
-from app.services.<name> import do_work
-result = do_work(...)
-```
+Put business or AI logic in `backend/app/services/<name>.py`. Keep routers thin.
 
 ## Register the router
 
-Import the new router in `backend/app/main.py` and mount it under the `/api` prefix, following the existing `include_router` block:
+Import in `backend/app/main.py` and mount under `/api`:
 
 ```python
-from app.routers import users, products, orders, returns, listings, redemptions, media, sustainability, analytics
-from app.routers import wishlist as wishlist_router, community, baseline, tryon
-
 app.include_router(<name>.router, prefix="/api")
 ```
 
-Every router in the app is mounted with `app.include_router(<r>.router, prefix="/api")`, so a router with `prefix="/<name>"` is served under `/api/<name>`.
-
 ## Safe column migration pattern
 
-`backend/app/main.py` defines `_safe_add_column(conn, table, column, col_type, default=None)`:
+`backend/app/main.py` defines `_safe_add_column(db_engine, table, column, col_type, default=None)`:
 
 ```python
-def _safe_add_column(conn, table, column, col_type, default=None):
-    """Add a column to an existing table if it doesn't already exist."""
+def _safe_add_column(db_engine, table, column, col_type, default=None):
     try:
-        if default is not None:
-            conn.execute(_sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type} DEFAULT {default}"))
-        else:
-            conn.execute(_sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+        with db_engine.connect() as conn:
+            if default is not None:
+                conn.execute(_sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type} DEFAULT {default}"))
+            else:
+                conn.execute(_sql_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+            conn.commit()
     except Exception:
-        pass  # column already exists or DB doesn't support it
+        pass  # column already exists
 ```
 
-It issues an idempotent `ALTER TABLE ... ADD COLUMN`, wrapped in `try/except` that swallows "column already exists" errors. It is invoked in the `lifespan` startup context after `Base.metadata.create_all`. This is a **known characteristic**: the app has no migration tool, so schema changes to existing tables are applied at startup. To add a column to an existing table, add another `_safe_add_column(...)` call in `lifespan` rather than reaching for a migration framework.
+Note: the signature takes `db_engine` (the engine object), **not** a connection — each call opens its own connection internally. Invoked in `lifespan` after `Base.metadata.create_all`.
 
 ## AWS graceful-degradation pattern
 
-AWS calls fall back to a non-fatal path when configuration is missing or a call fails. Concrete example — the S3 upload helper `_try_upload_to_s3(data_url, key)` in `backend/app/routers/baseline.py`:
+- S3 upload helpers return the original data URL when `AWS_S3_BUCKET_NAME` is unset.
+- Bedrock clients are created **per-call** in `community.py`, `sustainability.py`, and `product_verifier.py`.
+- Invoice verification falls back to `verified=False` (not `True`) when Bedrock is unavailable — conservative by design.
 
-- Returns the original base64 data URL when `AWS_S3_BUCKET_NAME` is unset.
-- On `put_object` failure, logs a warning and returns the original data URL as a fallback.
+## Bedrock model usage
 
-```python
-def _try_upload_to_s3(data_url: str, key: str) -> str:
-    try:
-        bucket = os.getenv("AWS_S3_BUCKET_NAME")
-        if not bucket:
-            return data_url  # No S3 configured — store data URL directly
-        ...
-        s3.put_object(Bucket=bucket, Key=key, Body=image_bytes, ContentType=content_type)
-        return f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
-    except Exception as e:
-        logger.warning(f"S3 upload failed, using data URL fallback: {e}")
-        return data_url
-```
+| Use case | Model |
+|---|---|
+| Community image check, price suggestion | `amazon.nova-lite-v1:0` |
+| Invoice OCR + verification, serial cross-check, return photo assessment | `amazon.nova-pro-v1:0` |
+| Product identity check (baseline scan) | `amazon.nova-lite-v1:0` (via `product_verifier.py`) |
 
-Bedrock clients follow a similar spirit and are created **per-call** (rather than as shared module-level clients) in `sustainability.py`, `community.py`, and `product_verifier.py`. Follow this pattern for new AWS integrations: degrade gracefully instead of crashing the request when AWS is unconfigured or unavailable.
+## Invoice verification logic (`community.py`)
+
+The `POST /api/community/verify-invoice` endpoint runs **5 gates** in sequence:
+
+1. **File type + size** — JPEG/PNG/WebP/GIF/PDF only, 15 MB max. PDF is converted to JPEG via `pdf2image` if available.
+2. **Nova Pro OCR + semantic match** — `_bedrock_invoice_check()` extracts: `product_name`, `store`, `purchase_date`, `invoice_total` (display string), `invoice_total_numeric` (float), `match_confidence`, `serial_number`, `imei`. Validates that the document is a genuine purchase receipt and matches the claimed product.
+3. **Confidence hard gate** — `low` confidence forces `verified=False` (listing blocked); `medium` passes but surfaces a warning via `confidence_gate_reason`.
+4. **Price cross-validation** — `_validate_price(asking_price, invoice_total_numeric)`:
+   - `asking > 5× invoice total` → **block** (fraud risk)
+   - `asking > 1.1× invoice total` → **warn** (above original price, unusual for used goods)
+   - `asking < 5% of invoice total` → **warn** (suspiciously low, may be error)
+5. **Serial/IMEI cross-check** (electronics only, optional) — if an identifier was found in the invoice and the seller has already uploaded a product photo, `_bedrock_serial_cross_check()` asks Nova Pro to look for that exact number in the product photo. Non-blocking warning.
+
+Invoice image is uploaded to S3 for audit trail **regardless of outcome**, with `claimed_title` and `verified` stored in S3 object metadata.
 
 ## pytest / conftest pattern
 
-Backend tests use `backend/tests/conftest.py`, which sets up an isolated in-memory database:
-
-- In-memory SQLite engine (`sqlite:///:memory:`) created with `StaticPool` and `connect_args={"check_same_thread": False}`.
-- `Base.metadata.create_all(bind=engine)` builds the schema (a session-scoped `db_engine` fixture).
-- A `db_session` fixture opens a connection/transaction, seeds a baseline `User(id=1)` and `Product(id=1)`, yields the session, then rolls back for isolation.
-- A `client` fixture overrides the `get_db` dependency via `app.dependency_overrides[get_db]` and wraps `TestClient(app)`, clearing the override afterward.
-
-Write tests against the `client` fixture so requests run through the app with the in-memory DB. Run the suite with `pytest` from `backend/`.
+Backend tests use `backend/tests/conftest.py` with an isolated in-memory SQLite database. Run the suite with `pytest` from `backend/`. Tests use the `client` fixture which overrides `get_db`.
 
 ## Return status machine
 
-The valid `Order.status` values and their meaning:
-
-| Status | Set by | Meaning |
+| `Order.status` | Set by | Meaning |
 |---|---|---|
 | `"placed"` | `create_order` | Order created, shown as "Order Received" |
 | `"returned"` | `create_return` | Customer triggered return; final state |
 
-`"delivered"`, `"return_pending"`, and `"return_verified"` are legacy values from the old video-scan gating flow. They are no longer set by any active code path but may appear in existing database rows. Do not introduce new code that sets or branches on these statuses until the video-scan rebuild is complete.
+`"delivered"`, `"return_pending"`, `"return_verified"` are **legacy** — may appear in existing DB rows, not set by active code.
 
-The valid `Return.status` values:
-
-| Status | Set by | Meaning |
+| `Return.status` | Set by | Meaning |
 |---|---|---|
 | `"completed"` | `create_return` | Return finalized immediately |
 
-`"pending_pickup"` is a legacy status from the old pickup-scan step. It is no longer set by active code; the `pickup_scan` endpoint still exists but is dormant until the rebuild.
+`"pending_pickup"` is a **legacy** status from the dormant pickup-scan step.
+
+## Key models and fields added
+
+**`Product`**
+- `image_url` — primary product image URL (CDN)
+- `image_urls` — comma-separated additional angle URLs (CDN, added for multi-angle gallery)
+
+**`CommunityListing` (provenance fields)**
+- `purchase_source` — `"amazon"` | `"non_amazon"`
+- `amazon_order_id` — FK to `orders.id` (Amazon path only)
+- `invoice_image_url` — S3 key of uploaded invoice
+- `invoice_verified` — bool: True after all invoice gates pass
+- `invoice_product_name`, `invoice_store`, `invoice_date` — extracted by Nova Pro from the invoice
+
+**`Return` (Nova Pro confidence gate fields)**
+- `condition_note` — defect summary for refurbished listings
+- `confidence` — model confidence in the recommended action
+- `assessment_source` — `"nova_pro"` | `"fallback"`
+- `original_recommended_action` — set when confidence gate overrode the recommendation
+- `gate_override` — bool: True when gate changed the action
+
+**`Listing`**
+- `condition_note` — set for refurbished listings
+
+**New models**
+- `Donation` — items routed to a donation partner org
+- `RecycleLog` — items routed to recycling (unrepairable or low-confidence)
 
 ## Known characteristics (backend)
 
-The following are **known hackathon characteristics** of the FluxForge codebase. They are documented here for accuracy. Do **not** "fix" them in application code — treat them as existing, intentional behavior:
-
-- **Permissive CORS** — `backend/app/main.py` configures the CORS middleware with `allow_origins=["*"]` (also `allow_credentials=True`, `allow_methods=["*"]`, `allow_headers=["*"]`). This is intentional for network access during the hackathon.
-- **Role_Field_Auth** — authorization is decided by the `User.role` string field (`"customer" | "employee" | "admin"`, default `"customer"`). There is no password, token, or session-based authentication; callers pass identifiers explicitly.
-- **Duplicated `ai_condition_summary` column** — the `CommunityListing` model in `backend/app/models.py` declares `ai_condition_summary = Column(Text, nullable=True)` twice. This is a known duplicate, not a defect to remove.
-- **Startup `ALTER TABLE` migrations** — schema changes to existing tables are applied at startup through `_safe_add_column` in `main.py` (no migration tool). Add new columns there.
-- **Video-scan code is preserved but dormant** — `backend/app/routers/baseline.py` (baseline scan endpoints), `backend/app/services/ai_assessment.py` (condition assessment stub), and the `pickup_scan` endpoint in `returns.py` are all still in the codebase. None of them gate the current return flow. They are kept intact as the foundation for a future video-analysis rebuild. Do not remove them.
-- **AI assessment stub** — `backend/app/services/ai_assessment.py` `assess_condition()` returns mock data. It is called as a fallback inside `create_return` when no `recommended_action` is passed. It is the single integration point for a future real vision model (e.g. AWS Bedrock / Claude Vision).
+- **Permissive CORS** — `allow_origins=["*"]`, intentional for hackathon.
+- **Role field auth** — `User.role` string, no tokens or sessions.
+- **Duplicated `ai_condition_summary` column** — `CommunityListing` declares it twice; known duplicate, do not remove.
+- **Startup ALTER TABLE migrations** — `_safe_add_column` in `main.py` lifespan, no migration tool.
+- **Video-scan code dormant** — `baseline.py`, `ai_assessment.py` stub, `pickup_scan` endpoint, `EmployeeScan.jsx`, `DeliveryDashboard.jsx`, `NewReturn.jsx`, `LiveVideoScanner` all intact but not gating any active flow.
+- **AI assessment stub** — `assess_condition()` in `ai_assessment.py` returns mock data; fallback in `create_return` when no `recommended_action` is passed.
+- **Seed is SQLite-compatible** — `seed.py` detects the DB URL and uses `Base.metadata.drop_all()` for SQLite instead of `DROP SCHEMA PUBLIC CASCADE`.
 
 ## Documentation maintenance rule
 
-**Every time you change a feature, update the docs.** This is not optional — stale docs silently break other team members and agents working from different IDEs.
+Every time you change a feature, update the docs before closing the task:
 
-When you add, change, or remove any feature, endpoint, model field, status value, or user-facing behaviour, you must update the following before closing the task:
-
-1. **`.kiro/steering/product.md`** — if the user-facing flow, roles, or domain concepts changed.
-2. **`.kiro/steering/backend.md`** — if an endpoint, status machine, model, service, or known characteristic changed.
-3. **`.kiro/steering/frontend.md`** — if a page, route, API client function, or UI convention changed.
-4. **`.kiro/steering/tech.md`** — if a dependency, command, or environment variable changed.
-5. **`AGENTS.md`** (repo root) — always sync the "Gotchas / known characteristics" and any flow summaries that changed. This file is the cross-tool source of truth read by Cursor, Claude Code, Copilot, and other agents.
-
-The steering files are the authoritative detail; `AGENTS.md` is the summary. Keep both accurate and consistent with each other.
+1. `.kiro/steering/product.md` — user-facing flow, roles, domain concepts
+2. `.kiro/steering/backend.md` — endpoint, status machine, model, service, known characteristic
+3. `.kiro/steering/frontend.md` — page, route, API client function, UI convention
+4. `.kiro/steering/tech.md` — dependency, command, environment variable
+5. `AGENTS.md` — always sync gotchas and flow summaries; cross-tool source of truth

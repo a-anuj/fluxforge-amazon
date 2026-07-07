@@ -10,9 +10,9 @@ The backend is a FastAPI application. Dependencies are declared in `backend/requ
 - **SQLAlchemy 2.x** — ORM for models and queries.
 - **Pydantic 2.x** — request/response schema validation.
 - **Uvicorn** (`uvicorn[standard]`) — ASGI server.
-- **boto3** — AWS SDK, used for Amazon Bedrock and S3 integrations.
+- **boto3** — AWS SDK, used for Amazon Bedrock (Nova Pro, Nova Lite) and S3 integrations.
 - **Pillow** — image processing.
-- **python-multipart** — multipart/form-data handling (file uploads such as baseline scans and try-on photos).
+- **python-multipart** — multipart/form-data handling (invoice uploads, product photos, try-on photos).
 - **python-dotenv** — loads environment variables from a `.env` file.
 - **gradio_client** — client for Gradio-hosted model endpoints.
 
@@ -32,6 +32,8 @@ The frontend is a React application built with Vite. Dependencies are declared i
 
 ESLint is configured for linting via the `@eslint/js` and `eslint` dev dependencies.
 
+**Note: the shopping cart has been removed.** `UserContext` no longer exposes `cart`, `addToCart`, `removeFromCart`, or `isInCart`. The `/cart` route and `Cart.jsx` page are no longer registered.
+
 ## Persistence
 
 Database configuration lives in `backend/app/database.py`. The connection URL is resolved from the `DATABASE_URL` environment variable:
@@ -40,6 +42,15 @@ Database configuration lives in `backend/app/database.py`. The connection URL is
 - **Production:** PostgreSQL via `psycopg2-binary`, selected by setting `DATABASE_URL` to a Postgres connection string.
 
 A `SessionLocal` session factory is bound to the engine, and the `get_db()` dependency yields a session per request.
+
+### Seed script (`backend/seed.py`)
+
+`python seed.py` drops and re-creates all tables, then inserts sample data. The drop strategy is DB-aware:
+
+- **PostgreSQL** — `DROP SCHEMA public CASCADE` / `CREATE SCHEMA public`
+- **SQLite** — `Base.metadata.drop_all(bind=engine)` (PostgreSQL syntax is not supported)
+
+Product images use the DummyJSON CDN (`cdn.dummyjson.com`) — permanent URLs, no API key required, 2–4 real product photo angles per item.
 
 ## Command reference
 
@@ -63,7 +74,7 @@ Referenced by name only — do not commit real values.
 | `AWS_REGION` | AWS region for Bedrock and S3 clients. |
 | `AWS_ACCESS_KEY_ID` | AWS credential identifier. |
 | `AWS_SECRET_ACCESS_KEY` | AWS credential secret. |
-| `AWS_S3_BUCKET_NAME` | Target S3 bucket for uploads; when unset, uploads fall back to a non-fatal path. |
+| `AWS_S3_BUCKET_NAME` | Target S3 bucket for community listing images, return photos, and invoice audit images. When unset, community image uploads will fail (S3 is required for community listings). |
 
 The code also observes `S3_AWS_REGION` and `AWS_DEFAULT_REGION` as region fallbacks (referenced by name only).
 

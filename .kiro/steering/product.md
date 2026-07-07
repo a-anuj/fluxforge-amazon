@@ -11,7 +11,7 @@ The domain is circular commerce: instead of treating a returned product as waste
 There are three user roles, backed by the `User.role` field in `backend/app/models.py` (a string, default `"customer"`):
 
 - **customer** — shops, returns products, earns and redeems Green Credits, lists items in the community marketplace, and uses virtual try-on.
-- **employee** — captures the delivery baseline scan of an order (multi-angle images at delivery) and works delivery zones.
+- **employee** — works delivery zones (baseline scan feature is dormant; see return lifecycle).
 - **admin** — administrative access; on the frontend, admin mode derives from `currentUser.role === "admin"`.
 
 ## Return lifecycle flow
@@ -22,12 +22,10 @@ The end-to-end return journey:
 2. **Return** — the customer clicks "Return or Replace" directly on the Orders page. This calls `POST /api/returns/` and immediately sets `Order.status = "returned"` and `Return.status = "completed"`. No delivery scan or employee action is required.
 3. **Outcome** — the `create_return` endpoint assigns a disposition action (`resell`, `refurbish`, `recycle`, `donate`, etc.) either from the caller or via the `assess_condition()` stub fallback, awards Green Credits, and forfeits any pending no-return loyalty credits.
 
-**Video scan feature — removed, pending rebuild.**  
-The pre-packaging baseline scan (employee captures multi-angle delivery images) and the return-phase live video assessment (customer scans returned item) have been **removed from the active return flow**. The underlying code is preserved — `backend/app/routers/baseline.py`, `backend/app/services/ai_assessment.py`, `frontend/src/pages/EmployeeScan.jsx`, `frontend/src/pages/NewReturn.jsx`, and `frontend/src/components/LiveVideoScanner` — but none of it is gating returns. When this feature is rebuilt from scratch, the gate (`order.status == "delivered"` check in `create_return`) and the pickup-scan finalization step will be reintroduced.
+**Video scan feature — removed, pending rebuild.**
+The pre-packaging baseline scan and the return-phase live video assessment have been **removed from the active return flow**. The underlying code is preserved — `backend/app/routers/baseline.py`, `backend/app/services/ai_assessment.py`, `frontend/src/pages/EmployeeScan.jsx`, `frontend/src/pages/NewReturn.jsx`, and `frontend/src/components/LiveVideoScanner` — but none of it is gating returns. When this feature is rebuilt from scratch, the gate (`order.status == "delivered"` check in `create_return`) and the pickup-scan finalization step will be reintroduced.
 
-The `baseline_scan_*` fields still exist on the `Order` model (`baseline_scan_urls`, `baseline_scan_at`, `baseline_scan_employee_id`, `baseline_frame_urls`) and the baseline/employee endpoints are still mounted, but they are not part of the customer-facing return journey until the rebuild is complete.
-
-**AI assessment note:** `backend/app/services/ai_assessment.py` (`assess_condition()`) returns mock data. It is the single integration point for a future real vision model (e.g. AWS Bedrock / Claude Vision).
+**Return AI (Nova Pro):** The `NewReturn.jsx` page now implements a simplified 3-step return flow (select item → upload photo → done) using `POST /api/returns/with-photo`. The photo is sent to Nova Pro for condition assessment. The old `assess_condition()` stub is still the fallback for the direct `POST /api/returns/` endpoint.
 
 ## Green Credits earn-and-redeem flow
 
@@ -36,12 +34,43 @@ Users earn and redeem the in-app Green Credits currency:
 - **Earn** — sustainable actions create a `GreenCreditTx` (transaction) record; `GreenChallenge` entries offer additional reward credits for completing sustainability challenges.
 - **Redeem** — users spend credits via a `Redemption`, whose type is one of `discount`, `prime`, or `donation`.
 
-## Community resale + wishlist-match flow
+## Community resale — split listing flow
 
-FluxForge supports peer-to-peer resale alongside the return pipeline:
+The community resale feature (`/feed`) has a dedicated listing creation page at **`/community/sell`** (`frontend/src/pages/SellItem.jsx`). This replaces the old single-form modal.
 
-- **Community resale** — users list items for sale directly to other users through `CommunityListing` (with AI-assisted condition summaries and price suggestions).
-- **Wishlist matching** — users register desired items as `Wishlist` entries (with a matching radius in km). When a return becomes available nearby, radius-based matching produces a `WishlistMatch` and sends a `WishlistNotification` to the interested user, enabling a local, low-logistics handoff.
+The flow splits at the first step based on purchase origin:
+
+### Amazon-purchased path
+1. Seller selects which Amazon order they're selling from their order history (pre-filled product data, no form typing).
+2. Sets condition, price (AI suggestion available), description, local pickup toggle.
+3. Uploads a product photo — Bedrock Nova Lite verifies it matches the listing.
+4. Listing created with `purchase_source = "amazon"`, `amazon_order_id` attached. Buyers see **"Amazon Verified Purchase"** badge.
+
+### Non-Amazon-purchased path
+1. Seller enters product title, category, brand.
+2. Uploads purchase invoice/bill — **5-gate verification** runs:
+   - Gate 1/2: File type + size check
+   - Gate 3: Nova Pro OCR + semantic match (extracts product name, store, date, total, serial/IMEI)
+   - Gate 4: Confidence hard gate — `low` confidence blocks the listing; `medium` passes with a warning
+   - Gate 5: Price cross-validation — asking price vs extracted invoice total (block if >5× invoice price)
+   - Gate 6: Serial/IMEI cross-check for electronics — if an identifier was found in the invoice, Nova Pro checks whether the same number is visible in the product photo
+3. Sets condition, price, description.
+4. Uploads product photo — Bedrock Nova Lite condition verification.
+5. Listing created with `purchase_source = "non_amazon"`, all invoice extraction fields stored. Buyers see **"Invoice Verified"** badge.
+
+All validation results (extracted data, price flag, serial match) are surfaced to the seller in real time.
+
+The `/feed` page itself shows three tabs: **All** (Amazon Certified Pre-Owned + community listings), **Community**, and **Leaderboard** (ranked by e-waste prevented).
+
+## NearDrop wishlist flow
+
+Users add products to a wishlist with a radius and max price. The **NearDrop page** (`/neardrop`) has been redesigned:
+
+- **"+ Add to Wishlist"** opens a full-screen `ProductPicker` — same 2-column product grid as the home screen, with live search and category pills. Each card has a "📍 Watch" button.
+- Tapping Watch opens a `WatchConfigModal` bottom sheet with two sliders (max price defaulting to 80% of retail, and radius in km).
+- After adding, the user lands on the **"My Wishlist" tab** which now shows a proper product-card grid (image, name, price) with a NearDrop metrics strip below each card (max price with implied discount %, radius, keywords, Remove button).
+
+When a return becomes available nearby, radius-based matching produces a `WishlistMatch` and sends a `WishlistNotification`.
 
 ## Virtual try-on flow
 
