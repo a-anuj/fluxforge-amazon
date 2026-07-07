@@ -186,6 +186,24 @@ export const createAlert = (userId, category, pincode) =>
   );
 export const getAlerts = (userId) => request(`/community/alerts?user_id=${userId}`);
 
+/** Upload invoice image and verify it with Nova Pro. Returns InvoiceVerifyResponse. */
+export const verifyInvoice = (invoiceFile, claimedTitle, claimedCategory, claimedBrand = "") => {
+  const form = new FormData();
+  form.append("invoice", invoiceFile);
+  form.append("claimed_title", claimedTitle);
+  form.append("claimed_category", claimedCategory);
+  form.append("claimed_brand", claimedBrand);
+  const url = `${BASE_URL}/community/verify-invoice`;
+  return fetch(url, { method: "POST", body: form }).then(async (res) => {
+    const body = await res.json().catch(() => ({ detail: res.statusText }));
+    if (!res.ok) {
+      const msg = typeof body.detail === "string" ? body.detail : `Error ${res.status}`;
+      throw Object.assign(new Error(msg), { status: res.status });
+    }
+    return body;
+  });
+};
+
 // Wishlist & NearDrop
 export const getWishlist = (userId) => request(`/wishlist/?user_id=${userId}`);
 export const addToWishlist = (data) =>

@@ -304,6 +304,14 @@ class CommunityListingCreate(BaseModel):
     city: Optional[str] = None
     pincode: Optional[str] = None
     allows_local_pickup: bool = False
+    # ── Provenance (split-path) ──
+    purchase_source: str = "non_amazon"       # "amazon" | "non_amazon"
+    amazon_order_id: Optional[int] = None     # only for amazon path
+    invoice_image_url: Optional[str] = None   # S3 key after invoice upload
+    invoice_verified: bool = False            # set True by /verify-invoice
+    invoice_product_name: Optional[str] = None
+    invoice_store: Optional[str] = None
+    invoice_date: Optional[str] = None
 
 
 class SellerOut(BaseModel):
@@ -339,8 +347,27 @@ class CommunityListingOut(BaseModel):
     seller: Optional[SellerOut] = None
     is_local: bool = False                   # computed: same pincode as requesting user
     created_at: Optional[datetime] = None
+    # ── Provenance ──
+    purchase_source: str = "non_amazon"
+    amazon_order_id: Optional[int] = None
+    invoice_verified: bool = False
+    invoice_product_name: Optional[str] = None
+    invoice_store: Optional[str] = None
+    invoice_date: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class InvoiceVerifyResponse(BaseModel):
+    """Returned by /community/verify-invoice"""
+    verified: bool
+    product_name: Optional[str] = None      # extracted from invoice
+    store: Optional[str] = None             # retailer / seller name on invoice
+    purchase_date: Optional[str] = None     # extracted date string
+    invoice_total: Optional[str] = None     # price shown on invoice
+    match_confidence: str = "low"           # "high" | "medium" | "low"
+    mismatch_reason: Optional[str] = None   # why it was rejected if not verified
+    s3_key: Optional[str] = None            # stored invoice S3 key
 
 
 class PriceSuggestRequest(BaseModel):

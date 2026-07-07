@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+﻿import { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import { CheckCircle } from "lucide-react";
 import {
   getFeed, getAllListings,
-  getCommunityListings, getNearbyListings, createCommunityListing,
-  buyCommunityListing, suggestPrice, getLeaderboard, getNotifications,
-  markNotificationsRead
+  getCommunityListings, getNearbyListings,
+  buyCommunityListing, getLeaderboard, getNotifications,
+  markNotificationsRead,
 } from "../api/client";
 
 const CATEGORIES = ["Electronics","Laptops","Mobiles","Clothing","Furniture","Appliances","Books","Sports","Toys","Other"];
@@ -33,6 +32,7 @@ function StarRating({ score }) {
 }
 
 export default function Feed() {
+  const navigate    = useNavigate();
   const { currentUser } = useUser();
   const [tab, setTab] = useState("all");
   
@@ -49,7 +49,6 @@ export default function Feed() {
   // UI State
   const [loading, setLoading] = useState(true);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [showModal, setShowModal] = useState(false);
   const [buying, setBuying] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -144,7 +143,7 @@ export default function Feed() {
                 Earn Green Credits and keep e-waste out of landfills.
               </p>
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => navigate("/community/sell")}
                 className="bg-[#00e5a0] hover:bg-[#00c98a] text-[#0f2027] font-bold px-6 py-2.5 rounded-md text-[14px] transition-colors"
               >
                 + Post a Community Listing
@@ -231,7 +230,7 @@ export default function Feed() {
                   <div className="col-span-full bg-white border border-amazon-border rounded-lg p-12 text-center">
                     <p className="text-[48px] mb-3"></p>
                     <p className="text-[16px] font-semibold mb-1">No listings available</p>
-                    <button onClick={() => setShowModal(true)} className="btn-amazon-primary text-[13px] px-5 py-2 mt-4">
+                    <button onClick={() => navigate("/community/sell")} className="btn-amazon-primary text-[13px] px-5 py-2 mt-4">
                       Post a Listing
                     </button>
                   </div>
@@ -315,7 +314,7 @@ export default function Feed() {
                             />
                           ) : (
                             <span className="text-[48px]">
-                              {listing.category === "Laptops" ? "" : listing.category === "Mobiles" ? "" : listing.category === "Clothing" ? "" : listing.category === "Electronics" ? "" : ""}
+                              {listing.category === "Laptops" ? "💻" : listing.category === "Mobiles" ? "📱" : listing.category === "Clothing" ? "👕" : listing.category === "Electronics" ? "🔌" : "📦"}
                             </span>
                           )}
                           {/* Badges */}
@@ -392,9 +391,6 @@ export default function Feed() {
         )}
       </div>
 
-      {/* Post Listing Modal */}
-      {showModal && <PostModal currentUser={currentUser} onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); fetchAllData(); showToast("Listing posted! +5 Green Credits earned."); }} />}
-
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-xl text-white text-[14px] font-medium z-50 transition-all ${toast.type === "error" ? "bg-red-600" : "bg-[#00a86b]"}`}>
@@ -405,253 +401,4 @@ export default function Feed() {
   );
 }
 
-function PostModal({ currentUser, onClose, onSuccess }) {
-  const [form, setForm] = useState({
-    title: "", category: "Electronics", brand: "", condition: "good",
-    asking_price: "", description: "", city: currentUser?.city || "", pincode: currentUser?.pincode || "",
-    allows_local_pickup: false,
-  });
-  const [aiSuggestion, setAiSuggestion] = useState(null);
-  const [suggesting, setSuggesting] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [aiVerified, setAiVerified] = useState(null);
-  const [aiError, setAiError] = useState(null);
-  const [verifyingImage, setVerifyingImage] = useState(false);
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setVerifyingImage(true);
-    setAiError(null);
-    setAiVerified(null);
-    setImageFile(null);
-    
-    try {
-      const fd = new FormData();
-      fd.append("image", file);
-      fd.append("category", form.category);
-      fd.append("title", form.title);
-      
-      const res = await fetch(`http://${window.location.hostname}:8000/api/community/verify-image`, { method: "POST", body: fd });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || "Image verification failed");
-      }
-      const data = await res.json();
-      setAiVerified(data.condition_summary || "Condition verified by Bedrock AI.");
-      setImageFile(file);
-    } catch (err) {
-      setAiError(err.message);
-      e.target.value = "";
-    } finally {
-      setVerifyingImage(false);
-    }
-  };
-
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
-  const handleAiSuggest = async () => {
-    if (!form.category || !form.condition) return;
-    setSuggesting(true);
-    try {
-      const res = await suggestPrice({
-        category: form.category, brand: form.brand || null,
-        condition: form.condition, description: form.description || null,
-        original_price: form.asking_price ? parseFloat(form.asking_price) : null,
-      });
-      setAiSuggestion(res);
-      if (!form.asking_price) set("asking_price", String(Math.round(res.suggested_price)));
-    } catch(e) { console.error(e); }
-    finally { setSuggesting(false); }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!currentUser) return;
-    setSubmitting(true);
-    try {
-      const listing = await createCommunityListing({
-        seller_id: currentUser.id,
-        title: form.title, category: form.category, brand: form.brand || null,
-        condition: form.condition, asking_price: parseFloat(form.asking_price),
-        description: form.description || null, city: form.city || null,
-        pincode: form.pincode || null, allows_local_pickup: form.allows_local_pickup,
-      });
-      if (imageFile && listing?.id) {
-        const fd = new FormData();
-        fd.append("image", imageFile);
-        await fetch(`http://${window.location.hostname}:8000/api/community/listings/${listing.id}/image`, { method: "POST", body: fd });
-      }
-      onSuccess();
-    } catch (err) {
-      alert("Error: " + err.message);
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-r from-[#0f2027] to-[#2c5364] px-6 py-4 rounded-t-xl flex items-center justify-between">
-          <div>
-            <h2 className="text-white font-bold text-[18px]">Post a Listing</h2>
-            <p className="text-[#aaa] text-[12px]">Earn +5 Green Credits just for posting!</p>
-          </div>
-          <button onClick={onClose} className="text-white text-[22px] hover:opacity-70">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-[12px] font-semibold text-amazon-text mb-1">Title *</label>
-            <input required value={form.title} onChange={e => set("title", e.target.value)}
-              placeholder="e.g. Dell XPS 15 Laptop, barely used"
-              className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-semibold mb-1">Category *</label>
-              <select value={form.category} onChange={e => set("category", e.target.value)}
-                className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange">
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[12px] font-semibold mb-1">Condition *</label>
-              <select value={form.condition} onChange={e => set("condition", e.target.value)}
-                className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange">
-                {CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1">Brand</label>
-            <input value={form.brand} onChange={e => set("brand", e.target.value)}
-              placeholder="Dell, Apple, Samsung…"
-              className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange" />
-          </div>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1">Description</label>
-            <textarea value={form.description} onChange={e => set("description", e.target.value)}
-              rows={3} placeholder="Describe the item's condition, what's included, reason for selling…"
-              className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange resize-none" />
-          </div>
-          {/* AI Price Suggestion */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[12px] font-semibold">Asking Price (₹) *</label>
-              <button type="button" onClick={handleAiSuggest} disabled={suggesting}
-                className="text-[11px] text-amazon-link hover:underline flex items-center gap-1">
-                {suggesting ? "⏳ Getting AI price…" : "Get AI Price Suggestion"}
-              </button>
-            </div>
-            {aiSuggestion && (
-              <div className="bg-[#f0fff8] border border-[#00a86b]/30 rounded p-3 mb-2 text-[12px]">
-                <p className="font-bold text-[#00a86b] mb-0.5">
-                  AI Suggests: ₹{Math.floor(aiSuggestion.suggested_price).toLocaleString("en-IN")}
-                  <span className="font-normal text-amazon-text-secondary ml-2">
-                    (₹{Math.floor(aiSuggestion.price_range_low).toLocaleString("en-IN")} – ₹{Math.floor(aiSuggestion.price_range_high).toLocaleString("en-IN")})
-                  </span>
-                </p>
-                <p className="text-amazon-text-secondary">{aiSuggestion.reasoning}</p>
-                <button type="button" onClick={() => set("asking_price", String(Math.round(aiSuggestion.suggested_price)))}
-                  className="mt-1 text-amazon-link text-[11px] hover:underline">Use suggested price</button>
-              </div>
-            )}
-            <input required type="number" min="1" value={form.asking_price} onChange={e => set("asking_price", e.target.value)}
-              placeholder="Enter price in ₹"
-              className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[12px] font-semibold mb-1">City</label>
-              <input value={form.city} onChange={e => set("city", e.target.value)}
-                placeholder="Mumbai"
-                className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange" />
-            </div>
-            <div>
-              <label className="block text-[12px] font-semibold mb-1">Pincode</label>
-              <input value={form.pincode} onChange={e => set("pincode", e.target.value)}
-                placeholder="400001"
-                className="w-full border border-amazon-border rounded px-3 py-2 text-[13px] focus:outline-none focus:border-amazon-orange" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1">Photo *</label>
-            <input required={!imageFile} type="file" accept="image/*" onChange={handleImageUpload}
-              className="w-full text-[13px] border border-amazon-border rounded px-3 py-2" />
-            
-            {aiError && (
-              <div className="mt-2 bg-[#fdf3e7] border border-[#c45500]/30 rounded-lg px-3 py-2">
-                <p className="text-[12px] font-bold text-[#c45500]">AI Verification Failed</p>
-                <p className="text-[11px] text-[#1a1f27] mt-0.5">{aiError}</p>
-              </div>
-            )}
-            
-            {aiVerified && (
-              <div className="mt-2 bg-[#f2fbf7] border border-[#067d62]/30 rounded-lg px-3 py-2 flex gap-2 items-start">
-                <CheckCircle size={16} className="text-[#067d62] shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-[12px] font-bold text-[#067d62]">Product Qualified for Resale!</p>
-                  <p className="text-[11px] text-amazon-text mt-0.5">{aiVerified}</p>
-                </div>
-              </div>
-            )}
-          </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" checked={form.allows_local_pickup} onChange={e => set("allows_local_pickup", e.target.checked)}
-              className="w-4 h-4 accent-amazon-orange" />
-            <div>
-              <p className="text-[13px] font-semibold">Allow Local Pickup</p>
-              <p className="text-[11px] text-amazon-text-secondary">+15 bonus credits for both buyer and seller </p>
-            </div>
-          </label>
-          <button type="submit" disabled={submitting || !imageFile}
-            className="w-full bg-amazon-orange hover:bg-amazon-orange-hover text-amazon-text font-bold py-2.5 rounded transition-colors text-[14px] disabled:opacity-50">
-            {submitting ? "Posting…" : "Post Listing & Earn Credits"}
-          </button>
-        </form>
-      </div>
-      
-      {/* AI Verification Full Screen Overlay */}
-      {verifyingImage && (
-        <div className="fixed inset-0 bg-[#0f1923]/95 z-[100] flex flex-col items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
-          <div className="relative w-32 h-32 mb-8">
-            <div className="absolute inset-0 border-[6px] border-[#00a86b]/20 rounded-full"></div>
-            <div className="absolute inset-0 border-[6px] border-[#00a86b] rounded-full border-t-transparent animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <svg className="w-12 h-12 text-[#00a86b] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-              </svg>
-            </div>
-            
-            {/* Scanning beam effect */}
-            <div className="absolute inset-0 overflow-hidden rounded-full">
-              <div className="w-full h-1 bg-[#00a86b] absolute top-0 left-0 shadow-[0_0_15px_#00a86b] animate-[scan_2s_ease-in-out_infinite]"></div>
-            </div>
-          </div>
-          
-          <h2 className="text-3xl font-extrabold text-white mb-3 tracking-tight">Amazon <span className="text-[#00a86b]">Circular Intelligence</span></h2>
-          <p className="text-[#8a9bb0] text-lg mb-10 max-w-md text-center">
-            Analyzing your product photo with Bedrock AI...
-          </p>
-          
-          <div className="w-72 space-y-4 bg-white/5 rounded-xl p-6 border border-white/10">
-            <div className="flex items-center gap-4 text-[15px]">
-              <div className="w-2.5 h-2.5 bg-[#00a86b] rounded-full animate-ping shadow-[0_0_8px_#00a86b]"></div>
-              <span className="text-white font-medium">Verifying product identity</span>
-            </div>
-            <div className="flex items-center gap-4 text-[15px] opacity-60">
-              <div className="w-2.5 h-2.5 bg-gray-500 rounded-full"></div>
-              <span className="text-gray-300">Checking physical condition</span>
-            </div>
-            <div className="flex items-center gap-4 text-[15px] opacity-60">
-              <div className="w-2.5 h-2.5 bg-gray-500 rounded-full"></div>
-              <span className="text-gray-300">Evaluating resale potential</span>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// â”€â”€ Shared AI scanning overlay (reused by both paths) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

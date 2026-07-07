@@ -57,6 +57,14 @@ async def lifespan(app: FastAPI):
         _safe_add_column(engine, "returns", "gate_override", "BOOLEAN", "FALSE")
         # ── Refurbished listing tag ────────────────────────────────
         _safe_add_column(engine, "listings", "condition_note", "TEXT")
+        # ── Community listing split-path provenance ────────────────
+        _safe_add_column(engine, "community_listings", "purchase_source", "VARCHAR", "'non_amazon'")
+        _safe_add_column(engine, "community_listings", "amazon_order_id", "INTEGER")
+        _safe_add_column(engine, "community_listings", "invoice_image_url", "TEXT")
+        _safe_add_column(engine, "community_listings", "invoice_verified", "BOOLEAN", "FALSE")
+        _safe_add_column(engine, "community_listings", "invoice_product_name", "VARCHAR")
+        _safe_add_column(engine, "community_listings", "invoice_store", "VARCHAR")
+        _safe_add_column(engine, "community_listings", "invoice_date", "VARCHAR")
     except Exception:
         pass  # Non-critical — app can still run
 

@@ -12,6 +12,7 @@ import NearDrop from "./pages/NearDrop";
 import Dashboard from "./pages/Dashboard";
 import EmployeeScan from "./pages/EmployeeScan";
 import DeliveryDashboard from "./pages/DeliveryDashboard";
+import SellItem from "./pages/SellItem";
 import HackathonPopup from "./components/HackathonPopup";
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/employee-scan" element={<EmployeeScan />} />
             <Route path="/delivery" element={<DeliveryDashboard />} />
+            <Route path="/community/sell" element={<SellItem />} />
           </Route>
         </Routes>
       </UserProvider>

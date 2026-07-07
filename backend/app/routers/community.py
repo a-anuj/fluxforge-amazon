@@ -26,6 +26,7 @@ from app.schemas import (
     CommunityListingCreate, CommunityListingOut,
     PriceSuggestRequest, PriceSuggestResponse,
     CommunityNotificationOut, LeaderboardEntry,
+    InvoiceVerifyResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,76 @@ Return ONLY valid JSON:
         # Default to valid if AI fails so we don't block users due to AI downtime
         return {"is_valid": True, "condition_summary": "AI check bypassed due to service error", "reasoning": str(e)}
 
+
+def _bedrock_invoice_check(
+    image_bytes: bytes,
+    content_type: str,
+    claimed_title: str,
+    claimed_category: str,
+    claimed_brand: Optional[str],
+) -> dict:
+    """
+    Use Nova Pro to extract invoice data and validate it matches the listing.
+    Returns structured data so the frontend can show what the AI read.
+    Strict: if the invoice cannot be read or doesn't match, verified=False.
+    """
+    format_map = {"image/jpeg": "jpeg", "image/png": "png",
+                  "image/webp": "webp", "image/gif": "gif"}
+    img_format = format_map.get(content_type, "jpeg")
+
+    prompt = f"""You are a strict invoice verification system for a second-hand marketplace.
+The seller claims to be selling: "{claimed_title}" (category: {claimed_category}{', brand: ' + claimed_brand if claimed_brand else ''}).
+
+Carefully examine this invoice/receipt/bill image and:
+1. Extract all readable text — product name, store/retailer, purchase date, total amount.
+2. Verify whether the product on the invoice plausibly matches what the seller is listing.
+3. Confirm this is a genuine purchase document (not a screenshot of a listing, not a blank page, not a product photo).
+
+Be STRICT. If the document is unclear, unreadable, or doesn't match, mark verified=false.
+
+Return ONLY valid JSON:
+{{
+  "verified": true,
+  "product_name": "exact product name from invoice",
+  "store": "store or retailer name",
+  "purchase_date": "date as shown on invoice",
+  "invoice_total": "total amount as shown",
+  "match_confidence": "high",
+  "mismatch_reason": null
+}}
+
+match_confidence must be one of: "high", "medium", "low".
+If not verified, set verified=false and explain in mismatch_reason."""
+
+    client = _get_bedrock_client()
+    try:
+        response = client.converse(
+            modelId="amazon.nova-pro-v1:0",   # use Nova Pro for document reading
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"image": {"format": img_format, "source": {"bytes": image_bytes}}},
+                    {"text": prompt},
+                ],
+            }],
+            inferenceConfig={"maxTokens": 500, "temperature": 0.1},
+        )
+        raw = response["output"]["message"]["content"][0]["text"].strip()
+        raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+        return json.loads(raw)
+    except Exception as e:
+        logger.error(f"Bedrock invoice check error: {e}")
+        # If Bedrock is unavailable, be conservative — reject rather than silently pass
+        return {
+            "verified": False,
+            "product_name": None,
+            "store": None,
+            "purchase_date": None,
+            "invoice_total": None,
+            "match_confidence": "low",
+            "mismatch_reason": f"Invoice verification service unavailable: {str(e)}",
+        }
+
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.post("/listings", response_model=CommunityListingOut)
@@ -241,6 +312,14 @@ def create_listing(payload: CommunityListingCreate, db: Session = Depends(get_db
         allows_local_pickup=payload.allows_local_pickup,
         ewaste_kg_saved=ewaste,
         seller_trust_score=trust,
+        # ── Provenance ──
+        purchase_source=payload.purchase_source,
+        amazon_order_id=payload.amazon_order_id,
+        invoice_image_url=payload.invoice_image_url,
+        invoice_verified=payload.invoice_verified,
+        invoice_product_name=payload.invoice_product_name,
+        invoice_store=payload.invoice_store,
+        invoice_date=payload.invoice_date,
     )
     db.add(listing)
     db.flush()  # get listing.id
@@ -424,6 +503,108 @@ async def verify_community_image(
         raise HTTPException(status_code=400, detail=f"{ai_result.get('reasoning', 'Image rejected.')}")
         
     return {"condition_summary": ai_result.get("condition_summary", "")}
+
+
+@router.post("/verify-invoice", response_model=InvoiceVerifyResponse)
+async def verify_invoice(
+    invoice: UploadFile = File(...),
+    claimed_title: str = Form(...),
+    claimed_category: str = Form(...),
+    claimed_brand: str = Form(""),
+):
+    """
+    Strict invoice/bill verification using Nova Pro.
+
+    The seller uploads a photo of their purchase invoice/receipt.
+    Nova Pro extracts the product name, store, date and total, then checks
+    whether the document plausibly supports the listing claim.
+
+    Rules enforced:
+    - Document must be a recognisable invoice / receipt / bill.
+    - Product name on invoice must match claimed category/brand.
+    - Only verified=True listings receive the 'Invoice Verified' trust badge.
+    - Image is uploaded to S3 for audit trail regardless of outcome.
+
+    Returns structured extraction data so the UI can show the seller exactly
+    what the AI read — building transparency in both directions.
+    """
+    content_type = invoice.content_type or "image/jpeg"
+
+    # --- File type gate -------------------------------------------------
+    allowed_types = {"image/jpeg", "image/png", "image/webp",
+                     "image/gif", "application/pdf"}
+    if content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail="Invoice must be an image (JPEG/PNG/WebP) or PDF."
+        )
+
+    raw = await invoice.read()
+
+    # --- Size gate: 15 MB max -------------------------------------------
+    if len(raw) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Invoice file too large (max 15 MB).")
+
+    # --- PDF: convert first page to JPEG for Bedrock vision -------------
+    if content_type == "application/pdf":
+        try:
+            from PIL import Image as PILImage
+            import io
+            # Try pdf2image if available, else tell user to upload image
+            try:
+                from pdf2image import convert_from_bytes
+                pages = convert_from_bytes(raw, dpi=150, first_page=1, last_page=1)
+                buf = io.BytesIO()
+                pages[0].save(buf, format="JPEG")
+                raw = buf.getvalue()
+                content_type = "image/jpeg"
+            except ImportError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="PDF invoices are not supported yet. Please upload a photo of your invoice instead."
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not process PDF: {e}")
+
+    # --- AI invoice extraction ------------------------------------------
+    ai = _bedrock_invoice_check(
+        raw, content_type,
+        claimed_title, claimed_category, claimed_brand or None
+    )
+
+    # --- Upload to S3 for audit trail (regardless of outcome) -----------
+    s3_key = None
+    bucket = os.getenv("AWS_S3_BUCKET_NAME")
+    if bucket:
+        try:
+            ext = "jpg" if "jpeg" in content_type else content_type.split("/")[-1]
+            s3_key = f"invoices/{uuid.uuid4().hex}.{ext}"
+            s3 = _get_s3_client()
+            s3.put_object(
+                Bucket=bucket, Key=s3_key, Body=raw,
+                ContentType=content_type,
+                Metadata={
+                    "claimed_title": claimed_title[:200],
+                    "verified": str(ai.get("verified", False)),
+                },
+            )
+        except Exception as e:
+            logger.warning(f"Invoice S3 upload failed (non-fatal): {e}")
+
+    verified = bool(ai.get("verified", False))
+
+    return InvoiceVerifyResponse(
+        verified=verified,
+        product_name=ai.get("product_name"),
+        store=ai.get("store"),
+        purchase_date=ai.get("purchase_date"),
+        invoice_total=ai.get("invoice_total"),
+        match_confidence=ai.get("match_confidence", "low"),
+        mismatch_reason=ai.get("mismatch_reason") if not verified else None,
+        s3_key=s3_key,
+    )
 
 
 @router.post("/listings/{listing_id}/image")

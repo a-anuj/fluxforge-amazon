@@ -238,6 +238,15 @@ class CommunityListing(Base):
     created_at           = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     sold_at              = Column(DateTime, nullable=True)
 
+    # ── Purchase provenance (split listing flow) ───────────────────
+    purchase_source      = Column(String, default="non_amazon")  # "amazon" | "non_amazon"
+    amazon_order_id      = Column(Integer, ForeignKey("orders.id"), nullable=True)  # linked Amazon order
+    invoice_image_url    = Column(String, nullable=True)         # S3 key for uploaded invoice
+    invoice_verified     = Column(Boolean, default=False)        # True = Bedrock confirmed invoice
+    invoice_product_name = Column(String, nullable=True)         # extracted from invoice by AI
+    invoice_store        = Column(String, nullable=True)         # extracted store/retailer name
+    invoice_date         = Column(String, nullable=True)         # extracted purchase date
+
     seller = relationship("User", foreign_keys=[seller_id], back_populates="community_listings_sold")
     buyer  = relationship("User", foreign_keys=[buyer_id])
 
