@@ -359,15 +359,29 @@ class CommunityListingOut(BaseModel):
 
 
 class InvoiceVerifyResponse(BaseModel):
-    """Returned by /community/verify-invoice"""
+    """Returned by /community/verify-invoice — full structured validation result."""
+    # ── Core verification ──
     verified: bool
     product_name: Optional[str] = None      # extracted from invoice
     store: Optional[str] = None             # retailer / seller name on invoice
     purchase_date: Optional[str] = None     # extracted date string
-    invoice_total: Optional[str] = None     # price shown on invoice
+    invoice_total: Optional[str] = None     # price shown on invoice (display string)
+    invoice_total_numeric: Optional[float] = None  # parsed float for programmatic checks
     match_confidence: str = "low"           # "high" | "medium" | "low"
     mismatch_reason: Optional[str] = None   # why it was rejected if not verified
     s3_key: Optional[str] = None            # stored invoice S3 key
+    # ── Confidence gate ──
+    confidence_gate_passed: bool = True
+    confidence_gate_reason: Optional[str] = None
+    # ── Price cross-validation ──
+    price_flag: bool = False                # True = asking price looks suspicious vs invoice
+    price_flag_reason: Optional[str] = None # human-readable explanation
+    price_flag_severity: str = "none"       # "none" | "warn" | "block"
+    # ── Serial / IMEI (electronics only) ──
+    serial_number: Optional[str] = None     # extracted from invoice
+    imei: Optional[str] = None             # extracted from invoice (mobiles)
+    serial_cross_checked: bool = False      # True = a product photo was checked for the serial
+    serial_match: Optional[bool] = None     # None = not checked, True/False = result
 
 
 class PriceSuggestRequest(BaseModel):

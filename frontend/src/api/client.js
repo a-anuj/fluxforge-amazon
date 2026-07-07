@@ -187,12 +187,14 @@ export const createAlert = (userId, category, pincode) =>
 export const getAlerts = (userId) => request(`/community/alerts?user_id=${userId}`);
 
 /** Upload invoice image and verify it with Nova Pro. Returns InvoiceVerifyResponse. */
-export const verifyInvoice = (invoiceFile, claimedTitle, claimedCategory, claimedBrand = "") => {
+export const verifyInvoice = (invoiceFile, claimedTitle, claimedCategory, claimedBrand = "", askingPrice = 0, productPhotoFile = null) => {
   const form = new FormData();
   form.append("invoice", invoiceFile);
   form.append("claimed_title", claimedTitle);
   form.append("claimed_category", claimedCategory);
   form.append("claimed_brand", claimedBrand);
+  form.append("asking_price", String(askingPrice));
+  if (productPhotoFile) form.append("product_photo", productPhotoFile);
   const url = `${BASE_URL}/community/verify-invoice`;
   return fetch(url, { method: "POST", body: form }).then(async (res) => {
     const body = await res.json().catch(() => ({ detail: res.statusText }));

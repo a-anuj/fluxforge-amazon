@@ -222,11 +222,24 @@ export default function SellItem() {
     setInvoiceResult(null);
     setInvoiceFile(null);
     try {
-      const res = await verifyInvoice(file, form.title, form.category, form.brand);
+      // Pass asking_price so the backend can cross-validate price vs invoice total.
+      // We also pass imageFile as the product photo for serial cross-check if available.
+      const askingPrice = parseFloat(form.asking_price) || 0;
+      const res = await verifyInvoice(
+        file,
+        form.title,
+        form.category,
+        form.brand,
+        askingPrice,
+        imageFile || null   // product photo for serial/IMEI cross-check if already uploaded
+      );
+      // Always store the full result — we surface warnings even when verified=true
+      setInvoiceResult(res);
       if (!res.verified) {
-        setInvoiceError(res.mismatch_reason || "Invoice could not be verified.");
+        setInvoiceError(
+          res.confidence_gate_reason || res.mismatch_reason || "Invoice could not be verified."
+        );
       } else {
-        setInvoiceResult(res);
         setInvoiceFile(file);
         if (!form.title && res.product_name) setF("title", res.product_name);
       }
@@ -566,29 +579,85 @@ export default function SellItem() {
               )}
 
               {invoiceResult && (
-                <div className="border border-[#1a73e8]/25 rounded-xl overflow-hidden">
-                  <div className="bg-[#e8f0fe] px-4 py-2.5 flex items-center gap-2">
-                    <ShieldCheck size={16} className="text-[#1a73e8]" />
-                    <p className="text-[13px] font-bold text-[#1a73e8] flex-1">Invoice Verified by Nova Pro</p>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
-                      ${invoiceResult.match_confidence === "high"   ? "bg-[#067d62] text-white"
-                      : invoiceResult.match_confidence === "medium" ? "bg-[#e77600] text-white"
-                      : "bg-[#f0f2f2] text-[#6c7480]"}`}>
-                      {invoiceResult.match_confidence} confidence
-                    </span>
+                <div className="space-y-2">
+                  {/* ── Extracted data card ── */}
+                  <div className="border border-[#1a73e8]/25 rounded-xl overflow-hidden">
+                    <div className="bg-[#e8f0fe] px-4 py-2.5 flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-[#1a73e8]" />
+                      <p className="text-[13px] font-bold text-[#1a73e8] flex-1">
+                        {invoiceResult.verified ? "Invoice Verified by Nova Pro" : "Invoice Read — Not Verified"}
+                      </p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full
+                        ${invoiceResult.match_confidence === "high"   ? "bg-[#067d62] text-white"
+                        : invoiceResult.match_confidence === "medium" ? "bg-[#e77600] text-white"
+                        : "bg-[#c45500] text-white"}`}>
+                        {invoiceResult.match_confidence} confidence
+                      </span>
+                    </div>
+                    <div className="bg-white px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
+                      {invoiceResult.product_name  && <><span className="text-[#6c7480]">Product</span><span className="font-semibold text-[#0f1111] truncate col-span-1">{invoiceResult.product_name}</span></>}
+                      {invoiceResult.store         && <><span className="text-[#6c7480]">Store</span><span className="font-semibold text-[#0f1111]">{invoiceResult.store}</span></>}
+                      {invoiceResult.purchase_date && <><span className="text-[#6c7480]">Date</span><span className="font-semibold text-[#0f1111]">{invoiceResult.purchase_date}</span></>}
+                      {invoiceResult.invoice_total && <><span className="text-[#6c7480]">Amount</span><span className="font-semibold text-[#0f1111]">{invoiceResult.invoice_total}</span></>}
+                      {invoiceResult.serial_number && <><span className="text-[#6c7480]">Serial</span><span className="font-semibold text-[#0f1111] truncate font-mono text-[11px]">{invoiceResult.serial_number}</span></>}
+                      {invoiceResult.imei          && <><span className="text-[#6c7480]">IMEI</span><span className="font-semibold text-[#0f1111] font-mono text-[11px]">{invoiceResult.imei}</span></>}
+                    </div>
                   </div>
-                  <div className="bg-white px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 text-[12px]">
-                    {invoiceResult.product_name  && <><span className="text-[#6c7480]">Product</span><span className="font-semibold text-[#0f1111] truncate">{invoiceResult.product_name}</span></>}
-                    {invoiceResult.store         && <><span className="text-[#6c7480]">Store</span><span className="font-semibold text-[#0f1111]">{invoiceResult.store}</span></>}
-                    {invoiceResult.purchase_date && <><span className="text-[#6c7480]">Date</span><span className="font-semibold text-[#0f1111]">{invoiceResult.purchase_date}</span></>}
-                    {invoiceResult.invoice_total && <><span className="text-[#6c7480]">Amount</span><span className="font-semibold text-[#0f1111]">{invoiceResult.invoice_total}</span></>}
-                  </div>
+
+                  {/* ── Medium-confidence warning ── */}
+                  {invoiceResult.verified && invoiceResult.match_confidence === "medium" && invoiceResult.confidence_gate_reason && (
+                    <div className="flex items-start gap-2.5 bg-[#fff8ef] border border-[#e77600]/30 rounded-xl p-3.5">
+                      <AlertTriangle size={15} className="text-[#e77600] flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-[12px] font-bold text-[#c45500]">Partial verification</p>
+                        <p className="text-[11px] text-[#8a6d3b] mt-0.5">{invoiceResult.confidence_gate_reason}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Price flag warning ── */}
+                  {invoiceResult.price_flag && invoiceResult.price_flag_severity !== "none" && (
+                    <div className={`flex items-start gap-2.5 rounded-xl p-3.5 border
+                      ${invoiceResult.price_flag_severity === "block"
+                        ? "bg-[#fdecea] border-[#c45500]/30"
+                        : "bg-[#fff8ef] border-[#e77600]/30"}`}>
+                      <AlertTriangle size={15} className={`flex-shrink-0 mt-0.5 ${invoiceResult.price_flag_severity === "block" ? "text-[#c45500]" : "text-[#e77600]"}`} />
+                      <div>
+                        <p className={`text-[12px] font-bold ${invoiceResult.price_flag_severity === "block" ? "text-[#c45500]" : "text-[#c45500]"}`}>
+                          {invoiceResult.price_flag_severity === "block" ? "Price not permitted" : "Price note"}
+                        </p>
+                        <p className="text-[11px] text-[#8a6d3b] mt-0.5">{invoiceResult.price_flag_reason}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Serial cross-check result ── */}
+                  {invoiceResult.serial_cross_checked && (
+                    <div className={`flex items-start gap-2.5 rounded-xl p-3.5 border
+                      ${invoiceResult.serial_match
+                        ? "bg-[#f0f9f4] border-[#067d62]/25"
+                        : "bg-[#fff8ef] border-[#e77600]/30"}`}>
+                      <span className="text-[15px] flex-shrink-0">{invoiceResult.serial_match ? "🔗" : "⚠️"}</span>
+                      <div>
+                        <p className={`text-[12px] font-bold ${invoiceResult.serial_match ? "text-[#067d62]" : "text-[#c45500]"}`}>
+                          {invoiceResult.serial_match
+                            ? "Serial number confirmed in product photo"
+                            : "Serial number not found in product photo"}
+                        </p>
+                        <p className="text-[11px] text-[#6c7480] mt-0.5">
+                          {invoiceResult.serial_match
+                            ? `Matched: ${invoiceResult.imei || invoiceResult.serial_number}`
+                            : "Upload a photo showing the device label or box for a stronger verification."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             <button
-              disabled={!invoiceResult || !form.title}
+              disabled={!invoiceResult?.verified || !form.title || invoiceResult?.price_flag_severity === "block"}
               onClick={() => go("details")}
               className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#1a73e8] hover:bg-[#1558c0] disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.99]">
               Next: Pricing & Details →

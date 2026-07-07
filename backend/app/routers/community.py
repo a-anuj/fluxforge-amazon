@@ -230,28 +230,43 @@ def _bedrock_invoice_check(
                   "image/webp": "webp", "image/gif": "gif"}
     img_format = format_map.get(content_type, "jpeg")
 
+    is_electronics = claimed_category.lower() in {
+        "electronics", "laptops", "mobiles", "tablets", "mobile-accessories"
+    }
+
+    serial_note = (
+        "For serial_number and imei: look carefully for any alphanumeric serial, "
+        "IMEI, or model numbers on the invoice. These often appear in small print near the product line."
+        if is_electronics else
+        "serial_number and imei can be null for this category."
+    )
+
     prompt = f"""You are a strict invoice verification system for a second-hand marketplace.
 The seller claims to be selling: "{claimed_title}" (category: {claimed_category}{', brand: ' + claimed_brand if claimed_brand else ''}).
 
-Carefully examine this invoice/receipt/bill image and:
-1. Extract all readable text — product name, store/retailer, purchase date, total amount.
-2. Verify whether the product on the invoice plausibly matches what the seller is listing.
-3. Confirm this is a genuine purchase document (not a screenshot of a listing, not a blank page, not a product photo).
+Carefully examine this invoice/receipt/bill image and extract ALL visible information.
 
 Be STRICT. If the document is unclear, unreadable, or doesn't match, mark verified=false.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no markdown):
 {{
   "verified": true,
-  "product_name": "exact product name from invoice",
+  "product_name": "exact product name from invoice as written",
   "store": "store or retailer name",
   "purchase_date": "date as shown on invoice",
-  "invoice_total": "total amount as shown",
+  "invoice_total": "total amount as shown including currency symbol",
+  "invoice_total_numeric": 0.0,
   "match_confidence": "high",
-  "mismatch_reason": null
+  "mismatch_reason": null,
+  "serial_number": null,
+  "imei": null
 }}
 
+Rules for invoice_total_numeric: extract ONLY the final total/grand total as a plain float.
+  Strip currency symbols, commas. E.g. "Rs.1,299.00" or "1299" -> 1299.0.
+  If no clear total found, set 0.
 match_confidence must be one of: "high", "medium", "low".
+{serial_note}
 If not verified, set verified=false and explain in mismatch_reason."""
 
     client = _get_bedrock_client()
@@ -265,7 +280,7 @@ If not verified, set verified=false and explain in mismatch_reason."""
                     {"text": prompt},
                 ],
             }],
-            inferenceConfig={"maxTokens": 500, "temperature": 0.1},
+            inferenceConfig={"maxTokens": 600, "temperature": 0.1},
         )
         raw = response["output"]["message"]["content"][0]["text"].strip()
         raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
@@ -279,9 +294,158 @@ If not verified, set verified=false and explain in mismatch_reason."""
             "store": None,
             "purchase_date": None,
             "invoice_total": None,
+            "invoice_total_numeric": 0,
             "match_confidence": "low",
             "mismatch_reason": f"Invoice verification service unavailable: {str(e)}",
+            "serial_number": None,
+            "imei": None,
         }
+
+
+def _parse_amount(raw: Optional[str]) -> Optional[float]:
+    """
+    Parse a currency string like '₹1,299.00' or 'Rs. 45,000' into a float.
+    Returns None if the string cannot be parsed.
+    """
+    if not raw:
+        return None
+    # Strip everything except digits, dots, commas, and minus
+    cleaned = re.sub(r"[^\d.,\-]", "", str(raw)).replace(",", "")
+    try:
+        return float(cleaned) if cleaned else None
+    except ValueError:
+        return None
+
+
+ELECTRONICS_CATEGORIES = {"electronics", "laptops", "mobiles", "tablets", "mobile-accessories"}
+
+
+def _bedrock_serial_cross_check(
+    product_image_bytes: bytes,
+    product_image_content_type: str,
+    serial_number: Optional[str],
+    imei: Optional[str],
+) -> dict:
+    """
+    Second-pass Nova Pro call: given the serial/IMEI extracted from the invoice,
+    look for that exact string in the product photo (on a label, sticker, or screen).
+
+    Returns:
+      {
+        "match": True | False,
+        "found_identifier": "the exact string spotted in the photo, or null",
+        "confidence": "high" | "medium" | "low",
+        "reasoning": "..."
+      }
+    """
+    identifier = imei or serial_number
+    if not identifier:
+        return {"match": False, "found_identifier": None,
+                "confidence": "low", "reasoning": "No identifier provided to check."}
+
+    format_map = {"image/jpeg": "jpeg", "image/png": "png",
+                  "image/webp": "webp", "image/gif": "gif"}
+    img_format = format_map.get(product_image_content_type, "jpeg")
+
+    prompt = f"""You are verifying physical ownership of a product.
+
+The purchase invoice for this product contains the following identifier:
+  {"IMEI: " + imei if imei else "Serial number: " + serial_number}
+
+Carefully examine the product photo and look for this exact identifier anywhere:
+- On a label or sticker on the device body
+- On the back cover or base of the device
+- On the box visible in the photo
+- On a screen showing device info
+
+Return ONLY valid JSON:
+{{
+  "match": false,
+  "found_identifier": null,
+  "confidence": "low",
+  "reasoning": "What you found or did not find in the image"
+}}
+
+Be precise. If the identifier is partially visible or partially obscured, note that in reasoning.
+Only set match=true if you can confidently see the same number or a clear substring match."""
+
+    client = _get_bedrock_client()
+    try:
+        response = client.converse(
+            modelId="amazon.nova-pro-v1:0",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"image": {"format": img_format, "source": {"bytes": product_image_bytes}}},
+                    {"text": prompt},
+                ],
+            }],
+            inferenceConfig={"maxTokens": 300, "temperature": 0.1},
+        )
+        raw = response["output"]["message"]["content"][0]["text"].strip()
+        raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
+        return json.loads(raw)
+    except Exception as e:
+        logger.error(f"Bedrock serial cross-check error: {e}")
+        return {
+            "match": False,
+            "found_identifier": None,
+            "confidence": "low",
+            "reasoning": f"Cross-check unavailable: {e}",
+        }
+
+
+def _validate_price(
+    asking_price: float,
+    invoice_total: Optional[float],
+) -> dict:
+    """
+    Cross-validate asking price against the invoice total.
+
+    Returns a dict with:
+      flag: bool       — True if the price looks suspicious
+      severity: str    — "none" | "warn" | "block"
+      reason: str      — human-readable explanation
+    """
+    if not invoice_total or invoice_total <= 0:
+        return {"flag": False, "severity": "none",
+                "reason": "Invoice total not available for price cross-validation."}
+    if asking_price <= 0:
+        return {"flag": False, "severity": "none", "reason": "Asking price not provided."}
+
+    ratio = asking_price / invoice_total
+
+    if ratio > 5.0:
+        return {
+            "flag": True,
+            "severity": "block",
+            "reason": (
+                f"Asking price (₹{asking_price:,.0f}) is more than 5× the invoice total "
+                f"(₹{invoice_total:,.0f}). This is not permitted — you can only list a "
+                f"second-hand item below its original purchase price."
+            ),
+        }
+    if ratio > 1.1:
+        return {
+            "flag": True,
+            "severity": "warn",
+            "reason": (
+                f"Asking price (₹{asking_price:,.0f}) is higher than the invoice total "
+                f"(₹{invoice_total:,.0f}). Second-hand items are typically priced below "
+                f"their original cost. You can continue, but buyers may question the price."
+            ),
+        }
+    if ratio < 0.05:
+        return {
+            "flag": True,
+            "severity": "warn",
+            "reason": (
+                f"Asking price (₹{asking_price:,.0f}) is very low compared to the invoice "
+                f"total (₹{invoice_total:,.0f}). Please confirm this price is correct."
+            ),
+        }
+
+    return {"flag": False, "severity": "none", "reason": "Price looks reasonable."}
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
@@ -511,26 +675,27 @@ async def verify_invoice(
     claimed_title: str = Form(...),
     claimed_category: str = Form(...),
     claimed_brand: str = Form(""),
+    asking_price: float = Form(0.0),
+    product_photo: Optional[UploadFile] = File(None),  # optional: for serial cross-check
 ):
     """
-    Strict invoice/bill verification using Nova Pro.
+    Multi-gate invoice verification using Nova Pro.
 
-    The seller uploads a photo of their purchase invoice/receipt.
-    Nova Pro extracts the product name, store, date and total, then checks
-    whether the document plausibly supports the listing claim.
+    Gates applied in order:
+    1. File type + size check (synchronous)
+    2. Nova Pro OCR + semantic match — extract product, store, date, total,
+       serial/IMEI; validate against claimed listing
+    3. Confidence gate — low confidence → blocked, medium → warning surfaced
+    4. Price cross-validation — asking price vs extracted invoice total
+    5. Serial/IMEI cross-check — for electronics: if serial found in invoice,
+       attempt to spot it in the product photo (optional pass)
 
-    Rules enforced:
-    - Document must be a recognisable invoice / receipt / bill.
-    - Product name on invoice must match claimed category/brand.
-    - Only verified=True listings receive the 'Invoice Verified' trust badge.
-    - Image is uploaded to S3 for audit trail regardless of outcome.
-
-    Returns structured extraction data so the UI can show the seller exactly
-    what the AI read — building transparency in both directions.
+    All extracted data is returned so the UI can show exactly what the AI read.
+    Invoice image is uploaded to S3 for audit trail regardless of outcome.
     """
     content_type = invoice.content_type or "image/jpeg"
 
-    # --- File type gate -------------------------------------------------
+    # ── Gate 1: File type ──────────────────────────────────────────────────
     allowed_types = {"image/jpeg", "image/png", "image/webp",
                      "image/gif", "application/pdf"}
     if content_type not in allowed_types:
@@ -541,16 +706,14 @@ async def verify_invoice(
 
     raw = await invoice.read()
 
-    # --- Size gate: 15 MB max -------------------------------------------
+    # ── Gate 1b: Size ─────────────────────────────────────────────────────
     if len(raw) > 15 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Invoice file too large (max 15 MB).")
 
-    # --- PDF: convert first page to JPEG for Bedrock vision -------------
+    # ── PDF → JPEG conversion ─────────────────────────────────────────────
     if content_type == "application/pdf":
         try:
-            from PIL import Image as PILImage
             import io
-            # Try pdf2image if available, else tell user to upload image
             try:
                 from pdf2image import convert_from_bytes
                 pages = convert_from_bytes(raw, dpi=150, first_page=1, last_page=1)
@@ -568,13 +731,17 @@ async def verify_invoice(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Could not process PDF: {e}")
 
-    # --- AI invoice extraction ------------------------------------------
+    # ── Gate 2: Nova Pro OCR + semantic match ─────────────────────────────
     ai = _bedrock_invoice_check(
         raw, content_type,
         claimed_title, claimed_category, claimed_brand or None
     )
+    logger.info(
+        "Invoice check result: verified=%s confidence=%s product='%s'",
+        ai.get("verified"), ai.get("match_confidence"), ai.get("product_name")
+    )
 
-    # --- Upload to S3 for audit trail (regardless of outcome) -----------
+    # ── S3 audit upload (always — before any gate blocks the response) ────
     s3_key = None
     bucket = os.getenv("AWS_S3_BUCKET_NAME")
     if bucket:
@@ -588,12 +755,85 @@ async def verify_invoice(
                 Metadata={
                     "claimed_title": claimed_title[:200],
                     "verified": str(ai.get("verified", False)),
+                    "confidence": ai.get("match_confidence", "low"),
                 },
             )
         except Exception as e:
             logger.warning(f"Invoice S3 upload failed (non-fatal): {e}")
 
+    # ── Gate 3: Confidence hard gate ──────────────────────────────────────
+    confidence = ai.get("match_confidence", "low")
+    confidence_gate_passed = True
+    confidence_gate_reason = None
+
+    if confidence == "low":
+        confidence_gate_passed = False
+        confidence_gate_reason = (
+            "The AI could not read the invoice clearly or could not confidently "
+            "match it to the product you're listing. Please upload a clearer, "
+            "well-lit photo of your original purchase receipt."
+        )
+    elif confidence == "medium":
+        # Medium passes but is surfaced as a warning — buyers will see it
+        confidence_gate_reason = (
+            "The AI matched your invoice with medium confidence. Your listing will "
+            "show a 'Partially Verified' badge. For a stronger 'Invoice Verified' "
+            "badge, upload a clearer photo showing the product name and total."
+        )
+
+    # If low confidence, verified is forced False regardless of AI output
+    if not confidence_gate_passed:
+        ai["verified"] = False
+        ai["mismatch_reason"] = confidence_gate_reason
+
     verified = bool(ai.get("verified", False))
+
+    # ── Gate 4: Price cross-validation ───────────────────────────────────
+    # Prefer the numeric value the model extracted; fall back to parsing the string
+    invoice_total_numeric = ai.get("invoice_total_numeric") or None
+    if not invoice_total_numeric:
+        invoice_total_numeric = _parse_amount(ai.get("invoice_total"))
+
+    price_result = _validate_price(asking_price, invoice_total_numeric)
+    logger.info(
+        "Price validation: asking=%.0f invoice=%.0f flag=%s severity=%s",
+        asking_price, invoice_total_numeric or 0,
+        price_result["flag"], price_result["severity"]
+    )
+
+    # "block" severity forces verified=False — listing cannot proceed
+    if price_result["severity"] == "block":
+        verified = False
+        ai["mismatch_reason"] = price_result["reason"]
+
+    # ── Gate 5: Serial / IMEI cross-check (electronics only) ─────────────
+    serial_number = ai.get("serial_number") or None
+    imei = ai.get("imei") or None
+    serial_cross_checked = False
+    serial_match = None
+
+    is_electronics = claimed_category.lower() in ELECTRONICS_CATEGORIES
+    has_identifier = bool(serial_number or imei)
+
+    if is_electronics and has_identifier and product_photo and verified:
+        try:
+            photo_bytes = await product_photo.read()
+            photo_ct = product_photo.content_type or "image/jpeg"
+            cross = _bedrock_serial_cross_check(
+                photo_bytes, photo_ct,
+                serial_number, imei
+            )
+            serial_cross_checked = True
+            serial_match = bool(cross.get("match", False))
+            logger.info(
+                "Serial cross-check: match=%s confidence=%s found='%s'",
+                serial_match, cross.get("confidence"), cross.get("found_identifier")
+            )
+            # Serial mismatch is a warning, not a block — not all photos show serial
+            if not serial_match:
+                logger.info("Serial not found in product photo — not blocking, surfacing as warning")
+        except Exception as e:
+            logger.warning(f"Serial cross-check failed (non-fatal): {e}")
 
     return InvoiceVerifyResponse(
         verified=verified,
@@ -601,9 +841,20 @@ async def verify_invoice(
         store=ai.get("store"),
         purchase_date=ai.get("purchase_date"),
         invoice_total=ai.get("invoice_total"),
-        match_confidence=ai.get("match_confidence", "low"),
+        invoice_total_numeric=invoice_total_numeric,
+        match_confidence=confidence,
         mismatch_reason=ai.get("mismatch_reason") if not verified else None,
         s3_key=s3_key,
+        # Gate results
+        confidence_gate_passed=confidence_gate_passed,
+        confidence_gate_reason=confidence_gate_reason,
+        price_flag=price_result["flag"],
+        price_flag_reason=price_result["reason"] if price_result["flag"] else None,
+        price_flag_severity=price_result["severity"],
+        serial_number=serial_number,
+        imei=imei,
+        serial_cross_checked=serial_cross_checked,
+        serial_match=serial_match,
     )
 
 
