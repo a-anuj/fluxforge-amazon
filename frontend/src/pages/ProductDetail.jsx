@@ -503,16 +503,16 @@ export default function ProductDetail() {
         {/* Alternatives */}
         {alternatives.length > 0 && (
           <div className="mt-8 border-t border-amazon-border pt-6">
-            <h2 className="text-[21px] font-bold text-amazon-text mb-4">Products related to this item</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <h2 className="text-[18px] sm:text-[21px] font-bold text-amazon-text mb-4">Products related to this item</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
               {alternatives.map(alt => (
-                <Link key={alt.id} to={`/products/${alt.id}`} className="product-card border border-amazon-border rounded-lg p-4 hover:shadow-md transition-shadow flex flex-col h-[380px]">
-                  <div className="flex items-center justify-center h-[200px] mb-3"><img src={alt.image_url} alt={alt.name} className="max-h-full max-w-full object-contain mix-blend-multiply" /></div>
+                <Link key={alt.id} to={`/products/${alt.id}`} className="product-card border border-amazon-border rounded-lg p-3 sm:p-4 hover:shadow-md transition-shadow flex flex-col h-[300px] sm:h-[380px]">
+                  <div className="flex items-center justify-center h-[140px] sm:h-[200px] mb-2 sm:mb-3"><img src={alt.image_url} alt={alt.name} className="max-h-full max-w-full object-contain mix-blend-multiply" /></div>
                   <div className="flex flex-col flex-1">
-                    <p className="text-[14px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">{alt.name}</p>
-                    <div className="star-rating text-[13px] mt-1">★★★★☆</div>
+                    <p className="text-[12px] sm:text-[14px] font-medium text-amazon-link leading-snug line-clamp-2 hover:text-amazon-link-hover">{alt.name}</p>
+                    <div className="star-rating text-[11px] sm:text-[13px] mt-1">★★★★☆</div>
                     <div className="mt-auto pt-2">
-                      <p><span className="text-[14px] font-bold text-amazon-text"><span className="text-[10px] align-top relative top-[3px] mr-0.5">₹</span>{Math.floor(alt.price).toLocaleString("en-IN")}</span></p>
+                      <p><span className="text-[13px] sm:text-[14px] font-bold text-amazon-text"><span className="text-[10px] align-top relative top-[3px] mr-0.5">₹</span>{Math.floor(alt.price).toLocaleString("en-IN")}</span></p>
                     </div>
                   </div>
                 </Link>
