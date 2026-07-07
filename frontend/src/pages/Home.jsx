@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getProducts, getImpactStats } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 const PAGE_SIZE = 10;
+const SLIDE_INTERVAL = 4000;
+const RESUME_DELAY = 6000; // resume auto-play 6s after user interaction
 
 // ── Category meta — icon + display label ─────────────────────────────────
 const CATEGORY_META = {
@@ -66,7 +68,7 @@ const slides = [
   {
     badge: "📍 NearDrop Wishlist",
     title: "Get your desired items fast, locally",
-    desc: "Add products you want to your wishlist. When someone nearby returns a matching item, get notified instantly. It means ultra-fast delivery and dynamic discounts from logistics savings.",
+    desc: "Add products you want to your wishlist. When someone nearby returns a matching item, get notified instantly — ultra-fast delivery with logistics savings.",
     italic: "Hyperlocal matching — connecting local returns directly to you",
     ctas: [
       { label: "Go to NearDrop", to: "/neardrop", primary: true },
@@ -74,6 +76,180 @@ const slides = [
     emoji: "⚡",
   },
 ];
+
+// ── Slideshow component — fully self-contained ───────────────────────────
+function HeroSlideshow() {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const resumeTimer = useRef(null);
+  const stripRef = useRef(null);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+
+  // Auto-advance
+  useEffect(() => {
+    if (paused) return;
+    const id = setInterval(() => advance(1), SLIDE_INTERVAL);
+    return () => clearInterval(id);
+  }, [paused, index]);
+
+  // Schedule auto-play resume after user interaction
+  const pauseTemporarily = useCallback(() => {
+    setPaused(true);
+    clearTimeout(resumeTimer.current);
+    resumeTimer.current = setTimeout(() => setPaused(false), RESUME_DELAY);
+  }, []);
+
+  useEffect(() => () => clearTimeout(resumeTimer.current), []);
+
+  const advance = useCallback((dir) => {
+    if (transitioning) return;
+    setTransitioning(true);
+    setIndex(i => (i + dir + slides.length) % slides.length);
+    setTimeout(() => setTransitioning(false), 520);
+  }, [transitioning]);
+
+  const goTo = useCallback((i) => {
+    if (i === index) return;
+    setTransitioning(true);
+    setIndex(i);
+    setTimeout(() => setTransitioning(false), 520);
+    pauseTemporarily();
+  }, [index, pauseTemporarily]);
+
+  // Touch / swipe support
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    // Only register as horizontal swipe if horizontal movement dominates
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      advance(dx < 0 ? 1 : -1);
+      pauseTemporarily();
+    }
+    touchStartX.current = null;
+    touchStartY.current = null;
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      {/* Slide viewport — clips the strip, never overflows */}
+      <div
+        className="relative w-full overflow-hidden"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{ touchAction: "pan-y" }}
+      >
+        {/* Strip — 400% wide, slides are each 25% of the strip = 1 viewport unit each */}
+        <div
+          ref={stripRef}
+          className="flex"
+          style={{
+            width: `${slides.length * 100}%`,
+            transform: `translateX(-${(index / slides.length) * 100}%)`,
+            transition: transitioning ? "transform 0.5s cubic-bezier(0.25,0.46,0.45,0.94)" : "none",
+            willChange: "transform",
+          }}
+        >
+          {slides.map((slide, i) => (
+            <div
+              key={i}
+              className="relative flex-shrink-0 bg-gradient-to-r from-[#232f3e] to-[#37475a]"
+              style={{ width: `${100 / slides.length}%` }}
+            >
+              {/* Slide inner — responsive padding, min-height avoids collapse */}
+              <div className="px-6 py-8 sm:px-10 sm:py-12 min-h-[260px] sm:min-h-[320px] flex flex-col justify-center">
+                <div className="relative z-10 max-w-xl">
+                  <p className="text-amazon-orange text-[12px] sm:text-[13px] font-bold tracking-wide uppercase mb-2">
+                    {slide.badge}
+                  </p>
+                  <h1 className="text-[22px] sm:text-[28px] md:text-[36px] font-bold text-white leading-tight mb-3">
+                    {slide.title}
+                  </h1>
+                  <p className="text-[#ccc] text-[13px] sm:text-[14px] mb-3 leading-relaxed line-clamp-3 sm:line-clamp-none">
+                    {slide.desc}
+                  </p>
+                  <p className="text-amazon-orange text-[12px] sm:text-[14px] italic tracking-wide mb-5 hidden sm:block">
+                    {slide.italic}
+                  </p>
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
+                    {slide.ctas.map((cta) => (
+                      <Link
+                        key={cta.label}
+                        to={cta.to}
+                        className={`text-[13px] sm:text-[14px] px-4 sm:px-6 py-2 sm:py-2.5 font-bold inline-block rounded ${
+                          cta.primary ? "btn-amazon-primary" : "btn-amazon-orange"
+                        }`}
+                      >
+                        {cta.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+                {/* Decorative emoji — desktop only */}
+                <div className="absolute right-10 top-1/2 -translate-y-1/2 hidden lg:block text-[90px] opacity-25 select-none text-white pointer-events-none">
+                  {slide.emoji}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Prev / Next arrows — always visible on mobile, hover-only on desktop */}
+        <button
+          aria-label="Previous slide"
+          onClick={() => { advance(-1); pauseTemporarily(); }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-20
+            w-9 h-9 rounded-full bg-black/30 hover:bg-black/50 active:bg-black/60
+            flex items-center justify-center text-white
+            transition-colors touch-manipulation
+            sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+          style={{ WebkitTapHighlightColor: "transparent" }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <button
+          aria-label="Next slide"
+          onClick={() => { advance(1); pauseTemporarily(); }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-20
+            w-9 h-9 rounded-full bg-black/30 hover:bg-black/50 active:bg-black/60
+            flex items-center justify-center text-white
+            transition-colors touch-manipulation
+            sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+          style={{ WebkitTapHighlightColor: "transparent" }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {/* Dot indicators */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+          {slides.map((_, i) => (
+            <button
+              key={i}
+              aria-label={`Go to slide ${i + 1}`}
+              onClick={() => goTo(i)}
+              className={`rounded-full transition-all duration-300 touch-manipulation ${
+                i === index
+                  ? "w-6 h-2 bg-amazon-orange"
+                  : "w-2 h-2 bg-white/50 hover:bg-white/80 active:bg-white"
+              }`}
+              style={{ WebkitTapHighlightColor: "transparent" }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -137,132 +313,45 @@ export default function Home() {
   const visibleProducts = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
 
-  const [slideIndex, setSlideIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-
-  useEffect(() => {
-    if (isPaused) return;
-    const timer = setInterval(() => {
-      setSlideIndex((i) => (i + 1) % slides.length);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [isPaused]);
-
-  const goToSlide = (idx) => {
-    setSlideIndex(idx);
-    setIsPaused(true);
-  };
-
   return (
-    <div className="animate-fade-in overflow-hidden">
+    <div className="animate-fade-in">
       {/* ── Hero Slideshow ────────────────────────────────────────────────── */}
-      <div className="relative bg-gradient-to-b from-[#232f3e] to-amazon-bg">
+      <div className="bg-gradient-to-b from-[#232f3e] to-amazon-bg">
         <div className="max-w-[1500px] mx-auto px-4 pt-6 pb-2">
-          {/* White card — slideshow + stats all live inside here */}
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden relative group">
+          {/* Slideshow + stats card */}
+          <div className="group">
+            <HeroSlideshow />
 
-            {/* Sliding strip */}
-            <div className="relative">
-              <div
-                className="flex transition-transform duration-500 ease-in-out"
-                style={{ transform: `translateX(-${slideIndex * 100}%)` }}
-                onClick={() => setIsPaused(true)}
-              >
-              {slides.map((slide, i) => (
-                <div key={i} className="min-w-full flex-shrink-0 p-8 md:p-12 relative min-h-[320px] bg-gradient-to-r from-[#232f3e] to-[#37475a]">
-                  <div className="relative z-10 max-w-xl">
-                    <p className="text-amazon-orange text-[13px] font-bold tracking-wide uppercase mb-2">
-                      {slide.badge}
-                    </p>
-                    <h1 className="text-[28px] md:text-[36px] font-bold text-white leading-tight mb-3">
-                      {slide.title}
-                    </h1>
-                    <p className="text-[#ccc] text-[14px] mb-4 leading-relaxed">{slide.desc}</p>
-                    <p className="text-amazon-orange text-[14px] italic tracking-wide mb-5">
-                      {slide.italic}
-                    </p>
-                    <div className="flex flex-wrap gap-3">
-                      {slide.ctas.map((cta) => (
-                        <Link
-                          key={cta.label}
-                          to={cta.to}
-                          className={`text-[14px] px-6 py-2.5 font-bold inline-block rounded ${
-                            cta.primary ? "btn-amazon-primary" : "btn-amazon-orange"
-                          }`}
-                        >
-                          {cta.label}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="absolute right-10 top-1/2 -translate-y-1/2 hidden lg:block text-[90px] opacity-25 select-none text-white">
-                    {slide.emoji}
-                  </div>
-                </div>
-              ))}
-              </div>
-
-              {/* Dot indicators — anchored to slider, not white card */}
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
-                {slides.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => goToSlide(i)}
-                    className={`rounded-full transition-all duration-300 ${
-                      i === slideIndex
-                        ? "w-6 h-2 bg-amazon-orange"
-                        : "w-2 h-2 bg-white/40 hover:bg-white/70"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Arrow nav */}
-            <button
-              onClick={() => goToSlide((slideIndex - 1 + slides.length) % slides.length)}
-              className="absolute left-3 top-[160px] -translate-y-1/2 text-white/50 hover:text-white text-2xl font-bold px-3 py-2 transition-colors z-20 opacity-0 group-hover:opacity-100"
-            >
-              &#8249;
-            </button>
-            <button
-              onClick={() => goToSlide((slideIndex + 1) % slides.length)}
-              className="absolute right-3 top-[160px] -translate-y-1/2 text-white/50 hover:text-white text-2xl font-bold px-3 py-2 transition-colors z-20 opacity-0 group-hover:opacity-100"
-            >
-              &#8250;
-            </button>
-
-            {/* Stats row — inside the white card, below the slider */}
+            {/* Stats row */}
             {currentUser && (
-              <div className="grid grid-cols-2 md:grid-cols-5 border-t border-amazon-border">
-                <div className="p-4 border-r border-amazon-border text-center">
-                  <p className="text-[11px] text-amazon-text-secondary">Welcome back</p>
-                  <p className="text-[14px] font-bold text-amazon-text">{currentUser.name}</p>
+              <div className="bg-white rounded-b-lg mt-[-4px] grid grid-cols-2 md:grid-cols-5 border-t border-amazon-border shadow-sm">
+                <div className="p-3 sm:p-4 border-r border-amazon-border text-center">
+                  <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary">Welcome back</p>
+                  <p className="text-[13px] sm:text-[14px] font-bold text-amazon-text truncate px-1">{currentUser.name}</p>
                 </div>
-                <div className="p-4 border-r border-amazon-border text-center">
-                  <p className="text-[11px] text-amazon-text-secondary">Level</p>
-                  <p className="text-[14px] font-bold text-amazon-green">{currentUser.level}</p>
+                <div className="p-3 sm:p-4 border-r border-amazon-border text-center">
+                  <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary">Level</p>
+                  <p className="text-[13px] sm:text-[14px] font-bold text-amazon-green">{currentUser.level}</p>
                 </div>
-                <div className="p-4 border-r border-amazon-border text-center">
-                  <p className="text-[11px] text-amazon-text-secondary">Green Credits</p>
-                  <p className="text-[14px] font-bold text-amazon-orange">{currentUser.green_credits}</p>
+                <div className="p-3 sm:p-4 border-r border-amazon-border text-center">
+                  <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary">Green Credits</p>
+                  <p className="text-[13px] sm:text-[14px] font-bold text-amazon-orange">{currentUser.green_credits}</p>
                 </div>
-                <div className="p-4 border-r border-amazon-border text-center">
-                  <p className="text-[11px] text-amazon-text-secondary">CO&#x2082; Saved</p>
-                  <p className="text-[14px] font-bold text-amazon-green">
+                <div className="p-3 sm:p-4 border-r border-amazon-border text-center">
+                  <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary">CO&#x2082; Saved</p>
+                  <p className="text-[13px] sm:text-[14px] font-bold text-amazon-green">
                     {impact ? `${impact.co2_saved} kg` : "—"}
                   </p>
                 </div>
-                <div className="p-4 text-center">
-                  <p className="text-[11px] text-amazon-text-secondary">E-Waste Prevented</p>
-                  <p className="text-[14px] font-bold text-amazon-green">
+                <div className="p-3 sm:p-4 text-center col-span-2 md:col-span-1">
+                  <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary">E-Waste Prevented</p>
+                  <p className="text-[13px] sm:text-[14px] font-bold text-amazon-green">
                     {impact ? `${impact.ewaste_prevented} kg` : "—"}
                   </p>
                 </div>
               </div>
             )}
-
-          </div>{/* /white card */}
+          </div>
         </div>
       </div>
 
