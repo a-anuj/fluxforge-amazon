@@ -120,110 +120,235 @@ function JourneyModal({ listingId, onClose }) {
 }
 
 // ── Add to Wishlist Modal ──────────────────────────────────────────────
-function AddWishlistModal({ onClose, onAdd, products }) {
-  const [form, setForm] = useState({
-    product_id: "",
-    category: "",
-    brand: "",
-    keywords: "",
-    max_price: "",
-    radius_km: 10,
-  });
+// Replaced by inline ProductPicker — kept as lightweight radius/price config only,
+// invoked after the user taps Watch on a product card.
+function WatchConfigModal({ product, onClose, onAdd }) {
+  const [maxPrice, setMaxPrice] = useState(Math.floor(product.price * 0.8));
+  const [radius, setRadius]     = useState(10);
   const [submitting, setSubmitting] = useState(false);
-
-  const categories = [...new Set(products.map(p => p.category))];
-  const brands = [...new Set(products.map(p => p.brand))];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     await onAdd({
-      product_id: form.product_id ? Number(form.product_id) : null,
-      category: form.category || null,
-      brand: form.brand || null,
-      keywords: form.keywords || null,
-      max_price: form.max_price ? Number(form.max_price) : null,
-      radius_km: Number(form.radius_km),
+      product_id: product.id,
+      category:   product.category,
+      brand:      product.brand,
+      max_price:  maxPrice,
+      radius_km:  radius,
     });
     setSubmitting(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 animate-fade-in" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-[440px]">
-        <div className="bg-[#232f3e] px-5 py-4 rounded-t-xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-[24px]">📍</span>
-            <div>
-              <p className="text-white font-bold text-[15px]">Add to NearDrop Wishlist</p>
-              <p className="text-[#adb1b8] text-[11px]">Get notified when this becomes available nearby</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-[#adb1b8] hover:text-white text-[20px]">✕</button>
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 animate-fade-in"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-t-2xl sm:rounded-xl shadow-2xl w-full sm:max-w-[400px]">
+        {/* Handle bar on mobile */}
+        <div className="flex justify-center pt-3 sm:hidden">
+          <div className="w-10 h-1 bg-[#d5d9d9] rounded-full" />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-3">
-          <div>
-            <label className="text-[12px] font-bold text-amazon-text block mb-1">Specific Product (optional)</label>
-            <select value={form.product_id} onChange={(e) => setForm({...form, product_id: e.target.value})}
-              className="w-full px-3 py-2 border border-[#a6a6a6] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[#e77600]">
-              <option value="">Any matching product</option>
-              {products.map(p => <option key={p.id} value={p.id}>{p.name} — ₹{p.price}</option>)}
-            </select>
+        <div className="px-5 pt-4 pb-2 flex items-center gap-3 border-b border-amazon-border">
+          {product.image_url && (
+            <img src={product.image_url} alt="" className="w-12 h-12 object-contain rounded flex-shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-bold text-amazon-text line-clamp-1">{product.name}</p>
+            <p className="text-[11px] text-amazon-text-secondary">{product.brand} · ₹{product.price.toLocaleString("en-IN")}</p>
           </div>
+          <button onClick={onClose} className="text-[#adb1b8] hover:text-amazon-text text-[20px] flex-shrink-0">✕</button>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-bold text-amazon-text block mb-1">Category</label>
-              <select value={form.category} onChange={(e) => setForm({...form, category: e.target.value})}
-                className="w-full px-3 py-2 border border-[#a6a6a6] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[#e77600]">
-                <option value="">Any</option>
-                {categories.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-              </select>
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[12px] font-bold text-amazon-text">Max Price I'll pay (₹)</label>
+              <span className="text-[13px] font-bold text-amazon-orange">₹{maxPrice.toLocaleString("en-IN")}</span>
             </div>
-            <div>
-              <label className="text-[12px] font-bold text-amazon-text block mb-1">Brand</label>
-              <select value={form.brand} onChange={(e) => setForm({...form, brand: e.target.value})}
-                className="w-full px-3 py-2 border border-[#a6a6a6] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[#e77600]">
-                <option value="">Any</option>
-                {brands.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
+            <input
+              type="range" min={500} max={product.price} step={100}
+              value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))}
+              className="w-full accent-[#e77600]"
+            />
+            <div className="flex justify-between text-[10px] text-amazon-text-secondary mt-0.5">
+              <span>₹500</span><span>₹{product.price.toLocaleString("en-IN")}</span>
             </div>
           </div>
 
           <div>
-            <label className="text-[12px] font-bold text-amazon-text block mb-1">Keywords (comma-separated)</label>
-            <input type="text" value={form.keywords} onChange={(e) => setForm({...form, keywords: e.target.value})}
-              placeholder="e.g., earbuds, headphones, tws"
-              className="w-full px-3 py-2 border border-[#a6a6a6] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[#e77600]" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[12px] font-bold text-amazon-text block mb-1">Max Price (₹)</label>
-              <input type="number" value={form.max_price} onChange={(e) => setForm({...form, max_price: e.target.value})}
-                placeholder="e.g., 5000"
-                className="w-full px-3 py-2 border border-[#a6a6a6] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[#e77600]" />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[12px] font-bold text-amazon-text">Match radius</label>
+              <span className="text-[13px] font-bold text-amazon-orange">{radius} km</span>
             </div>
-            <div>
-              <label className="text-[12px] font-bold text-amazon-text block mb-1">Radius (km)</label>
-              <input type="range" min="1" max="50" value={form.radius_km} onChange={(e) => setForm({...form, radius_km: e.target.value})}
-                className="w-full mt-2 accent-[#e77600]" />
-              <p className="text-[11px] text-amazon-text-secondary text-center">{form.radius_km} km</p>
+            <input
+              type="range" min={1} max={50} value={radius}
+              onChange={(e) => setRadius(Number(e.target.value))}
+              className="w-full accent-[#e77600]"
+            />
+            <div className="flex justify-between text-[10px] text-amazon-text-secondary mt-0.5">
+              <span>1 km</span><span>50 km</span>
             </div>
           </div>
 
-          <div className="bg-[#f0f9f4] border border-[#d4edda] rounded p-3">
-            <p className="text-[11px] text-[#067d62]">
-              <b>How it works:</b> When someone within {form.radius_km}km returns a matching product, you'll be notified instantly with a dynamic discount (15-50% off) based on logistics savings.
+          <div className="bg-[#f0f9f4] border border-[#d4edda] rounded-lg p-3">
+            <p className="text-[11px] text-[#067d62] leading-relaxed">
+              <b>How it works:</b> When someone within {radius} km returns this product, you'll be notified instantly with a discount based on logistics savings.
             </p>
           </div>
 
-          <button type="submit" disabled={submitting || (!form.product_id && !form.category && !form.brand && !form.keywords)}
-            className="btn-amazon-primary w-full py-2.5 text-[14px] font-bold disabled:opacity-40">
-            {submitting ? "Adding..." : "📍 Add to NearDrop Wishlist"}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full py-2.5 rounded-lg text-[14px] font-bold text-white disabled:opacity-50 active:scale-[0.98] transition-transform"
+            style={{
+              backgroundColor: "#e77600",
+              animation: submitting ? "none" : "watchGlow 2s ease-in-out infinite",
+            }}
+          >
+            <style>{`
+              @keyframes watchGlow {
+                0%   { box-shadow: 0 0 0 0 rgba(231,118,0,0.55); }
+                50%  { box-shadow: 0 0 0 8px rgba(231,118,0,0); }
+                100% { box-shadow: 0 0 0 0 rgba(231,118,0,0); }
+              }
+            `}</style>
+            {submitting ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+                Adding…
+              </span>
+            ) : "📍 Watch this product"}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Product Picker (browse & one-tap Watch) ────────────────────────────
+function ProductPicker({ products, wishlist, onWatch, onClose }) {
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("all");
+  const watchedIds = new Set(wishlist.map(w => w.product_id).filter(Boolean));
+  const categories = ["all", ...new Set(products.map(p => p.category))];
+
+  const visible = products.filter(p => {
+    const matchCat = catFilter === "all" || p.category === catFilter;
+    const q = search.toLowerCase();
+    const matchQ = !q || p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white animate-fade-in">
+      {/* Header */}
+      <div className="bg-[#232f3e] px-4 py-3 flex items-center gap-3 flex-shrink-0">
+        <button onClick={onClose} className="text-white/70 hover:text-white p-1">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div className="flex-1 bg-white rounded-lg flex items-center px-3 h-9">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4 text-[#888] flex-shrink-0 mr-2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search products to watch…"
+            className="flex-1 text-[13px] text-amazon-text outline-none bg-transparent"
+            autoFocus
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-[#888] text-[16px] ml-1">✕</button>
+          )}
+        </div>
+      </div>
+
+      {/* Category pills */}
+      <div className="bg-[#232f3e] pb-3 px-4 flex gap-2 overflow-x-auto scrollbar-none flex-shrink-0">
+        {categories.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setCatFilter(cat)}
+            className={`flex-shrink-0 text-[11px] font-bold px-3 py-1 rounded-full transition-colors ${
+              catFilter === cat
+                ? "bg-amazon-orange text-white"
+                : "bg-white/10 text-white/80 hover:bg-white/20"
+            }`}
+          >
+            {cat === "all" ? "All" : cat.charAt(0).toUpperCase() + cat.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Results count */}
+      <div className="px-4 py-2 bg-[#f0f2f2] border-b border-amazon-border flex-shrink-0">
+        <p className="text-[12px] text-amazon-text-secondary">
+          {visible.length} product{visible.length !== 1 ? "s" : ""}
+          {search ? ` for "${search}"` : catFilter !== "all" ? ` in ${catFilter}` : ""}
+        </p>
+      </div>
+
+      {/* Product grid */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-[1px] bg-amazon-border">
+          {visible.map(product => {
+            const watched = watchedIds.has(product.id);
+            return (
+              <div key={product.id} className="bg-white p-3 flex flex-col">
+                {/* Product image */}
+                <Link to={`/products/${product.id}`} onClick={onClose}>
+                  <div className="flex items-center justify-center h-[120px] sm:h-[160px] mb-2">
+                    <img
+                      src={product.image_url || "https://via.placeholder.com/200"}
+                      alt={product.name}
+                      className="max-h-full max-w-full object-contain mix-blend-multiply"
+                    />
+                  </div>
+                </Link>
+
+                {/* Info */}
+                <div className="flex-1 flex flex-col">
+                  <p className="text-[12px] sm:text-[13px] font-medium text-amazon-text leading-snug line-clamp-2 mb-1">
+                    {product.name}
+                  </p>
+                  <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary mb-1">{product.brand}</p>
+                  <p className="text-[13px] sm:text-[15px] font-bold text-amazon-text mb-2">
+                    <span className="text-[10px] align-top relative top-[2px]">₹</span>
+                    {Math.floor(product.price).toLocaleString("en-IN")}
+                  </p>
+
+                  {/* Watch button */}
+                  <button
+                    onClick={() => !watched && onWatch(product)}
+                    disabled={watched}
+                    className={`mt-auto w-full py-1.5 rounded-lg text-[11px] sm:text-[12px] font-bold transition-all active:scale-[0.97] ${
+                      watched
+                        ? "bg-[#f0f9f4] text-[#067d62] border border-[#067d62]/30 cursor-default"
+                        : "bg-[#e77600] hover:bg-[#d56e0c] text-white"
+                    }`}
+                  >
+                    {watched ? "✓ Watching" : "📍 Watch"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {visible.length === 0 && (
+          <div className="p-12 text-center">
+            <p className="text-[15px] text-amazon-text-secondary">No products match "{search}"</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -238,7 +363,8 @@ export default function NearDrop() {
   const [notifications, setNotifications] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [watchTarget, setWatchTarget] = useState(null); // product selected in picker
   const [journeyListingId, setJourneyListingId] = useState(null);
   const [purchasing, setPurchasing] = useState(null);
 
@@ -261,11 +387,18 @@ export default function NearDrop() {
       await addToWishlist({ ...data, user_id: currentUser.id });
       const wl = await getWishlist(currentUser.id);
       setWishlist(wl);
-      // Check for immediate matches
       const m = await getWishlistMatches(currentUser.id);
       setMatches(m);
-      setShowAddModal(false);
+      // Close everything and land on the wishlist tab
+      setWatchTarget(null);
+      setShowPicker(false);
+      setTab("wishlist");
     } catch (err) { alert(err.message); }
+  };
+
+  // Called from ProductPicker when user taps Watch on a card
+  const handlePickProduct = (product) => {
+    setWatchTarget(product); // open the radius/price config sheet
   };
 
   const handleRemove = async (id) => {
@@ -309,7 +442,7 @@ export default function NearDrop() {
                 Get notified when products you want are returned near you. Save money with dynamic discounts from logistics savings.
               </p>
             </div>
-            <button onClick={() => setShowAddModal(true)}
+            <button onClick={() => setShowPicker(true)}
               className="btn-amazon-primary px-5 py-2.5 text-[14px] font-bold">
               + Add to Wishlist
             </button>
@@ -362,7 +495,7 @@ export default function NearDrop() {
                   <span className="text-[48px]">📍</span>
                   <p className="text-[16px] text-amazon-text mt-3 font-bold">No matches yet</p>
                   <p className="text-[13px] text-amazon-text-secondary mt-1">When someone near you returns a product from your wishlist, it'll appear here with a dynamic discount.</p>
-                  <button onClick={() => setShowAddModal(true)} className="btn-amazon-primary mt-4 px-5 py-2 text-[13px]">+ Add items to watch</button>
+                  <button onClick={() => setShowPicker(true)} className="btn-amazon-primary mt-4 px-5 py-2 text-[13px]">+ Add items to watch</button>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -437,37 +570,114 @@ export default function NearDrop() {
                     <span className="text-[48px]">♥</span>
                     <p className="text-[16px] text-amazon-text mt-3 font-bold">Your wishlist is empty</p>
                     <p className="text-[13px] text-amazon-text-secondary mt-1">Add products or categories you're looking for — we'll notify you when they're available nearby at a discount.</p>
-                    <button onClick={() => setShowAddModal(true)} className="btn-amazon-primary mt-4 px-5 py-2 text-[13px]">+ Add your first item</button>
+                    <button onClick={() => setShowPicker(true)} className="btn-amazon-primary mt-4 px-5 py-2 text-[13px]">+ Add your first item</button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {wishlist.map(item => (
-                      <div key={item.id} className="bg-white border border-amazon-border rounded-lg p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            {item.product_image ? (
-                              <img src={item.product_image} alt="" className="w-12 h-12 object-contain rounded" />
-                            ) : (
-                              <div className="w-12 h-12 bg-[#f0f2f2] rounded flex items-center justify-center text-[20px]">
-                                {item.category === "electronics" ? "🎧" : item.category === "running" ? "👟" : item.category === "backpacking" ? "🎒" : "📦"}
+                  <>
+                    {/* Add more button */}
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-[13px] text-amazon-text-secondary">
+                        Watching <b className="text-amazon-text">{wishlist.length}</b> product{wishlist.length !== 1 ? "s" : ""}
+                      </p>
+                      <button
+                        onClick={() => setShowPicker(true)}
+                        className="flex items-center gap-1.5 text-[13px] font-bold text-amazon-link hover:text-amazon-link-hover border border-amazon-border rounded-lg px-3 py-1.5 hover:bg-[#f0f2f2] transition-colors"
+                      >
+                        <span>+</span> Add more
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-[1px] bg-amazon-border">
+                      {wishlist.map(item => {
+                        // Cross-reference with the products list for full product data
+                        const prod = products.find(p => p.id === item.product_id);
+                        const productImage = item.product_image || prod?.image_url;
+                        const productName  = item.product_name  || prod?.name || `${item.brand || ""} ${item.category || ""}`.trim() || "Custom search";
+                        const productPrice = prod?.price;
+                        const productId    = item.product_id || prod?.id;
+
+                        return (
+                          <div key={item.id} className="bg-white flex flex-col">
+                            {/* Product card section — clickable to product page */}
+                            <Link
+                              to={productId ? `/products/${productId}` : "#"}
+                              className="flex flex-col p-3 flex-1 hover:bg-[#fafafa] transition-colors group"
+                            >
+                              {/* Image */}
+                              <div className="flex items-center justify-center h-[130px] sm:h-[180px] mb-2">
+                                {productImage ? (
+                                  <img
+                                    src={productImage}
+                                    alt={productName}
+                                    className="max-h-full max-w-full object-contain mix-blend-multiply"
+                                  />
+                                ) : (
+                                  <div className="w-16 h-16 bg-[#f0f2f2] rounded-full flex items-center justify-center text-[28px]">
+                                    {item.category === "electronics" ? "💻" : item.category === "running" || item.category === "footwear" ? "👟" : item.category === "bags" || item.category === "backpacking" ? "🎒" : item.category === "clothing" ? "👕" : item.category === "kitchen" ? "🍳" : item.category === "furniture" ? "🛋️" : "📦"}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            <div>
-                              <p className="text-[13px] font-bold text-amazon-text">
-                                {item.product_name || `${item.brand || ""} ${item.category || ""}`.trim() || "Custom search"}
+
+                              {/* Name + brand */}
+                              <p className="text-[12px] sm:text-[13px] font-medium text-amazon-link group-hover:text-amazon-link-hover leading-snug line-clamp-2 mb-0.5">
+                                {productName}
                               </p>
-                              {item.keywords && <p className="text-[11px] text-amazon-text-secondary">Keywords: {item.keywords}</p>}
-                              <div className="flex gap-2 mt-1">
-                                {item.max_price && <span className="text-[10px] bg-[#f0f2f2] px-1.5 py-0.5 rounded">Max ₹{item.max_price}</span>}
-                                <span className="text-[10px] bg-[#f0f2f2] px-1.5 py-0.5 rounded">📍 {item.radius_km}km</span>
+                              {item.brand && (
+                                <p className="text-[10px] sm:text-[11px] text-amazon-text-secondary mb-1">{item.brand}</p>
+                              )}
+
+                              {/* Original price */}
+                              {productPrice && (
+                                <p className="text-[12px] sm:text-[14px] font-bold text-amazon-text">
+                                  <span className="text-[10px] align-top relative top-[1px]">₹</span>
+                                  {Math.floor(productPrice).toLocaleString("en-IN")}
+                                </p>
+                              )}
+                            </Link>
+
+                            {/* ── NearDrop metrics strip ── */}
+                            <div className="border-t border-amazon-border bg-[#f8fffe] px-3 py-2 space-y-1.5">
+                              {/* Max price I'll pay */}
+                              {item.max_price && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] text-amazon-text-secondary">Max I'll pay</span>
+                                  <span className="text-[11px] font-bold text-[#067d62]">
+                                    ₹{Number(item.max_price).toLocaleString("en-IN")}
+                                    {productPrice && (
+                                      <span className="text-[10px] font-normal text-amazon-text-secondary ml-1">
+                                        ({Math.round((1 - item.max_price / productPrice) * 100)}% off)
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Radius */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-amazon-text-secondary">Match radius</span>
+                                <span className="text-[11px] font-bold text-[#1a73e8]">📍 {item.radius_km} km</span>
                               </div>
+
+                              {/* Keywords if set */}
+                              {item.keywords && (
+                                <p className="text-[10px] text-amazon-text-secondary truncate">
+                                  🔍 {item.keywords}
+                                </p>
+                              )}
+
+                              {/* Remove button */}
+                              <button
+                                onClick={() => handleRemove(item.id)}
+                                className="w-full mt-1 py-1 rounded text-[11px] font-medium text-amazon-text-secondary border border-amazon-border hover:border-amazon-red hover:text-amazon-red active:bg-red-50 transition-colors"
+                              >
+                                Remove
+                              </button>
                             </div>
                           </div>
-                          <button onClick={() => handleRemove(item.id)} className="text-[12px] text-amazon-text-secondary hover:text-amazon-red">✕</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -511,7 +721,21 @@ export default function NearDrop() {
       </div>
 
       {/* Modals */}
-      {showAddModal && <AddWishlistModal onClose={() => setShowAddModal(false)} onAdd={handleAdd} products={products} />}
+      {showPicker && (
+        <ProductPicker
+          products={products}
+          wishlist={wishlist}
+          onWatch={handlePickProduct}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+      {watchTarget && (
+        <WatchConfigModal
+          product={watchTarget}
+          onClose={() => setWatchTarget(null)}
+          onAdd={handleAdd}
+        />
+      )}
       {journeyListingId && <JourneyModal listingId={journeyListingId} onClose={() => setJourneyListingId(null)} />}
     </div>
   );
