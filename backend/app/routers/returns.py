@@ -131,6 +131,33 @@ def apply_confidence_gate(result: dict) -> dict:
     return result
 
 
+def apply_damaged_product_rules(assessment: dict) -> dict:
+    """
+    Evaluates damaged products based on logistics and repair costs.
+    If damage is slight, we check for refurbishment.
+    If refurbishment isn't viable (logistics cost + repair cost > 40%), 
+    we check if it can be donated (must be usable).
+    """
+    if assessment.get("is_damaged"):
+        # Assume logistics cost is a fixed 15% for simplicity
+        logistics_cost_pct = 15
+        
+        repair_cost_pct = assessment.get("refurb_cost_estimate_pct") or 0
+        total_cost_pct = logistics_cost_pct + repair_cost_pct
+        
+        # If total cost is within margin, item is refurbishable, and has >85% life
+        if total_cost_pct <= 40 and assessment.get("refurbishable") and assessment.get("remaining_life_pct", 0) > 85:
+            assessment["recommended_action"] = "refurbish"
+        else:
+            # If refurbishment not possible, donate only if remaining life > 70%
+            if assessment.get("remaining_life_pct", 0) > 70:
+                assessment["recommended_action"] = "donate"
+            else:
+                assessment["recommended_action"] = "recycle"
+                
+    return assessment
+
+
 
 # ── Helper: fetch bytes from a URL (best-effort) ───────────────────────
 
@@ -321,6 +348,8 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
             product_metadata=product_meta,
             return_reason="no reason provided",
         )
+        
+        assessment = apply_damaged_product_rules(assessment)
 
         # ── Step 2: Confidence gate ───────────────────────────────────
         assessment = apply_confidence_gate(assessment)
@@ -581,6 +610,7 @@ def get_return_by_order(order_id: int, db: Session = Depends(get_db)):
 @router.post("/with-photo", status_code=201)
 async def create_return_with_photo(
     order_id: int = Form(...),
+    reason: str = Form(None),
     photo: UploadFile = File(None),   # optional single image
     db: Session = Depends(get_db),
 ):
@@ -615,8 +645,9 @@ async def create_return_with_photo(
     assessment = assess_return_condition(
         return_photo_bytes=photo_bytes,
         product_metadata=product_meta,
-        return_reason="customer return",
+        return_reason=reason or "customer return",
     )
+    assessment = apply_damaged_product_rules(assessment)
     assessment = apply_confidence_gate(assessment)
 
     action = assessment["recommended_action"]

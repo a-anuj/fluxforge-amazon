@@ -245,7 +245,7 @@ export default function NewReturn() {
     setSubmitting(true);
     setError("");
     try {
-      const res = await createReturnWithPhoto(Number(selectedOrder), photoFile || null);
+      const res = await createReturnWithPhoto(Number(selectedOrder), photoFile || null, reason);
       setResult(res);
       refreshUser();
       setStep("done");
@@ -337,21 +337,7 @@ export default function NewReturn() {
                   })}
                 </div>
 
-                {/* Reason */}
-                <div>
-                  <label className="block text-[12px] font-semibold text-[#0f1923] mb-1.5">
-                    Why are you returning?
-                  </label>
-                  <select
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-[#c8cdd3] rounded-xl text-[13px] text-[#0f1923] focus:outline-none focus:ring-2 focus:ring-[#0f1923]/20 bg-white"
-                  >
-                    {RETURN_REASONS.map((r) => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
-                </div>
+
 
                 <button
                   type="button"
@@ -381,7 +367,7 @@ export default function NewReturn() {
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-semibold text-[#0f1923] truncate">{selectedProductObj.name}</p>
                   <p className="text-[11px] text-[#6c7480]">
-                    {RETURN_REASONS.find((r) => r.value === reason)?.label || reason}
+                    Order #{selectedOrder}
                   </p>
                 </div>
                 <button
@@ -393,6 +379,23 @@ export default function NewReturn() {
                 </button>
               </div>
             )}
+
+            {/* Reason */}
+            <div>
+              <label className="block text-[12px] font-semibold text-[#0f1923] mb-1.5">
+                Why are you returning?
+              </label>
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="w-full px-3 py-2.5 border border-[#c8cdd3] rounded-xl text-[13px] text-[#0f1923] focus:outline-none focus:ring-2 focus:ring-[#0f1923]/20 bg-white"
+              >
+                {RETURN_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
 
             {/* Photo upload */}
             <div>
