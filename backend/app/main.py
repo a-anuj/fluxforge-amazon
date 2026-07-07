@@ -45,6 +45,7 @@ async def lifespan(app: FastAPI):
             _safe_add_column(_conn, "users", "employee_zone", "VARCHAR")
             _safe_add_column(_conn, "products", "return_period_days", "INTEGER", "7")
             _safe_add_column(_conn, "products", "has_no_return_policy", "BOOLEAN", "FALSE")
+            _safe_add_column(_conn, "products", "image_urls", "TEXT")
             _conn.commit()
     except Exception:
         pass  # Non-critical — app can still run

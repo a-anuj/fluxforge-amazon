@@ -59,6 +59,8 @@ class Product(Base):
     price = Column(Float, nullable=False)
     description = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
+    # Comma-separated list of up to 4 additional angle/detail image URLs
+    image_urls = Column(Text, nullable=True)
 
     # ── Environmental Impact metrics ──
     co2_impact = Column(Float, default=0.0)            # kg CO₂ footprint

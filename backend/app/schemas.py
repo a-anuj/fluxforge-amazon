@@ -62,6 +62,7 @@ class ProductOut(BaseModel):
     price: float
     description: Optional[str] = None
     image_url: Optional[str] = None
+    image_urls: Optional[str] = None   # comma-separated additional angle URLs
 
     # Environmental impact metrics
     co2_impact: float = 0.0

@@ -145,12 +145,13 @@ export default function ProductDetail() {
   const [deliveryOptions, setDeliveryOptions] = useState([]);
   const [selectedDelivery, setSelectedDelivery] = useState("standard");
   const [showTryOn, setShowTryOn] = useState(false);
+  const [activeImg, setActiveImg] = useState(0);
 
   const ratingCount = useMemo(() => Math.floor(Math.random() * 500 + 100), [id]);
   const discountPct = useMemo(() => Math.floor(Math.random() * 20 + 5), [id]);
 
   useEffect(() => {
-    setLoading(true); setOrderResult(null); setReturnFreqScore(null); setComfortScore(null);
+    setLoading(true); setOrderResult(null); setReturnFreqScore(null); setComfortScore(null); setActiveImg(0);
     Promise.all([getProduct(id), getAlternatives(id), getProductConfidence(id), getProductImpact(id), getRefurbishedAlt(id), getSustainabilityAdvice(id)])
       .then(([p, alts, conf, imp, refurb, adv]) => {
         setProduct(p); setAlternatives(alts);
@@ -204,6 +205,13 @@ export default function ProductDetail() {
   const scoresReady = returnFreqScore !== null && comfortScore !== null;
   const selectedDO = deliveryOptions.find(d => d.type === selectedDelivery);
 
+  // Build ordered image list: primary + extras from comma-separated image_urls field
+  const allImages = [
+    product.image_url,
+    ...(product.image_urls ? product.image_urls.split(",").filter(Boolean) : []),
+  ].filter(Boolean);
+  if (allImages.length === 0) allImages.push("https://via.placeholder.com/400");
+
   return (
     <div className="bg-white animate-fade-in">
       <div className="max-w-[1500px] mx-auto px-4 py-4">
@@ -234,11 +242,72 @@ export default function ProductDetail() {
         )}
 
         <div className="grid md:grid-cols-[400px_1fr_300px] gap-6">
-          {/* Image + Virtual Try-On */}
+          {/* Image Gallery + Virtual Try-On */}
           <div className="self-start flex flex-col gap-3">
-            <div className="border border-amazon-border rounded p-4 flex items-center justify-center bg-white">
-              <img src={product.image_url || "https://via.placeholder.com/400"} alt={product.name} className="max-h-[400px] max-w-full object-contain" />
+
+            {/* Main image with prev/next arrows when multiple images */}
+            <div className="relative border border-amazon-border rounded p-4 flex items-center justify-center bg-white min-h-[320px] sm:min-h-[400px] group">
+              <img
+                key={allImages[activeImg]}
+                src={allImages[activeImg]}
+                alt={`${product.name} — view ${activeImg + 1}`}
+                className="max-h-[320px] sm:max-h-[400px] max-w-full object-contain transition-opacity duration-200"
+              />
+              {allImages.length > 1 && (
+                <>
+                  <button
+                    aria-label="Previous image"
+                    onClick={() => setActiveImg(i => (i - 1 + allImages.length) % allImages.length)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 border border-amazon-border shadow-sm flex items-center justify-center text-amazon-text hover:bg-white active:bg-[#f0f2f2] transition-colors sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                    style={{ WebkitTapHighlightColor: "transparent" }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    aria-label="Next image"
+                    onClick={() => setActiveImg(i => (i + 1) % allImages.length)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/80 border border-amazon-border shadow-sm flex items-center justify-center text-amazon-text hover:bg-white active:bg-[#f0f2f2] transition-colors sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                    style={{ WebkitTapHighlightColor: "transparent" }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                  {/* Image counter pill */}
+                  <span className="absolute bottom-2 right-3 text-[11px] text-amazon-text-secondary bg-white/80 border border-amazon-border rounded-full px-2 py-0.5 font-medium">
+                    {activeImg + 1} / {allImages.length}
+                  </span>
+                </>
+              )}
             </div>
+
+            {/* Thumbnail strip — only shown when there are 2+ images */}
+            {allImages.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {allImages.map((url, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActiveImg(i)}
+                    aria-label={`View image ${i + 1}`}
+                    className={`flex-shrink-0 w-[60px] h-[60px] sm:w-[72px] sm:h-[72px] rounded border-2 flex items-center justify-center bg-white p-1 transition-all ${
+                      i === activeImg
+                        ? "border-amazon-orange shadow-sm scale-[1.05]"
+                        : "border-amazon-border hover:border-[#999] active:border-amazon-orange"
+                    }`}
+                    style={{ WebkitTapHighlightColor: "transparent" }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Thumbnail ${i + 1}`}
+                      className="max-h-full max-w-full object-contain"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
             {["clothing", "fashion", "apparel", "shirts", "tops", "dresses", "running", "fitness", "sports", "shoes", "footwear"].some(c => (product.category || "").toLowerCase().includes(c)) && (
               isTryOnUnsupported(product) ? (
                 <div style={{
