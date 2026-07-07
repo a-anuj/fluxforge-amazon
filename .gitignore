@@ -13,3 +13,7 @@ Thumbs.db
 .env
 .env.*
 !.env.production
+
+#fluxforge-presentation-documentation
+
+fluxforge-presentation-documentation
