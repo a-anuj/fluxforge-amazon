@@ -117,9 +117,16 @@ class Return(Base):
     remaining_life_pct = Column(Integer, nullable=True)
     recommended_action = Column(String, nullable=True)  # "resell" | "refurbish" | "exchange" | "donate" | "recycle"
     status = Column(String, default="submitted")
+    condition_note = Column(String, nullable=True)      # e.g. defect summary for refurbished listings
 
     # ── Green Credits earned for this return action ──
     green_credits_earned = Column(Integer, default=0)
+
+    # ── Nova Pro confidence gate fields ──────────────────────────────
+    confidence = Column(Float, nullable=True)           # model's confidence in recommended_action
+    assessment_source = Column(String, nullable=True)   # "nova_pro" | "fallback"
+    original_recommended_action = Column(String, nullable=True)  # only set when gate_override=True
+    gate_override = Column(Boolean, default=False)      # True when confidence gate changed the action
 
     order = relationship("Order", back_populates="returns")
     listing = relationship("Listing", back_populates="return_item", uselist=False)
@@ -134,10 +141,13 @@ class Listing(Base):
     matched_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     price = Column(Float, nullable=False)
     status = Column(String, default="available")        # "available" | "matched" | "sold"
+    condition_note = Column(Text, nullable=True)        # set for refurbished listings
 
     return_item = relationship("Return", back_populates="listing")
     product = relationship("Product")
     matched_user = relationship("User")
+
+
 
 
 class GreenCreditTx(Base):
@@ -355,3 +365,31 @@ class TryOnCache(Base):
     user    = relationship("User")
     product = relationship("Product")
 
+
+# ── Circular Outcome Logs ──────────────────────────────────────────────
+
+class Donation(Base):
+    """Records items routed to a donation partner organisation."""
+    __tablename__ = "donations"
+
+    id           = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    return_id    = Column(Integer, ForeignKey("returns.id"), nullable=False)
+    partner_org  = Column(String, nullable=True)         # e.g. "GiveIndia", "local_ngo"
+    status       = Column(String, default="pending")     # "pending" | "dispatched" | "received"
+    created_at   = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    return_item  = relationship("Return")
+
+
+class RecycleLog(Base):
+    """Records items routed to recycling — either unrepairable or confidence-gated."""
+    __tablename__ = "recycle_log"
+
+    id                = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    return_id         = Column(Integer, ForeignKey("returns.id"), nullable=False)
+    material_category = Column(String, nullable=True)    # e.g. product category
+    status            = Column(String, default="pending") # "pending" | "collected" | "processed"
+    disposed_reason   = Column(String, nullable=True)    # "low_confidence" | "unrepairable"
+    created_at        = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    return_item  = relationship("Return")

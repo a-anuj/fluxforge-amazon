@@ -1,308 +1,671 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import { getPendingBaselineOrders, submitPickupScan } from "../api/client";
+import { 
+  listReturns, 
+  overrideReturnDisposition, 
+  verifyReturnDisposition 
+} from "../api/client";
+import { 
+  AlertTriangle, 
+  RefreshCw, 
+  Search, 
+  CheckCircle2, 
+  RotateCcw, 
+  Package, 
+  User, 
+  MapPin, 
+  Check, 
+  ShieldAlert, 
+  Award, 
+  Recycle, 
+  ArrowRightLeft, 
+  Edit, 
+  Filter, 
+  CheckSquare
+} from "lucide-react";
+
+/* ─── AI details badge colours ──────────────────────────────── */
+const ACTION_STYLE = {
+  resell: {
+    bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    label: "RESELL — Second Life",
+    icon: <Award className="w-3.5 h-3.5 text-emerald-600" />
+  },
+  refurbish: {
+    bg: "bg-blue-50 text-blue-700 border-blue-200",
+    label: "REFURBISH",
+    icon: <RotateCcw className="w-3.5 h-3.5 text-blue-600" />
+  },
+  exchange: {
+    bg: "bg-amber-50 text-amber-700 border-amber-200",
+    label: "EXCHANGE",
+    icon: <ArrowRightLeft className="w-3.5 h-3.5 text-amber-600" />
+  },
+  donate: {
+    bg: "bg-orange-50 text-orange-700 border-orange-200",
+    label: "DONATE",
+    icon: <User className="w-3.5 h-3.5 text-orange-600" />
+  },
+  recycle: {
+    bg: "bg-slate-100 text-slate-700 border-slate-200",
+    label: "RECYCLE",
+    icon: <Recycle className="w-3.5 h-3.5 text-slate-600" />
+  },
+};
+
+function ConditionBar({ value }) {
+  const color = value >= 75 ? "#10b981" : value >= 50 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+      <div 
+        className="h-full rounded-full transition-all duration-700" 
+        style={{ width: `${Math.min(100, value)}%`, backgroundColor: color }} 
+      />
+    </div>
+  );
+}
 
 /* ─── Stat card ─────────────────────────────────────────────── */
 function StatCard({ icon, label, value, sub, accentBg, accentText }) {
   return (
-    <div className="flex items-center gap-4 bg-white border border-[#d5d9d9] rounded-lg p-5 flex-1 min-w-[160px] shadow-sm">
-      <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-2xl flex-shrink-0 ${accentBg}`}>
+    <div className="flex items-center gap-4 bg-white border border-slate-200 rounded-xl p-5 flex-1 min-w-[220px] shadow-sm">
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${accentBg}`}>
         {icon}
       </div>
       <div>
-        <p className={`text-[28px] font-extrabold leading-none ${accentText}`}>{value}</p>
-        <p className="text-[12px] text-[#565959] mt-0.5 font-medium">{label}</p>
-        {sub && <p className="text-[11px] text-[#888] mt-0.5">{sub}</p>}
+        <p className={`text-2xl font-black leading-none ${accentText}`}>{value}</p>
+        <p className="text-[12px] text-slate-500 mt-1 font-bold tracking-tight">{label}</p>
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
       </div>
     </div>
   );
 }
 
-/* ─── Order row ─────────────────────────────────────────────── */
-function OrderRow({ order, onScan, onConfirmPickup, confirmingId }) {
-  const placedAt = order.placed_at
-    ? new Date(order.placed_at).toLocaleString("en-IN", {
-        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
-      })
-    : "—";
+/* ─── Return Card ───────────────────────────────────────────── */
+function ReturnCard({ r, onVerify, onOverride, processingId }) {
+  const [showOverride, setShowOverride] = useState(false);
+  const [newAction, setNewAction] = useState(r.recommended_action || "recycle");
+  const [justification, setJustification] = useState("");
+  const [error, setError] = useState("");
 
-  const isReturn = order.is_return;
-  const isConfirming = confirmingId === order.return_id;
+  const handleOverrideSubmit = async (e) => {
+    e.preventDefault();
+    if (!justification.trim()) {
+      setError("Please provide a justification for the override.");
+      return;
+    }
+    setError("");
+    try {
+      await onOverride(r.id, newAction, justification);
+      setShowOverride(false);
+      setJustification("");
+    } catch (err) {
+      setError(err.message || "Override failed.");
+    }
+  };
+
+  const actionStyle = ACTION_STYLE[r.recommended_action] || {
+    bg: "bg-slate-100 text-slate-700 border-slate-250",
+    label: (r.recommended_action || "unknown").toUpperCase(),
+    icon: <Package className="w-4 h-4 text-slate-500" />
+  };
+
+  const confidencePct = r.confidence != null ? Math.round(r.confidence * 100) : null;
+  const isLowConfidence = confidencePct !== null && confidencePct < 70;
 
   return (
-    <div className="flex items-center gap-4 bg-white border border-[#d5d9d9] rounded-lg px-5 py-4 hover:border-[#e77600] hover:shadow-sm transition-all group">
-      {/* Thumbnail */}
-      <div className="w-14 h-14 rounded-md bg-[#f0f2f2] flex items-center justify-center flex-shrink-0 overflow-hidden border border-[#e3e6e6]">
-        {order.product_image ? (
-          <img src={order.product_image} alt="" className="w-full h-full object-contain mix-blend-multiply" />
-        ) : (
-          <span className="text-2xl">{isReturn ? "↩️" : "📦"}</span>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-[14px] font-semibold text-[#0f1111] truncate">{order.product_name}</p>
-        <p className="text-[13px] text-[#565959] truncate">
-          <span className="font-medium">{order.customer_name}</span>
-          {order.customer_pincode && (
-            <span className="ml-1 text-[#888]">· {order.customer_pincode}</span>
-          )}
-        </p>
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className="text-[11px] text-[#888]">Order #{order.order_id}</span>
-          {isReturn && (
-            <span className="text-[10px] bg-purple-100 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded font-bold">
-              RETURN PICKUP
+    <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-all duration-200 ${
+      r.status === "verified" ? "border-emerald-200" : "border-slate-200 hover:border-slate-350 hover:shadow-md"
+    }`}>
+      {/* Card Header */}
+      <div className="bg-slate-50 border-b border-slate-100 px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Return ID: #{r.id}</span>
+          <span className="text-slate-300">|</span>
+          <span className="text-xs font-semibold text-slate-600">Order: #{r.order_id}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {r.status === "verified" ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Verified Outcome
             </span>
-          )}
-          {!isReturn && order.has_no_return_policy && (
-            <span className="text-[10px] bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded font-bold">
-              NO RETURN
-            </span>
-          )}
-          {!isReturn && !order.has_no_return_policy && order.return_period_days && (
-            <span className="text-[10px] bg-[#e6f4ea] text-[#1a7a35] border border-[#c8e6c9] px-1.5 py-0.5 rounded font-bold">
-              {order.return_period_days}d return
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-250 px-2.5 py-1 rounded-full uppercase tracking-wider">
+              <RefreshCw className="w-3 h-3 animate-spin" /> Awaiting Review
             </span>
           )}
         </div>
       </div>
 
-      {/* Time + CTA */}
-      <div className="flex flex-col items-end gap-2 flex-shrink-0">
-        <span className="text-[11px] text-[#888]">{placedAt}</span>
-        {isReturn ? (
-          <button
-            onClick={() => onConfirmPickup(order)}
-            disabled={isConfirming}
-            className="text-[12px] bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold px-4 py-1.5 rounded shadow-sm transition-colors"
-          >
-            {isConfirming ? "Confirming…" : "✓ Confirm Pickup"}
-          </button>
-        ) : (
-          <button
-            onClick={() => onScan(order)}
-            className="text-[12px] bg-[#FFD814] hover:bg-[#F7CA00] border border-[#FCD200] text-[#0f1111] font-bold px-4 py-1.5 rounded shadow-sm transition-colors"
-          >
-            Start Scan →
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+      {/* Card Body */}
+      <div className="p-5 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Product & Customer */}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-16 h-16 rounded-lg bg-slate-50 border border-slate-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
+              {r.product_image ? (
+                <img src={r.product_image} alt="" className="w-full h-full object-contain mix-blend-multiply" />
+              ) : (
+                <Package className="w-8 h-8 text-slate-300" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-slate-900 truncate leading-tight">{r.product_name}</h4>
+              <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{r.product_category}</p>
+              <p className="text-sm font-extrabold text-indigo-600 mt-1">₹{r.product_price}</p>
+            </div>
+          </div>
 
-/* ─── Section ───────────────────────────────────────────────── */
-function Section({ title, badge, badgeBg, badgeText, children, empty, emptyIcon = "📭" }) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className="text-[16px] font-bold text-[#0f1111]">{title}</h2>
-        {badge !== undefined && (
-          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${badgeBg} ${badgeText}`}>
-            {badge}
-          </span>
-        )}
-      </div>
-      {empty ? (
-        <div className="text-center py-10 bg-white border border-[#d5d9d9] rounded-lg shadow-sm">
-          <span className="text-3xl">{emptyIcon}</span>
-          <p className="text-[13px] text-[#888] mt-2">{empty}</p>
+          <div className="border-t border-slate-100 pt-3.5 space-y-2">
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span className="font-semibold text-slate-700 truncate">{r.customer_name}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-600">
+              <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+              <span className="font-medium text-slate-500">{r.customer_city} ({r.customer_pincode})</span>
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="flex flex-col gap-2">{children}</div>
-      )}
+
+        {/* Middle Column: Customer Photo */}
+        <div className="lg:col-span-3">
+          <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mb-2.5">Submission Media</p>
+          <div className="w-full h-32 rounded-xl bg-slate-50 border border-slate-200 overflow-hidden flex items-center justify-center relative group shadow-inner">
+            {r.image_url ? (
+              <>
+                <img src={r.image_url} alt="Uploaded item" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                <a 
+                  href={r.image_url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity"
+                >
+                  View Large Photo
+                </a>
+              </>
+            ) : (
+              <div className="text-center p-4">
+                <span className="text-2xl block mb-1">📸</span>
+                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">No Photo Provided</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: AI Insights */}
+        <div className="lg:col-span-5 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">AI Assessment & Circular Routing</p>
+            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider italic">Source: {r.assessment_source || "fallback"}</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black border ${actionStyle.bg} ${actionStyle.text} ${actionStyle.border}`}>
+              {actionStyle.icon}
+              {actionStyle.label}
+            </div>
+
+            {confidencePct !== null && (
+              <div className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold ${
+                isLowConfidence 
+                  ? "bg-rose-50 text-rose-700 border border-rose-200" 
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              }`}>
+                {confidencePct}% AI Confidence
+              </div>
+            )}
+          </div>
+
+          {/* Safety Gate Warning */}
+          {r.gate_override && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
+              <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-xs font-black text-amber-800 uppercase tracking-wide">Confidence Gate Override</p>
+                <p className="text-[11px] text-amber-700 leading-normal mt-0.5">
+                  The model recommended <strong>{(r.original_recommended_action || "").toUpperCase()}</strong> but confidence did not meet safety threshold. Automatically rerouted to <strong>RECYCLE</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Metrics */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+              <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">Condition score</p>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-xl font-black text-slate-800">{r.condition_score ?? "—"}</span>
+                <span className="text-[10px] text-slate-400">/100</span>
+              </div>
+              <ConditionBar value={r.condition_score ?? 0} />
+            </div>
+
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+              <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">Remaining Life</p>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-xl font-black text-slate-800">{r.remaining_life_pct ?? "—"}</span>
+                <span className="text-[10px] text-slate-400">%</span>
+              </div>
+              <ConditionBar value={r.remaining_life_pct ?? 0} />
+            </div>
+          </div>
+
+          {/* Defects */}
+          {r.defects && (
+            <div className="bg-slate-50 border border-slate-150 rounded-xl px-3 py-2.5">
+              <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider mb-0.5">AI Defects Audit</p>
+              <p className="text-xs text-slate-700 leading-normal font-semibold">{r.defects}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Card Actions / Override Area */}
+      <div className="bg-slate-50 border-t border-slate-100 px-5 py-3.5 flex flex-col gap-3">
+        {r.status !== "verified" ? (
+          <>
+            {!showOverride ? (
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowOverride(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all duration-150 cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5" /> Manual Override
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onVerify(r.id)}
+                  disabled={processingId === r.id}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 transition-all duration-150 shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {processingId === r.id ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Verify & Confirm
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleOverrideSubmit} className="space-y-3 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Override Action</label>
+                    <select
+                      value={newAction}
+                      onChange={(e) => setNewAction(e.target.value)}
+                      className="w-full text-xs font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    >
+                      <option value="resell">Resell (Second Life)</option>
+                      <option value="refurbish">Refurbish (Certified Refurbished)</option>
+                      <option value="donate">Donate</option>
+                      <option value="recycle">Recycle</option>
+                    </select>
+                  </div>
+                  <div className="flex-[2]">
+                    <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1.5">Override Reason & Diagnosis</label>
+                    <input
+                      type="text"
+                      placeholder="Explain why you are overriding the AI circular disposition..."
+                      value={justification}
+                      onChange={(e) => setJustification(e.target.value)}
+                      className="w-full text-xs border border-slate-200 bg-white rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {error && <p className="text-xs font-bold text-rose-600">{error}</p>}
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOverride(false);
+                      setError("");
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-extrabold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all duration-150 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={processingId === r.id}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-all duration-150 shadow-sm disabled:opacity-50 cursor-pointer"
+                  >
+                    {processingId === r.id ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      "Apply Override"
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-100/50 pt-2.5 mt-0.5">
+            <span>Disposition validated and logged.</span>
+            <span className="font-extrabold text-emerald-700 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> RECOVERY LOOP ENGAGED
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-/* ─── Main Page ─────────────────────────────────────────────── */
+/* ─── Main Hub Operations Dashboard ─────────────────────────── */
 export default function DeliveryDashboard() {
-  const navigate = useNavigate();
   const { currentUser } = useUser();
 
-  const [allOrders, setAllOrders] = useState([]);
+  const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(null);
-  const [confirmingId, setConfirmingId] = useState(null);
+  
+  // Filters state
+  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "pending" | "verified"
+  const [searchQuery, setSearchQuery] = useState("");
+  const [actionFilter, setActionFilter] = useState("all"); // "all" | resell | refurbish | recycle | donate | exchange
+  const [riskFilter, setRiskFilter] = useState("all"); // "all" | "gated" | "low_confidence"
 
-  const isEmployee = currentUser?.role === "employee";
+  const isEmployee = currentUser?.role === "employee" || currentUser?.role === "admin";
 
-  const fetchOrders = () => {
+  const fetchReturnsList = () => {
     if (!currentUser || !isEmployee) return;
     setLoading(true);
-    getPendingBaselineOrders(currentUser.id)
+    listReturns(currentUser.id)
       .then((data) => {
-        setAllOrders(data);
+        setReturns(data);
         setLastRefresh(new Date());
       })
-      .catch(() => setAllOrders([]))
+      .catch((err) => {
+        console.error("Failed to load hub returns:", err);
+        setReturns([]);
+      })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchReturnsList();
   }, [currentUser]);
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-[#febd69] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!isEmployee) {
     return (
-      <div className="min-h-screen bg-[#f0f2f2] flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center gap-4 p-8 text-center">
         <div className="text-5xl">🔒</div>
-        <h2 className="text-[20px] font-bold text-[#0f1111]">Delivery Agent Access Only</h2>
-        <p className="text-[#565959] text-[13px] max-w-xs">
-          Switch to a delivery employee profile to access this dashboard.
+        <h2 className="text-xl font-black text-slate-900">Hub Operations Authorized Only</h2>
+        <p className="text-slate-500 text-sm max-w-xs leading-relaxed">
+          Access restricted. Please log in with a Hub Employee or Admin account.
         </p>
-        <Link to="/" className="mt-2 text-amazon-link text-[13px] font-bold hover:underline">
-          ← Back to Home
+        <Link to="/" className="mt-2 text-indigo-600 font-bold hover:underline text-sm">
+          ← Return to Storefront
         </Link>
       </div>
     );
   }
 
-  const pendingDeliveries = allOrders.filter((o) => !o.is_return);
-  const returnPickups = allOrders.filter((o) => o.is_return);
-  const totalPending = pendingDeliveries.length;
-  const totalReturns = returnPickups.length;
-  const totalQueue = allOrders.length;
-
-  const handleScan = (order) => {
-    sessionStorage.setItem("preselectOrder", JSON.stringify(order));
-    navigate("/employee-scan");
-  };
-
-  const handleConfirmPickup = async (order) => {
-    if (!order.return_id) return;
-    setConfirmingId(order.return_id);
+  const handleVerify = async (returnId) => {
+    setProcessingId(returnId);
     try {
-      await submitPickupScan(order.return_id, currentUser.id);
-      // Remove from list immediately
-      setAllOrders((prev) => prev.filter((o) => o.return_id !== order.return_id));
+      await verifyReturnDisposition(returnId);
+      // Update local state instantly
+      setReturns((prev) => 
+        prev.map((r) => r.id === returnId ? { ...r, status: "verified" } : r)
+      );
     } catch (err) {
-      alert(`Pickup failed: ${err.message}`);
+      alert(`Verification failed: ${err.message}`);
     } finally {
-      setConfirmingId(null);
+      setProcessingId(null);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#f0f2f2]">
+  const handleOverride = async (returnId, recommendedAction, justification) => {
+    setProcessingId(returnId);
+    try {
+      await overrideReturnDisposition(returnId, recommendedAction, justification);
+      // Update local state instantly
+      setReturns((prev) => 
+        prev.map((r) => r.id === returnId ? { 
+          ...r, 
+          status: "verified", 
+          recommended_action: recommendedAction,
+          defects: `[Manual Override: ${justification}] ${r.defects || ""}`
+        } : r)
+      );
+    } catch (err) {
+      alert(`Override failed: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
-      {/* ── Agent banner ─────────────────────────────────── */}
-      <div className="bg-[#232f3e] text-white px-6 py-4">
-        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
+  // Stat computations
+  const totalInHub = returns.length;
+  const pendingVerification = returns.filter((r) => r.status !== "verified").length;
+  const totalVerified = returns.filter((r) => r.status === "verified").length;
+  
+  const recoveryItems = returns.filter((r) => ["resell", "refurbish", "exchange", "donate"].includes(r.recommended_action));
+  const recoveryRate = totalInHub > 0 
+    ? Math.round((recoveryItems.length / totalInHub) * 100) 
+    : 0;
+
+  const totalGateOverrides = returns.filter((r) => r.gate_override).length;
+
+  // Filtering returns
+  const filteredReturns = returns.filter((r) => {
+    // 1. Status Filter
+    if (statusFilter === "pending" && r.status === "verified") return false;
+    if (statusFilter === "verified" && r.status !== "verified") return false;
+
+    // 2. Action Filter
+    if (actionFilter !== "all" && r.recommended_action !== actionFilter) return false;
+
+    // 3. Risk Filter
+    if (riskFilter === "gated" && !r.gate_override) return false;
+    if (riskFilter === "low_confidence") {
+      const conf = r.confidence != null ? Math.round(r.confidence * 100) : 100;
+      if (conf >= 70) return false;
+    }
+
+    // 4. Search Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchOrder = String(r.order_id).includes(q);
+      const matchReturn = String(r.id).includes(q);
+      const matchProduct = r.product_name?.toLowerCase().includes(q);
+      const matchCustomer = r.customer_name?.toLowerCase().includes(q);
+      if (!matchOrder && !matchReturn && !matchProduct && !matchCustomer) return false;
+    }
+
+    return true;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-12">
+      
+      {/* ── Dashboard Navigation Banner ─────────────────── */}
+      <div className="bg-slate-900 text-white px-6 py-5 shadow-md">
+        <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#febd69] flex items-center justify-center text-xl flex-shrink-0">
-              🚚
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-xl flex-shrink-0 font-black shadow-inner">
+              ⚙️
             </div>
             <div>
-              <h1 className="text-[16px] font-bold leading-tight">{currentUser.name}</h1>
-              <p className="text-[11px] text-[#ccc]">
-                {currentUser.employee_zone || "Delivery Agent"} ·{" "}
-                <span className="text-[#febd69] font-semibold">On Duty</span>
+              <h1 className="text-lg font-black tracking-tight leading-tight">Circular Operations Control</h1>
+              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                {currentUser.employee_zone || "Global"} Hub · Authorized Operator:{" "}
+                <span className="text-indigo-400">{currentUser.name}</span>
                 {lastRefresh && (
-                  <span className="ml-2 text-[#888]">
-                    · Updated {lastRefresh.toLocaleTimeString("en-IN")}
+                  <span className="ml-2 text-slate-500 font-medium normal-case">
+                    · Last updated {lastRefresh.toLocaleTimeString("en-IN")}
                   </span>
                 )}
               </p>
             </div>
           </div>
           <button
-            onClick={fetchOrders}
-            className="text-[12px] text-[#ccc] hover:text-white border border-[#3a4553] hover:border-[#555] px-3 py-1.5 rounded transition-colors flex items-center gap-1.5"
+            onClick={fetchReturnsList}
+            className="text-xs font-bold text-slate-300 hover:text-white border border-slate-700 hover:border-slate-600 px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            🔄 Refresh
+            <RefreshCw className="w-3.5 h-3.5" /> Force Sync
           </button>
         </div>
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
 
-        {/* ── Stat Cards ───────────────────────────────── */}
-        <div className="flex gap-4 flex-wrap">
+        {/* ── Operational Insights Stat Cards ───────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            icon="📦"
-            label="Pending Deliveries"
-            value={loading ? "—" : totalPending}
-            sub={totalPending > 0 ? "Awaiting your scan" : "All clear!"}
-            accentBg="bg-[#fff3cd]"
-            accentText="text-[#c45500]"
+            icon="🗳️"
+            label="Total Circular Returns"
+            value={loading ? "—" : totalInHub}
+            sub={`Processed in ${currentUser.employee_zone || "your zone"}`}
+            accentBg="bg-indigo-50"
+            accentText="text-indigo-700"
           />
           <StatCard
-            icon="↩️"
-            label="Return Pickups"
-            value={loading ? "—" : totalReturns}
-            sub={totalReturns > 0 ? "Confirm pickup to complete" : "None pending"}
-            accentBg="bg-purple-100"
-            accentText="text-purple-700"
+            icon="⚠️"
+            label="Awaiting Hub Review"
+            value={loading ? "—" : pendingVerification}
+            sub={`${pendingVerification} items need confirmation`}
+            accentBg="bg-amber-50"
+            accentText="text-amber-700"
           />
           <StatCard
-            icon="⏳"
-            label="Total in Queue"
-            value={loading ? "—" : totalQueue}
-            sub="Your active workload"
-            accentBg="bg-blue-50"
-            accentText="text-blue-700"
+            icon="♻️"
+            label="Resource Recovery Rate"
+            value={loading ? "—" : `${recoveryRate}%`}
+            sub={`${recoveryItems.length} items kept out of landfill`}
+            accentBg="bg-emerald-50"
+            accentText="text-emerald-700"
+          />
+          <StatCard
+            icon="🛡️"
+            label="Safety Gate Overrides"
+            value={loading ? "—" : totalGateOverrides}
+            sub="Rerouted due to quality criteria"
+            accentBg="bg-rose-50"
+            accentText="text-rose-700"
           />
         </div>
 
-        {/* ── Info banner ───────────────────────────── */}
-        <div className="bg-[#ebf2fb] border border-[#1a6bb5]/30 rounded-lg px-5 py-3 flex items-start gap-3">
-          <span className="text-[18px] mt-0.5 flex-shrink-0">ℹ️</span>
-          <p className="text-[13px] text-[#1a6bb5] leading-relaxed">
-            For each delivery, tap <strong>Start Scan →</strong> to open the live video scanner.
-            The scan creates an AI baseline of the product condition, marks it as{" "}
-            <em>delivered</em> for the customer, and enables future return verification.
-          </p>
+        {/* ── Controls: Search & Analytical Filters ────────── */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-3 mb-2">
+            <Filter className="w-4 h-4 text-indigo-600" />
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Operational Diagnostics Filters</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            
+            {/* Search */}
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Search className="w-4 h-4 text-slate-400" />
+              </span>
+              <input
+                type="text"
+                placeholder="Search Order ID, return, product, buyer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full text-xs pl-10 pr-4 py-2.5 border border-slate-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50/50"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full text-xs border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
+              >
+                <option value="all">Verification: All Returns</option>
+                <option value="pending">Awaiting Verification ({pendingVerification})</option>
+                <option value="verified">Verified Outcomes ({totalVerified})</option>
+              </select>
+            </div>
+
+            {/* Action Filter */}
+            <div>
+              <select
+                value={actionFilter}
+                onChange={(e) => setActionFilter(e.target.value)}
+                className="w-full text-xs border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
+              >
+                <option value="all">AI Action: All Outlays</option>
+                <option value="resell">Resell (Second Life)</option>
+                <option value="refurbish">Refurbish</option>
+                <option value="donate">Donate</option>
+                <option value="recycle">Recycle</option>
+                <option value="exchange">Exchange</option>
+              </select>
+            </div>
+
+            {/* Risk Gating Filter */}
+            <div>
+              <select
+                value={riskFilter}
+                onChange={(e) => setRiskFilter(e.target.value)}
+                className="w-full text-xs border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
+              >
+                <option value="all">AI Risk Filter: None</option>
+                <option value="gated">Gated Overrides Only ({totalGateOverrides})</option>
+                <option value="low_confidence">Low Confidence (&lt;70%)</option>
+              </select>
+            </div>
+
+          </div>
         </div>
 
-        {/* ── Two-column grid on wide screens ─────────── */}
+        {/* ── Main Returns List ──────────────────────────── */}
         {loading ? (
-          <div className="space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-[80px] rounded-lg bg-white border border-[#d5d9d9] animate-pulse shadow-sm" />
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-44 rounded-xl bg-white border border-slate-200 animate-pulse shadow-sm" />
             ))}
           </div>
+        ) : filteredReturns.length === 0 ? (
+          <div className="text-center py-16 bg-white border border-slate-200 rounded-xl shadow-sm space-y-3">
+            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mx-auto border border-slate-100">
+              <CheckSquare className="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">No returns match your filter criteria</h3>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto">
+              Try adjusting your diagnostics filters or check back later for new customer submissions.
+            </p>
+          </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Section
-              title="Pending Deliveries"
-              badge={totalPending}
-              badgeBg="bg-[#fff3cd]"
-              badgeText="text-[#c45500]"
-              empty={totalPending === 0 ? "No pending deliveries in your zone 🎉" : null}
-              emptyIcon="✅"
-            >
-              {pendingDeliveries.map((o) => (
-                <OrderRow key={o.order_id} order={o} onScan={handleScan} onConfirmPickup={handleConfirmPickup} confirmingId={confirmingId} />
-              ))}
-            </Section>
-
-            <Section
-              title="Return Pickups"
-              badge={totalReturns}
-              badgeBg="bg-purple-100"
-              badgeText="text-purple-700"
-              empty={totalReturns === 0 ? "No return pickups assigned" : null}
-              emptyIcon="↩️"
-            >
-              {returnPickups.map((o) => (
-                <OrderRow key={o.order_id} order={o} onScan={handleScan} onConfirmPickup={handleConfirmPickup} confirmingId={confirmingId} />
-              ))}
-            </Section>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center px-1">
+              <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                Showing {filteredReturns.length} return {filteredReturns.length === 1 ? "item" : "items"}
+              </p>
+            </div>
+            {filteredReturns.map((item) => (
+              <ReturnCard 
+                key={item.id} 
+                r={item} 
+                onVerify={handleVerify} 
+                onOverride={handleOverride} 
+                processingId={processingId}
+              />
+            ))}
           </div>
         )}
-
 
       </div>
     </div>

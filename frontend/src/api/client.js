@@ -99,6 +99,45 @@ export const createReturn = (
     }),
   });
 
+/** Customer simplified flow — POST multipart with optional photo file */
+export const createReturnWithPhoto = (orderId, photoFile) => {
+  const form = new FormData();
+  form.append("order_id", orderId);
+  if (photoFile) form.append("photo", photoFile);
+  const url = `${BASE_URL}/returns/with-photo`;
+  return fetch(url, { method: "POST", body: form }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const msg = typeof err.detail === "string" ? err.detail : err.message || `Error ${res.status}`;
+      throw Object.assign(new Error(msg), { status: res.status });
+    }
+    return res.json();
+  });
+};
+
+/** Hub employee: fetch AI assessment details for a completed return */
+export const getReturnByOrder = (orderId) => request(`/returns/by-order/${orderId}`);
+
+/** Hub operations: list all circular returns (zone-filtered if employeeId provided) */
+export const listReturns = (employeeId) => 
+  request(`/returns/list${employeeId ? `?employee_id=${employeeId}` : ""}`);
+
+/** Hub operations: override AI recommendation */
+export const overrideReturnDisposition = (returnId, recommendedAction, justification) =>
+  request(`/returns/${returnId}/override`, {
+    method: "POST",
+    body: JSON.stringify({
+      recommended_action: recommendedAction,
+      justification: justification
+    })
+  });
+
+/** Hub operations: verify/confirm AI recommendation */
+export const verifyReturnDisposition = (returnId) =>
+  request(`/returns/${returnId}/verify`, { method: "POST" });
+
+
+
 // Listings
 export const getFeed = (userId) => request(`/listings/feed?user_id=${userId}`);
 export const getAllListings = () => request("/listings/all");

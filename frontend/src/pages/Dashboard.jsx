@@ -278,6 +278,118 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Nova Pro Confidence Gate Performance Section */}
+      {metrics.confidenceGate && (
+        <div className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-6 text-lg font-medium text-gray-900 flex items-center gap-2">
+            <BrainCircuit className="h-5 w-5 text-purple-600" />
+            AI Confidence Gate &amp; Safety Routing
+          </h2>
+          
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* Column 1: Nova Pro Pipeline */}
+            <div className="rounded-lg border border-purple-100 bg-purple-50/30 p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-purple-900 uppercase tracking-wider">Nova Pro Pipeline</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Total Assessed:</span>
+                  <span className="font-bold text-gray-900">{metrics.confidenceGate.novaPro.totalAssessed}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Gate Passed (Direct Routing):</span>
+                  <span className="font-bold text-emerald-600">{metrics.confidenceGate.novaPro.gatePassed}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Gate Overridden (Low Confidence):</span>
+                  <span className="font-bold text-amber-600">{metrics.confidenceGate.novaPro.gateOverridden}</span>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-purple-100">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-purple-600 h-2 rounded-full" 
+                    style={{ 
+                      width: `${metrics.confidenceGate.novaPro.totalAssessed > 0 
+                        ? (metrics.confidenceGate.novaPro.gatePassed / metrics.confidenceGate.novaPro.totalAssessed) * 100 
+                        : 100}%` 
+                    }}
+                  ></div>
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  {metrics.confidenceGate.novaPro.totalAssessed > 0 
+                    ? `${Math.round((metrics.confidenceGate.novaPro.gatePassed / metrics.confidenceGate.novaPro.totalAssessed) * 100)}% directly routed without override` 
+                    : "No assessments recorded"}
+                </p>
+              </div>
+            </div>
+
+            {/* Column 2: Safety Gating Efficacy */}
+            <div className="rounded-lg border border-amber-100 bg-amber-50/30 p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-amber-900 uppercase tracking-wider">Safety Gating Efficacy</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Gated &amp; Disposed:</span>
+                  <span className="font-bold text-gray-900">{metrics.confidenceGate.totalGatedDisposed}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Low-Confidence Rate:</span>
+                  <span className="font-bold text-amber-600">{metrics.confidenceGate.lowConfidencePct}%</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Unrepairable Rate:</span>
+                  <span className="font-bold text-red-600">
+                    {metrics.confidenceGate.totalRecycleLog > 0 
+                      ? `${Math.round((metrics.confidenceGate.unrepairableCount / metrics.confidenceGate.totalRecycleLog) * 100)}%` 
+                      : "0%"}
+                  </span>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-amber-100">
+                <p className="text-[12px] text-gray-600 leading-snug">
+                  When the model's confidence for high-value actions (resell/refurbish/donate/exchange) drops below configured thresholds, the item is safely routed to local recycling.
+                </p>
+              </div>
+            </div>
+
+            {/* Column 3: Recycle Log Reasons */}
+            <div className="rounded-lg border border-red-100 bg-red-50/30 p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-red-900 uppercase tracking-wider">Recycle Log Reasons</h3>
+              <div className="h-28 w-full flex items-center justify-center">
+                {metrics.confidenceGate.totalRecycleLog > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie 
+                        data={[
+                          { name: "Low Confidence", value: metrics.confidenceGate.lowConfidenceCount },
+                          { name: "Unrepairable / Damaged", value: metrics.confidenceGate.unrepairableCount }
+                        ]} 
+                        dataKey="value" 
+                        nameKey="name" 
+                        cx="50%" 
+                        cy="50%" 
+                        outerRadius={35} 
+                        label={({ name, percent }) => `${name.split(' ')[0]}: ${(percent * 100).toFixed(0)}%`}
+                      >
+                        <Cell fill="#F59E0B" />
+                        <Cell fill="#EF4444" />
+                      </Pie>
+                      <RechartsTooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <span className="text-xs text-gray-400 font-medium">No recycling logs recorded</span>
+                )}
+              </div>
+              <div className="pt-2 border-t border-red-100 text-center">
+                <p className="text-[11px] text-gray-500">
+                  Total Disposed/Recycled: <strong>{metrics.confidenceGate.totalRecycleLog}</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Row: Pie Charts */}
       <div className="mt-8 grid gap-8 lg:grid-cols-4">
         {/* Return Reasons */}

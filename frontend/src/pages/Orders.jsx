@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits, getBaselineScan, createReturn } from "../api/client";
 import { useUser } from "../context/UserContext";
 
@@ -97,37 +97,15 @@ function PendingCreditsTooltip({ order }) {
 
 /* ── Main Orders Page ─────────────────────────────────────── */
 export default function Orders() {
+  const navigate = useNavigate();
   const { currentUser, refreshUser } = useUser();
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
   const [returningId, setReturningId] = useState(null);
 
-  // Basic one-click return: mark the order returned immediately.
-  // (The video baseline/return scan flow has been removed and will be rebuilt.)
-  const handleReturn = async (orderId) => {
-    if (returningId) return;
-    setReturningId(orderId);
-    try {
-      await createReturn(orderId);
-      setOrders(prev =>
-        prev.map(o =>
-          o.id === orderId
-            ? {
-                ...o,
-                status: "returned",
-                no_return_credits_status:
-                  o.no_return_credits_status === "pending" ? "forfeited" : o.no_return_credits_status,
-              }
-            : o
-        )
-      );
-      refreshUser();
-    } catch (err) {
-      alert(`Could not process the return: ${err?.message || err}`);
-    } finally {
-      setReturningId(null);
-    }
+  const handleReturn = (orderId) => {
+    navigate(`/returns/new?orderId=${orderId}`);
   };
 
   const getOrderSortTime = (order) => {
@@ -238,7 +216,7 @@ export default function Orders() {
   };
 
   const statusStyles = {
-    placed:          { color: "text-[#067d62]",             label: "Order Received" },
+    placed:          { color: "text-[#067d62]",             label: "Delivered" },
     delivered:       { color: "text-[#067d62]",             label: "Delivered" },
     returned:        { color: "text-amazon-red",            label: "Returned" },
     return_pending:  { color: "text-[#c7511f]",             label: "Return Requested — Awaiting Pickup" },
