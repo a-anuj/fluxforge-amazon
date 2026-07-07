@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits, getBaselineScan } from "../api/client";
+import { getOrders, getProduct, getCommunityPurchases, vestNoReturnCredits, getBaselineScan, createReturn } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 /* ── Credits Badge with simple "why" popup ───────────────── */
@@ -101,6 +101,34 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
+  const [returningId, setReturningId] = useState(null);
+
+  // Basic one-click return: mark the order returned immediately.
+  // (The video baseline/return scan flow has been removed and will be rebuilt.)
+  const handleReturn = async (orderId) => {
+    if (returningId) return;
+    setReturningId(orderId);
+    try {
+      await createReturn(orderId);
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: "returned",
+                no_return_credits_status:
+                  o.no_return_credits_status === "pending" ? "forfeited" : o.no_return_credits_status,
+              }
+            : o
+        )
+      );
+      refreshUser();
+    } catch (err) {
+      alert(`Could not process the return: ${err?.message || err}`);
+    } finally {
+      setReturningId(null);
+    }
+  };
 
   const getOrderSortTime = (order) => {
     const rawTimestamp = order?.placed_at || order?.created_at || order?.sold_at;
@@ -210,7 +238,7 @@ export default function Orders() {
   };
 
   const statusStyles = {
-    placed:          { color: "text-[#1a6bb5]",             label: "Awaiting Delivery Verification" },
+    placed:          { color: "text-[#067d62]",             label: "Order Received" },
     delivered:       { color: "text-[#067d62]",             label: "Delivered" },
     returned:        { color: "text-amazon-red",            label: "Returned" },
     return_pending:  { color: "text-[#c7511f]",             label: "Return Requested — Awaiting Pickup" },
@@ -325,12 +353,6 @@ export default function Orders() {
                       )}
                       <div className="flex-1">
                         <p className={`text-[14px] font-bold ${st.color} mb-1`}>{st.label}</p>
-                        {order.status === "placed" && !order.is_community && (
-                          <p className="text-[11px] text-[#1a6bb5]/80 mb-1 flex items-center gap-1">
-                            <span>🚚</span>
-                            Your packaging operator will verify this product with a live scan before it appears as delivered
-                          </p>
-                        )}
                         <p className="text-[14px] text-amazon-link hover:text-amazon-link-hover">
                           {prod
                             ? <Link to={`/products/${prod.id}`}>{prod.name}</Link>
@@ -386,13 +408,6 @@ export default function Orders() {
                                 </span>
                               );
                             }
-                            if (order.status === "placed") {
-                              return (
-                                <span className="inline-flex items-center gap-1 text-[11px] bg-[#ebf2fb] border border-[#1a6bb5]/30 text-[#1a6bb5] px-2.5 py-1 rounded font-bold">
-                                  🔒 Return available after packaging verification
-                                </span>
-                              );
-                            }
                             if (!isWithinWindow) {
                               return (
                                 <span className="inline-flex items-center gap-1 text-[11px] bg-[#f0f2f2] border border-amazon-border text-amazon-text-secondary px-2.5 py-1 rounded">
@@ -401,19 +416,20 @@ export default function Orders() {
                               );
                             }
                             return (
-                              <Link
-                                to={`/returns/new?orderId=${order.id}`}
-                                className="btn-amazon text-[12px] px-3 py-1 flex items-center gap-1"
+                              <button
+                                onClick={() => handleReturn(order.id)}
+                                disabled={returningId === order.id}
+                                className="btn-amazon text-[12px] px-3 py-1 flex items-center gap-1 disabled:opacity-50"
                               >
-                                Return or Replace
-                                {daysLeft !== null && (
+                                {returningId === order.id ? "Processing…" : "Return or Replace"}
+                                {daysLeft !== null && returningId !== order.id && (
                                   <span className={`ml-1 text-[10px] font-bold ${
                                     daysLeft <= 2 ? 'text-red-500' : daysLeft <= 5 ? 'text-orange-500' : 'text-[#067d62]'
                                   }`}>
                                     {daysLeft}d left
                                   </span>
                                 )}
-                              </Link>
+                              </button>
                             );
                           })()}
                         </div>

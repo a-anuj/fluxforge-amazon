@@ -21,19 +21,10 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
     if order.status == "returned":
         raise HTTPException(status_code=409, detail="This order has already been returned.")
 
-    # Returns require delivery verification — employee must complete baseline scan first
-    if order.status != "delivered":
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "type": "delivery_not_verified",
-                "message": (
-                    "This order has not been verified by the delivery agent yet. "
-                    "Returns are available only after the delivery baseline scan is complete."
-                ),
-                "order_status": order.status,
-            },
-        )
+    # NOTE: The pre-packaging baseline scan and the return-phase video assessment
+    # have been removed — a return is now a simple one-click action available for
+    # any order within its return window. The richer video-analysis flow will be
+    # rebuilt from scratch, at which point gating can be reintroduced here.
 
     # If AI assessment details are passed, use them; otherwise fall back to stub
     if body.recommended_action:
@@ -66,14 +57,15 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
         defects=defects,
         remaining_life_pct=remaining_life_pct,
         recommended_action=action,
-        status="pending_pickup",
+        status="completed",
     )
     db.add(return_item)
     db.commit()
     db.refresh(return_item)
 
-    # Mark original order as pending return and forfeit any pending loyalty credits
-    order.status = "return_pending"
+    # Basic return: mark the original order as returned immediately (no pickup
+    # scan step) and forfeit any pending loyalty credits.
+    order.status = "returned"
     if order.no_return_credits_status == "pending":
         order.no_return_credits_status = "forfeited"
     db.commit()
