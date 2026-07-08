@@ -210,7 +210,7 @@ Return ONLY valid JSON (no markdown, no extra text):
     return result
 
 
-def _bedrock_image_check(image_bytes: bytes, content_type: str, category: str, title: str) -> dict:
+def _bedrock_image_check(image_bytes: bytes, content_type: str, category: str, title: str, brand: str = "") -> dict:
     """Call Bedrock Nova Lite to verify image matches listing and check condition."""
     format_map = {
         "image/jpeg": "jpeg",
@@ -220,17 +220,21 @@ def _bedrock_image_check(image_bytes: bytes, content_type: str, category: str, t
     }
     img_format = format_map.get(content_type, "jpeg")
     
-    prompt = f"""You are an AI Quality Verifier for a community resale marketplace.
-The user is listing a '{title}' in the '{category}' category.
-1. Verify if the object in the image matches the category and title.
-2. Assess its physical condition.
-3. Decide if it's in acceptable condition to be resold.
+    brand_instruction = f" expected brand: '{brand}'" if brand else ""
 
-Return ONLY valid JSON:
+    prompt = f"""You are a strict AI Quality Verifier for a community resale marketplace.
+The user is listing a '{title}' in the '{category}' category.{brand_instruction}
+
+Your task:
+1. Verify IDENTITY: Does the object in the image match the category, title, and brand? If the product visibly mismatches the title, category, or brand (e.g., logo says SMEG but expected Prestige), this is a critical failure.
+2. Verify CONDITION: Assess its physical condition. Is it in acceptable condition to be resold?
+
+You must return ONLY valid JSON with this exact structure:
 {{
-  "is_valid": true,
+  "is_valid": boolean (MUST be false if IDENTITY or CONDITION fails, otherwise true),
   "condition_summary": "Short description of what you see and its condition",
-  "reasoning": "Why it was accepted or rejected"
+  "condition": "like_new or good or fair or poor",
+  "reasoning": "Detailed explanation of why it was accepted or rejected (especially if is_valid is false)"
 }}"""
 
     client = _get_bedrock_client()
@@ -315,7 +319,11 @@ Return ONLY valid JSON (no markdown):
 Rules for invoice_total_numeric: extract ONLY the final total/grand total as a plain float.
   Strip currency symbols, commas. E.g. "Rs.1,299.00" or "1299" -> 1299.0.
   If no clear total found, set 0.
-match_confidence must be one of: "high", "medium", "low".
+
+match_confidence must be one of: "good photo", "cannot find the values".
+  - "good photo": The invoice is clearly readable and the brand, product name, store and some details are visible.
+  - "cannot find the values": The invoice is blurry, unreadable, or the values cannot be found.
+
 {serial_note}
 If not verified, set verified=false and explain in mismatch_reason."""
 
@@ -334,7 +342,9 @@ If not verified, set verified=false and explain in mismatch_reason."""
         )
         raw = response["output"]["message"]["content"][0]["text"].strip()
         raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        print(f"Confidence: {parsed.get('match_confidence', 'unknown')}")
+        return parsed
     except Exception as e:
         logger.error(f"Bedrock invoice check error: {e}")
         # If Bedrock is unavailable, be conservative — reject rather than silently pass
@@ -706,17 +716,21 @@ def buy_listing(listing_id: int, buyer_id: int = Query(...), db: Session = Depen
 async def verify_community_image(
     image: UploadFile = File(...),
     category: str = Form(""),
-    title: str = Form("")
+    title: str = Form(""),
+    brand: str = Form("")
 ):
     """Pre-flight AI verification for a community listing image."""
     content_type = image.content_type or "image/jpeg"
     raw = await image.read()
     
-    ai_result = _bedrock_image_check(raw, content_type, category, title)
+    ai_result = _bedrock_image_check(raw, content_type, category, title, brand)
     if not ai_result.get("is_valid", True):
         raise HTTPException(status_code=400, detail=f"{ai_result.get('reasoning', 'Image rejected.')}")
         
-    return {"condition_summary": ai_result.get("condition_summary", "")}
+    return {
+        "condition_summary": ai_result.get("condition_summary", ""),
+        "condition": ai_result.get("condition", "good")
+    }
 
 
 @router.post("/verify-invoice", response_model=InvoiceVerifyResponse)
@@ -812,23 +826,15 @@ async def verify_invoice(
             logger.warning(f"Invoice S3 upload failed (non-fatal): {e}")
 
     # ── Gate 3: Confidence hard gate ──────────────────────────────────────
-    confidence = ai.get("match_confidence", "low")
+    confidence = ai.get("match_confidence", "cannot find the values")
     confidence_gate_passed = True
     confidence_gate_reason = None
 
-    if confidence == "low":
+    if confidence == "cannot find the values" or confidence == "low":
         confidence_gate_passed = False
         confidence_gate_reason = (
-            "The AI could not read the invoice clearly or could not confidently "
-            "match it to the product you're listing. Please upload a clearer, "
-            "well-lit photo of your original purchase receipt."
-        )
-    elif confidence == "medium":
-        # Medium passes but is surfaced as a warning — buyers will see it
-        confidence_gate_reason = (
-            "The AI matched your invoice with medium confidence. Your listing will "
-            "show a 'Partially Verified' badge. For a stronger 'Invoice Verified' "
-            "badge, upload a clearer photo showing the product name and total."
+            "The AI could not read the invoice clearly or could not find the necessary details. "
+            "Please upload a clearer, well-lit photo of your original purchase receipt."
         )
 
     # If low confidence, verified is forced False regardless of AI output

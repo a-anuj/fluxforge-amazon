@@ -16,12 +16,10 @@ import {
   User, 
   MapPin, 
   Check, 
-  ShieldAlert, 
   Award, 
   Recycle, 
   ArrowRightLeft, 
   Edit, 
-  Filter, 
   CheckSquare
 } from "lucide-react";
 
@@ -127,12 +125,12 @@ function ReturnCard({ r, onVerify, onOverride, processingId }) {
         </div>
         <div className="flex items-center gap-3">
           {r.status === "verified" ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full uppercase tracking-wider">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Verified Outcome
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Done
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-250 px-2.5 py-1 rounded-full uppercase tracking-wider">
-              <RefreshCw className="w-3 h-3 animate-spin" /> Awaiting Review
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+              <RefreshCw className="w-3 h-3" /> Pending Review
             </span>
           )}
         </div>
@@ -197,8 +195,7 @@ function ReturnCard({ r, onVerify, onOverride, processingId }) {
         {/* Right Column: AI Insights */}
         <div className="lg:col-span-5 space-y-3.5">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest">AI Assessment & Circular Routing</p>
-            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider italic">Source: {r.assessment_source || "fallback"}</span>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">AI Routing Decision</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -218,18 +215,6 @@ function ReturnCard({ r, onVerify, onOverride, processingId }) {
             )}
           </div>
 
-          {/* Safety Gate Warning */}
-          {r.gate_override && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-black text-amber-800 uppercase tracking-wide">Confidence Gate Override</p>
-                <p className="text-[11px] text-amber-700 leading-normal mt-0.5">
-                  The model recommended <strong>{(r.original_recommended_action || "").toUpperCase()}</strong> but confidence did not meet safety threshold. Automatically rerouted to <strong>RECYCLE</strong>.
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* Metrics */}
           <div className="grid grid-cols-2 gap-3">
@@ -368,10 +353,9 @@ export default function DeliveryDashboard() {
   const [lastRefresh, setLastRefresh] = useState(null);
   
   // Filters state
-  const [statusFilter, setStatusFilter] = useState("all"); // "all" | "pending" | "verified"
+  const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [actionFilter, setActionFilter] = useState("all"); // "all" | resell | refurbish | recycle | donate | exchange
-  const [riskFilter, setRiskFilter] = useState("all"); // "all" | "gated" | "low_confidence"
+  const [actionFilter, setActionFilter] = useState("all");
 
   const isEmployee = currentUser?.role === "employee" || currentUser?.role === "admin";
 
@@ -462,34 +446,20 @@ export default function DeliveryDashboard() {
     ? Math.round((recoveryItems.length / totalInHub) * 100) 
     : 0;
 
-  const totalGateOverrides = returns.filter((r) => r.gate_override).length;
-
   // Filtering returns
   const filteredReturns = returns.filter((r) => {
-    // 1. Status Filter
     if (statusFilter === "pending" && r.status === "verified") return false;
     if (statusFilter === "verified" && r.status !== "verified") return false;
-
-    // 2. Action Filter
     if (actionFilter !== "all" && r.recommended_action !== actionFilter) return false;
-
-    // 3. Risk Filter
-    if (riskFilter === "gated" && !r.gate_override) return false;
-    if (riskFilter === "low_confidence") {
-      const conf = r.confidence != null ? Math.round(r.confidence * 100) : 100;
-      if (conf >= 70) return false;
-    }
-
-    // 4. Search Filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchOrder = String(r.order_id).includes(q);
-      const matchReturn = String(r.id).includes(q);
-      const matchProduct = r.product_name?.toLowerCase().includes(q);
-      const matchCustomer = r.customer_name?.toLowerCase().includes(q);
-      if (!matchOrder && !matchReturn && !matchProduct && !matchCustomer) return false;
+      if (
+        !String(r.order_id).includes(q) &&
+        !String(r.id).includes(q) &&
+        !r.product_name?.toLowerCase().includes(q) &&
+        !r.customer_name?.toLowerCase().includes(q)
+      ) return false;
     }
-
     return true;
   });
 
@@ -531,35 +501,35 @@ export default function DeliveryDashboard() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             icon="🗳️"
-            label="Total Circular Returns"
+            label="Total Returns"
             value={loading ? "—" : totalInHub}
-            sub={`Processed in ${currentUser.employee_zone || "your zone"}`}
+            sub={`In ${currentUser.employee_zone || "your zone"}`}
             accentBg="bg-indigo-50"
             accentText="text-indigo-700"
           />
           <StatCard
-            icon="⚠️"
-            label="Awaiting Hub Review"
+            icon="⏳"
+            label="Pending Review"
             value={loading ? "—" : pendingVerification}
-            sub={`${pendingVerification} items need confirmation`}
+            sub="Need hub confirmation"
             accentBg="bg-amber-50"
             accentText="text-amber-700"
           />
           <StatCard
             icon="♻️"
-            label="Resource Recovery Rate"
+            label="Recovery Rate"
             value={loading ? "—" : `${recoveryRate}%`}
-            sub={`${recoveryItems.length} items kept out of landfill`}
+            sub={`${recoveryItems.length} items saved from landfill`}
             accentBg="bg-emerald-50"
             accentText="text-emerald-700"
           />
           <StatCard
-            icon="🛡️"
-            label="Safety Gate Overrides"
-            value={loading ? "—" : totalGateOverrides}
-            sub="Rerouted due to quality criteria"
-            accentBg="bg-rose-50"
-            accentText="text-rose-700"
+            icon="✅"
+            label="Confirmed"
+            value={loading ? "—" : totalVerified}
+            sub="Outcomes verified by hub"
+            accentBg="bg-green-50"
+            accentText="text-green-700"
           />
         </div>
 
@@ -570,8 +540,7 @@ export default function DeliveryDashboard() {
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider">Operational Diagnostics Filters</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Search */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -579,10 +548,10 @@ export default function DeliveryDashboard() {
               </span>
               <input
                 type="text"
-                placeholder="Search Order ID, return, product, buyer..."
+                placeholder="Search by product, customer, order ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full text-xs pl-10 pr-4 py-2.5 border border-slate-250 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50/50"
+                className="w-full text-xs pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-slate-50/50"
               />
             </div>
 
@@ -591,11 +560,11 @@ export default function DeliveryDashboard() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full text-xs border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
+                className="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
               >
-                <option value="all">Verification: All Returns</option>
-                <option value="pending">Awaiting Verification ({pendingVerification})</option>
-                <option value="verified">Verified Outcomes ({totalVerified})</option>
+                <option value="all">All Returns</option>
+                <option value="pending">Pending Review ({pendingVerification})</option>
+                <option value="verified">Confirmed ({totalVerified})</option>
               </select>
             </div>
 
@@ -604,30 +573,16 @@ export default function DeliveryDashboard() {
               <select
                 value={actionFilter}
                 onChange={(e) => setActionFilter(e.target.value)}
-                className="w-full text-xs border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
+                className="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
               >
-                <option value="all">AI Action: All Outlays</option>
-                <option value="resell">Resell (Second Life)</option>
+                <option value="all">All Actions</option>
+                <option value="resell">Resell</option>
                 <option value="refurbish">Refurbish</option>
                 <option value="donate">Donate</option>
                 <option value="recycle">Recycle</option>
                 <option value="exchange">Exchange</option>
               </select>
             </div>
-
-            {/* Risk Gating Filter */}
-            <div>
-              <select
-                value={riskFilter}
-                onChange={(e) => setRiskFilter(e.target.value)}
-                className="w-full text-xs border border-slate-250 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
-              >
-                <option value="all">AI Risk Filter: None</option>
-                <option value="gated">Gated Overrides Only ({totalGateOverrides})</option>
-                <option value="low_confidence">Low Confidence (&lt;70%)</option>
-              </select>
-            </div>
-
           </div>
         </div>
 

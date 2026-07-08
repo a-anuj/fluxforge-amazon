@@ -86,14 +86,14 @@ App.jsx       # Route table
 
 "+ Post a Community Listing" navigates to **`/community/sell`** (`SellItem.jsx`) — a dedicated multi-step page, not a modal.
 
-**Amazon path:** order picker → details (condition, price, description) → product photo → done. Listing gets `purchase_source="amazon"` + `amazon_order_id`. Buyer sees **"Amazon Verified Purchase"** badge.
+**Amazon path:** order picker → product photo → details (condition locked by AI, price, description) → done. Listing gets `purchase_source="amazon"` + `amazon_order_id`. Buyer sees **"Amazon Verified Purchase"** badge.
 
-**Non-Amazon path:** product info + invoice upload → 5-gate verification → details → product photo → done. Listing gets `purchase_source="non_amazon"` + all invoice extraction fields. Buyer sees **"Invoice Verified"** badge.
+**Non-Amazon path:** product info + invoice upload → 5-gate verification → product photo → details (condition locked by AI, price, description) → done. Listing gets `purchase_source="non_amazon"` + all invoice extraction fields. Buyer sees **"Invoice Verified"** badge.
 
 **Invoice verification gates (all in `POST /api/community/verify-invoice`):**
 1. File type + size (JPEG/PNG/WebP/PDF, 15 MB max)
 2. Nova Pro OCR — extracts product name, store, date, total, serial/IMEI; validates against claimed product
-3. Confidence gate — `low` blocks; `medium` warns
+3. Confidence gate — must output `"good photo"`. If `"cannot find the values"`, blocks verification.
 4. Price cross-validation — `asking > 5× invoice total` blocks; `asking > 1.1× invoice` warns
 5. Serial/IMEI cross-check for electronics — Nova Pro looks for invoice serial in product photo (warning only)
 

@@ -55,6 +55,9 @@ async def lifespan(app: FastAPI):
         _safe_add_column(engine, "returns", "assessment_source", "VARCHAR")
         _safe_add_column(engine, "returns", "original_recommended_action", "VARCHAR")
         _safe_add_column(engine, "returns", "gate_override", "BOOLEAN", "FALSE")
+        # ── Reason-aware routing columns ────────────────────────────
+        _safe_add_column(engine, "returns", "return_reason", "VARCHAR")
+        _safe_add_column(engine, "returns", "hub_review_note", "TEXT")
         # ── Refurbished listing tag ────────────────────────────────
         _safe_add_column(engine, "listings", "condition_note", "TEXT")
         # ── Community listing split-path provenance ────────────────

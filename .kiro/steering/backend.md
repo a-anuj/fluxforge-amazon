@@ -108,7 +108,7 @@ The `POST /api/community/verify-invoice` endpoint runs **5 gates** in sequence:
 
 1. **File type + size** — JPEG/PNG/WebP/GIF/PDF only, 15 MB max. PDF is converted to JPEG via `pdf2image` if available.
 2. **Nova Pro OCR + semantic match** — `_bedrock_invoice_check()` extracts: `product_name`, `store`, `purchase_date`, `invoice_total` (display string), `invoice_total_numeric` (float), `match_confidence`, `serial_number`, `imei`. Validates that the document is a genuine purchase receipt and matches the claimed product.
-3. **Confidence hard gate** — `low` confidence forces `verified=False` (listing blocked); `medium` passes but surfaces a warning via `confidence_gate_reason`.
+3. **Confidence hard gate** — must output `"good photo"`. If `"cannot find the values"`, forces `verified=False` (listing blocked).
 4. **Price cross-validation** — `_validate_price(asking_price, invoice_total_numeric)`:
    - `asking > 5× invoice total` → **block** (fraud risk)
    - `asking > 1.1× invoice total` → **warn** (above original price, unusual for used goods)

@@ -130,6 +130,10 @@ class Return(Base):
     original_recommended_action = Column(String, nullable=True)  # only set when gate_override=True
     gate_override = Column(Boolean, default=False)      # True when confidence gate changed the action
 
+    # ── Reason-aware routing fields ───────────────────────────────────
+    return_reason = Column(String, nullable=True)       # "size_mismatch" | "quality" | "wrong_item" | etc.
+    hub_review_note = Column(Text, nullable=True)       # AI note explaining why hub review is needed
+
     order = relationship("Order", back_populates="returns")
     listing = relationship("Listing", back_populates="return_item", uselist=False)
 
