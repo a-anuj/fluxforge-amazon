@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { CheckCircle, ShieldCheck, AlertTriangle, Package, ChevronLeft } from "lucide-react";
+import ProductCameraCapture from "../components/ProductCameraCapture";
 import {
   createCommunityListing,
   suggestPrice,
@@ -147,11 +148,12 @@ export default function SellItem() {
   const [suggesting,   setSuggesting]   = useState(false);
 
   // ── Photo state ──
-  const [imageFile,     setImageFile]     = useState(null);
+  const [capturedPhotos, setCapturedPhotos] = useState(null); // { front: File, back: File }
+  const [imageFile,     setImageFile]     = useState(null);  // front file used for AI check
   const [photoVerified, setPhotoVerified] = useState(null);
   const [photoError,    setPhotoError]    = useState(null);
   const [verifyingPhoto,setVerifyingPhoto] = useState(false);
-  const [photoDragActive, setPhotoDragActive] = useState(false);
+  const [showCamera,    setShowCamera]    = useState(false);
   const photoRef = useRef(null);
 
   // ── Submit state ──
@@ -281,6 +283,16 @@ export default function SellItem() {
       if (!form.asking_price) setF("asking_price", String(Math.round(res.suggested_price)));
     } catch(e) { console.error(e); }
     finally { setSuggesting(false); }
+  };
+
+  // ── Camera capture handler — receives { front, back } from ProductCameraCapture ──
+  const handleCameraCapture = async ({ front, back }) => {
+    setShowCamera(false);
+    setCapturedPhotos({ front, back });
+    setImageFile(front); // front is used for AI verification
+    setPhotoError(null);
+    setPhotoVerified(null);
+    await processPhotoFile(front);
   };
 
   // ── Photo handler ──
@@ -866,84 +878,97 @@ export default function SellItem() {
 
             <div className="bg-white rounded-2xl border border-[#d5d9d9] p-5 space-y-4">
               <div>
-                <p className="text-[14px] font-bold text-[#0f1111]">Take a current photo of your product</p>
+                <p className="text-[14px] font-bold text-[#0f1111]">Capture product photos</p>
                 <p className="text-[12px] text-[#6c7480] mt-0.5">
                   {path === "amazon"
-                    ? "AI verifies the product matches your Amazon order."
-                    : "AI cross-checks this photo against your invoice claim."}
+                    ? "2 guided shots — AI verifies the product matches your Amazon order."
+                    : "2 guided shots — AI cross-checks these photos against your invoice."}
                 </p>
               </div>
 
-              <input ref={photoRef} type="file" accept="image/*"
-                onChange={handlePhotoUpload} className="hidden" />
-
-              {/* Drop zone — works for tap, click, and drag-and-drop */}
-              <div
-                onClick={() => photoRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setPhotoDragActive(true); }}
-                onDragEnter={(e) => { e.preventDefault(); setPhotoDragActive(true); }}
-                onDragLeave={() => setPhotoDragActive(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setPhotoDragActive(false);
-                  const file = e.dataTransfer.files?.[0];
-                  if (file && file.type.startsWith("image/")) processPhotoFile(file);
-                }}
-                className={`w-full border-2 border-dashed rounded-2xl cursor-pointer transition-all select-none
-                  ${photoDragActive
-                    ? "border-[#e77600] bg-[#fff8ef] scale-[1.01]"
-                    : imageFile
-                      ? "border-[#067d62] bg-[#f0f9f4]"
-                      : "border-[#c8cdd3] hover:border-[#e77600] hover:bg-[#fff8ef]"}`}
-              >
-                {imageFile ? (
-                  <div className="flex flex-col items-center gap-3 py-6 px-4">
-                    {/* Thumbnail preview */}
-                    <div className="relative">
-                      <img
-                        src={URL.createObjectURL(imageFile)}
-                        alt="Your photo"
-                        className="w-32 h-32 object-cover rounded-xl border border-[#d5d9d9] shadow-sm"
-                      />
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-[#067d62] rounded-full flex items-center justify-center">
-                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
+              {/* ── Camera CTA / captured state ── */}
+              {capturedPhotos ? (
+                /* Both shots captured — show thumbnails + retake */
+                <div className="border border-[#067d62]/30 rounded-2xl bg-[#f2fbf7] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-[#067d62]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    <p className="text-[13px] font-bold text-[#067d62]">Both photos captured</p>
+                  </div>
+                  <div className="flex gap-3">
+                    {[
+                      { label: "Front", file: capturedPhotos.front },
+                      { label: "Back",  file: capturedPhotos.back },
+                    ].map(({ label, file }) => (
+                      <div key={label} className="flex-1 flex flex-col items-center gap-1.5">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={label}
+                          className="w-full aspect-square object-cover rounded-xl border border-[#067d62]/20 shadow-sm"
+                        />
+                        <span className="text-[11px] font-semibold text-[#067d62]">{label}</span>
                       </div>
-                    </div>
-                    <p className="text-[13px] font-semibold text-[#0f1111]">{imageFile.name}</p>
-                    <p className="text-[11px] text-[#6c7480]">Tap or drop a new photo to replace</p>
+                    ))}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 py-10 px-4">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${photoDragActive ? "bg-[#e77600]/10" : "bg-[#f0f2f2]"}`}>
-                      {photoDragActive
-                        ? <svg className="w-8 h-8 text-[#e77600]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                        : <span className="text-[30px]">📷</span>}
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[14px] font-semibold text-[#0f1111]">
-                        {photoDragActive ? "Drop your photo here" : "Tap to take or upload a photo"}
-                      </p>
-                      <p className="text-[11px] text-[#6c7480] mt-1">
-                        {photoDragActive ? "" : "Or drag and drop · "}JPEG · PNG · WebP · max 10 MB
-                      </p>
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => { setCapturedPhotos(null); setImageFile(null); setPhotoVerified(null); setPhotoError(null); }}
+                    className="w-full text-[12px] font-semibold text-[#6c7480] hover:text-[#c45500] transition-colors py-1"
+                  >
+                    Retake photos
+                  </button>
+                </div>
+              ) : (
+                /* Open guided camera */
+                <button
+                  type="button"
+                  onClick={() => setShowCamera(true)}
+                  className="w-full border-2 border-dashed border-[#c8cdd3] hover:border-[#e77600] hover:bg-[#fff8ef] rounded-2xl py-8 flex flex-col items-center gap-3 transition-all active:scale-[0.99]"
+                >
+                  <div className="w-16 h-16 rounded-full bg-[#0f1923] flex items-center justify-center shadow-lg">
+                    <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
                   </div>
-                )}
-              </div>
+                  <div className="text-center">
+                    <p className="text-[15px] font-bold text-[#0f1111]">Open Guided Camera</p>
+                    <p className="text-[12px] text-[#6c7480] mt-0.5">Front &amp; back — frame guide with auto-detect</p>
+                    <p className="text-[11px] text-[#adb1b8] mt-1">Works on mobile &amp; desktop · Green = perfect position</p>
+                  </div>
+                </button>
+              )}
 
-              {photoError && (
+              {/* ── AI verification feedback ── */}
+              {verifyingPhoto && (
+                <div className="flex items-center gap-3 bg-[#f0f6ff] border border-[#1a73e8]/20 rounded-xl px-4 py-3">
+                  <svg className="w-5 h-5 animate-spin text-[#1a73e8] flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  <p className="text-[13px] text-[#1a73e8] font-medium">AI verifying your product photo…</p>
+                </div>
+              )}
+
+              {photoError && !verifyingPhoto && (
                 <div className="flex items-start gap-3 bg-[#fff3cd] border border-[#c45500]/25 rounded-xl p-4">
                   <AlertTriangle size={18} className="text-[#c45500] flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[13px] font-bold text-[#c45500]">Photo Verification Failed</p>
                     <p className="text-[12px] text-[#8a6d3b] mt-0.5">{photoError}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setCapturedPhotos(null); setImageFile(null); setPhotoVerified(null); setPhotoError(null); setShowCamera(true); }}
+                      className="mt-2 text-[12px] font-bold text-[#1a73e8] hover:underline"
+                    >
+                      Retake photos
+                    </button>
                   </div>
                 </div>
               )}
 
-              {photoVerified && (
+              {photoVerified && !verifyingPhoto && (
                 <div className="flex items-start gap-3 bg-[#f0f9f4] border border-[#067d62]/25 rounded-xl p-4">
                   <CheckCircle size={18} className="text-[#067d62] flex-shrink-0 mt-0.5" />
                   <div>
@@ -961,18 +986,28 @@ export default function SellItem() {
             </div>
 
             <button
-              disabled={!imageFile || !photoVerified}
-              onClick={() => go("details")}
-              className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#e77600] hover:bg-[#d56e0c] disabled:opacity-40 transition-all active:scale-[0.99]">
-              Next: Details →
+              disabled={!imageFile || !photoVerified || verifyingPhoto || submitting}
+              onClick={handleSubmit}
+              className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#067d62] hover:bg-[#055d49] disabled:opacity-40 transition-all active:scale-[0.99]">
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  Publishing your listing…
+                </span>
+              ) : "Publish Listing & Earn +5 Credits 🌱"}
             </button>
           </div>
         )}
 
-        {verifyingPhoto && (
-          <AiScanOverlay
-            subtitle={path === "amazon" ? "Checking product photo against your order…" : "Cross-checking photo against invoice…"}
-            steps={["Verifying product identity", "Checking physical condition", "Evaluating resale potential"]}
+        {/* Guided camera — full-screen overlay */}
+        {showCamera && (
+          <ProductCameraCapture
+            title={path === "amazon" ? "Capture Product Photos" : "Capture Product Photos"}
+            onCapture={handleCameraCapture}
+            onClose={() => setShowCamera(false)}
           />
         )}
 
