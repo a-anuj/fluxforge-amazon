@@ -137,6 +137,18 @@ export const overrideReturnDisposition = (returnId, recommendedAction, justifica
 export const verifyReturnDisposition = (returnId) =>
   request(`/returns/${returnId}/verify`, { method: "POST" });
 
+/** Replacement flow: check if a restocked hub item is available in the customer's city */
+export const checkHubInventory = (productId, city) =>
+  request(`/returns/check-inventory?product_id=${productId}&city=${encodeURIComponent(city)}`);
+
+/** Replacement flow: choose refund or replacement (places new order if replacement) */
+export const requestReplacement = (orderId, mode) =>
+  request("/returns/request-replacement", {
+    method: "POST",
+    body: JSON.stringify({ order_id: orderId, mode }),
+  });
+
+
 
 
 // Listings

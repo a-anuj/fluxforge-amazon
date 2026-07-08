@@ -1011,6 +1011,191 @@ def list_returns(employee_id: int = None, db: Session = Depends(get_db)):
     return result
 
 
+# ── Replacement flow: check hub inventory ─────────────────────────────
+
+@router.get("/check-inventory")
+def check_hub_inventory(product_id: int, city: str, db: Session = Depends(get_db)):
+    """
+    Check if there is a verified, restocked (resell-action) return for a given
+    product in the same city. Used before customer chooses replacement vs refund.
+    """
+    # Find any verified return for this product whose customer is in the same city
+    restocked = (
+        db.query(Return)
+        .join(Order, Return.order_id == Order.id)
+        .join(User, Order.user_id == User.id)
+        .filter(
+            Order.product_id == product_id,
+            Return.recommended_action == "resell",
+            Return.status == "verified",
+            User.city.ilike(city),
+        )
+        .first()
+    )
+
+    return {
+        "available": restocked is not None,
+        "return_id": restocked.id if restocked else None,
+    }
+
+
+class ReplacementRequest(BaseModel):
+    order_id: int
+    mode: str   # "refund" | "replacement"
+
+
+@router.post("/request-replacement")
+def request_replacement(body: ReplacementRequest, db: Session = Depends(get_db)):
+    """
+    Called after the customer picks Return vs Replace.
+
+    mode='refund'      → behaves like the standard return submission; no special logic here
+                         (the /with-photo endpoint already handles refund returns).
+    mode='replacement' →
+        1. Check hub inventory (same city).
+           FOUND  → place a new Order from hub stock, mark source return as 'replacement_fulfilled',
+                    award Green Credits to the customer.
+           NOT FOUND → place a new Order from Amazon (root seller, non-refurbished),
+                       no Green Credits.
+        2. Return enough context for the frontend to show the correct confirmation screen.
+    """
+    order = db.query(Order).filter(Order.id == body.order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    user = db.query(User).filter(User.id == order.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    product = order.product
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if body.mode == "refund":
+        # Nothing special — caller will proceed to /with-photo for the return.
+        return {"mode": "refund", "message": "Proceed with standard return flow."}
+
+    # ── Replacement mode ──────────────────────────────────────────────
+    # Guard: don't allow duplicate replacements
+    if order.status == "returned":
+        raise HTTPException(status_code=409, detail="This order has already been returned or replaced.")
+
+    customer_city = user.city or ""
+
+    # Mark original order as returned
+    order.status = "returned"
+    if order.no_return_credits_status == "pending":
+        order.no_return_credits_status = "forfeited"
+
+    # Create a Return record so the returned item appears in the Hub
+    return_item = Return(
+        order_id=order.id,
+        recommended_action="resell",   # good-condition item back into stock
+        status="completed",
+        return_reason="replacement_request",
+        condition_note="Returned for replacement — item condition not yet assessed.",
+        assessment_source="replacement_flow",
+        confidence=None,
+        gate_override=False,
+    )
+    db.add(return_item)
+    db.commit()
+    db.refresh(return_item)
+
+    restocked_return = (
+        db.query(Return)
+        .join(Order, Return.order_id == Order.id)
+        .join(User, Order.user_id == User.id)
+        .filter(
+            Order.product_id == product.id,
+            Return.recommended_action == "resell",
+            Return.status == "verified",
+            User.city.ilike(customer_city),
+            Return.id != return_item.id,   # exclude the one we just created
+        )
+        .first()
+    )
+
+    from app.services.credit_engine import calculate_credits, get_level
+
+    if restocked_return:
+        # ── Hub-stock path: place order from inventory ────────────────
+        new_order = Order(
+            user_id=order.user_id,
+            product_id=product.id,
+            status="placed",
+            is_refurbished=True,   # it is a returned/restocked item
+            delivery_type="standard",
+            return_period_days=product.return_period_days,
+        )
+        db.add(new_order)
+
+        # Mark the source return as fulfilled so it can't be used again
+        restocked_return.status = "replacement_fulfilled"
+        db.commit()
+        db.refresh(new_order)
+
+        # Award Green Credits for circular replacement
+        credits = calculate_credits("resell", product.category.lower() if product.category else "other")
+        user.green_credits += credits
+        user.lifetime_credits += credits
+        user.products_resold += 1
+        level_info = get_level(user.lifetime_credits)
+        user.level = level_info["name"]
+
+        db.add(GreenCreditTx(
+            user_id=order.user_id,
+            amount=credits,
+            type="earned",
+            action_type="replacement_hub",
+            description=f"Replacement from hub inventory: {product.name}",
+        ))
+        db.commit()
+
+        logger.info(
+            "Replacement (hub) for order %d → new order %d, credits=%d",
+            order.id, new_order.id, credits,
+        )
+
+        return {
+            "mode": "replacement",
+            "source": "hub",
+            "new_order_id": new_order.id,
+            "product_name": product.name,
+            "green_credits_earned": credits,
+            "message": "Replacement placed from hub inventory. Green Credits awarded!",
+        }
+
+    else:
+        # ── Amazon-root path: place fresh order ────────────────────────
+        new_order = Order(
+            user_id=order.user_id,
+            product_id=product.id,
+            status="placed",
+            is_refurbished=False,
+            delivery_type="standard",
+            return_period_days=product.return_period_days,
+        )
+        db.add(new_order)
+        db.commit()
+        db.refresh(new_order)
+
+        logger.info(
+            "Replacement (Amazon root) for order %d → new order %d",
+            order.id, new_order.id,
+        )
+
+        return {
+            "mode": "replacement",
+            "source": "amazon",
+            "new_order_id": new_order.id,
+            "product_name": product.name,
+            "green_credits_earned": 0,
+            "message": "No hub stock available. Replacement ordered fresh from Amazon.",
+        }
+
+
+
 def _presign_return_photo(raw_url: str | None) -> str | None:
     """Generate a 1-hour presigned URL for an S3 key, falling back to the raw URL."""
     if not raw_url:
