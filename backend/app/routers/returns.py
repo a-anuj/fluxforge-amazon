@@ -159,6 +159,147 @@ def apply_damaged_product_rules(assessment: dict) -> dict:
 
 
 
+# ── Reason-based pre-routing ──────────────────────────────────────────
+
+# Reasons that require a photo and trigger special routing
+HUB_REVIEW_REASONS = {"size_mismatch", "wrong_item"}
+QUALITY_REASONS    = {"quality", "defective"}
+
+def _bedrock_identity_check(photo_bytes: bytes, product_name: str, product_category: str) -> dict:
+    """
+    Uses Nova Pro (via converse) to check if the photo matches the expected
+    product name/category. Returns {\"matches\": bool, \"note\": str}.
+    """
+    import boto3
+    region = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
+    try:
+        client = boto3.client(
+            "bedrock-runtime",
+            region_name=region,
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        )
+        response = client.converse(
+            modelId="amazon.nova-pro-v1:0",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"image": {"format": "jpeg", "source": {"bytes": photo_bytes}}},
+                    {"text": (
+                        f"The customer ordered: '{product_name}' (category: {product_category}).\n"
+                        "Look at the photo carefully. Does the item in the photo appear to be "
+                        "the same product (or a reasonable match for the same category)?\n"
+                        "Return ONLY valid JSON:\n"
+                        "{\"matches\": true_or_false, \"note\": \"one sentence explanation\"}"
+                    )},
+                ],
+            }],
+            inferenceConfig={"maxTokens": 256, "temperature": 0.1},
+        )
+        import json
+        raw = ""
+        for block in response["output"]["message"].get("content", []):
+            if "text" in block:
+                raw += block["text"]
+        # extract JSON
+        start = raw.find("{"); end = raw.rfind("}") + 1
+        data = json.loads(raw[start:end]) if start >= 0 and end > start else {}
+        return {"matches": bool(data.get("matches", True)), "note": data.get("note", "")}
+    except Exception as exc:
+        logger.warning("Identity check failed: %s — defaulting to match=True", exc)
+        return {"matches": True, "note": "AI check unavailable"}
+
+
+def apply_reason_routing(
+    reason: str,
+    photo_bytes: list[bytes],
+    product_name: str,
+    product_category: str,
+) -> dict | None:
+    """
+    For the three special return reasons, apply pre-routing logic BEFORE the
+    standard AI assessment pipeline. Returns a partial assessment dict if a
+    special path was triggered, or None to fall through to standard logic.
+
+    Reason logic:
+    - size_mismatch  → Check photo for damage. If no damage → pending_hub_review
+                       (hub manager decides resell vs exchange; NearDrop runs).
+    - quality/defective → Fall through to standard AI assessment (refurb/donate/recycle).
+    - wrong_item    → Identity-check: photo vs order title. If mismatch →
+                       pending_hub_review; NearDrop runs regardless.
+    """
+    if reason == "size_mismatch":
+        if not photo_bytes:
+            # No photo → can't confirm damage-free; send to hub for manual check
+            return {
+                "recommended_action": "pending_hub_review",
+                "hub_review_note": "No photo provided for size-mismatch return. Hub manager must verify condition before resell.",
+                "confidence": 1.0,
+                "assessment_source": "rule_based",
+                "condition_score": 80,
+                "remaining_life_pct": 85,
+                "defects_summary": "No photo — assumed undamaged based on stated reason.",
+                "is_damaged": False,
+                "gate_override": False,
+                "original_recommended_action": None,
+            }
+        # Run identity check to detect damage
+        id_result = _bedrock_identity_check(photo_bytes[0], product_name, product_category)
+        logger.info("[Reason: size_mismatch] Identity/damage check → %s", id_result)
+        return {
+            "recommended_action": "pending_hub_review",
+            "hub_review_note": (
+                f"Size mismatch return. AI photo note: {id_result['note']} "
+                "Hub manager should verify condition and decide resell/exchange."
+            ),
+            "confidence": 1.0,
+            "assessment_source": "rule_based",
+            "condition_score": 85,
+            "remaining_life_pct": 90,
+            "defects_summary": id_result["note"],
+            "is_damaged": False,
+            "gate_override": False,
+            "original_recommended_action": None,
+        }
+
+    elif reason == "wrong_item":
+        if not photo_bytes:
+            return {
+                "recommended_action": "pending_hub_review",
+                "hub_review_note": "Wrong item claimed but no photo provided. Hub must verify before processing.",
+                "confidence": 1.0,
+                "assessment_source": "rule_based",
+                "condition_score": 80,
+                "remaining_life_pct": 85,
+                "defects_summary": "No photo — cannot verify item identity.",
+                "is_damaged": False,
+                "gate_override": False,
+                "original_recommended_action": None,
+            }
+        id_result = _bedrock_identity_check(photo_bytes[0], product_name, product_category)
+        logger.info("[Reason: wrong_item] Identity check → matches=%s, note=%s", id_result["matches"], id_result["note"])
+        if id_result["matches"]:
+            # Photo matches — customer may be mistaken; still flag for hub
+            hub_note = f"Customer claims wrong item, but AI sees a likely match: {id_result['note']}. Hub should verify."
+        else:
+            hub_note = f"AI confirmed item mismatch: {id_result['note']}. Process as wrong-item return and run NearDrop."
+        return {
+            "recommended_action": "pending_hub_review",
+            "hub_review_note": hub_note,
+            "confidence": 1.0,
+            "assessment_source": "rule_based",
+            "condition_score": 80,
+            "remaining_life_pct": 85,
+            "defects_summary": id_result["note"],
+            "is_damaged": False,
+            "gate_override": False,
+            "original_recommended_action": None,
+        }
+
+    # quality / defective / changed_mind / other → fall through to standard AI assessment
+    return None
+
+
 # ── Helper: fetch bytes from a URL (best-effort) ───────────────────────
 
 def _fetch_image_bytes(url: str) -> bytes | None:
@@ -600,28 +741,29 @@ def get_return_by_order(order_id: int, db: Session = Depends(get_db)):
         "original_recommended_action": return_item.original_recommended_action,
         "green_credits_earned": return_item.green_credits_earned,
         "condition_note": return_item.condition_note,
+        "return_reason": return_item.return_reason,
+        "hub_review_note": return_item.hub_review_note,
         "product_name": product.name if product else None,
         "product_category": product.category if product else None,
     }
 
 
-# ── Customer: submit return with a single photo upload ───────────────
+# ── Customer: submit return with a single photo upload ─────────────────
 
 @router.post("/with-photo", status_code=201)
 async def create_return_with_photo(
     order_id: int = Form(...),
     reason: str = Form(None),
-    photo: UploadFile = File(None),   # optional single image
+    photo: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
     """
-    Customer-facing endpoint for the simplified return flow.
-    Accepts a single optional photo file; runs Nova Pro assessment; mirrors
-    the full confidence-gate routing of the main POST / endpoint.
-    Returns only the customer-facing fields (credits, action label).
-    Internal AI scores are NOT returned here — hub employees use
-    GET /returns/by-order/{order_id} for full details.
+    Customer-facing endpoint. Applies reason-aware routing:
+    - size_mismatch / wrong_item → pending_hub_review + NearDrop
+    - quality / defective → Standard Nova Pro (refurb/donate/recycle)
+    - other reasons → Standard Nova Pro assessment
     """
+
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -630,6 +772,7 @@ async def create_return_with_photo(
 
     product = order.product
     category = product.category.lower() if product and product.category else "electronics"
+    product_name = product.name if product else "Unknown"
 
     # Read photo bytes if supplied
     photo_bytes: list[bytes] = []
@@ -638,17 +781,33 @@ async def create_return_with_photo(
         if data:
             photo_bytes.append(data)
 
-    product_meta = {
-        "name": product.name if product else "Unknown",
-        "category": category,
-    }
-    assessment = assess_return_condition(
-        return_photo_bytes=photo_bytes,
-        product_metadata=product_meta,
-        return_reason=reason or "customer return",
+    # ── Step 1: Reason-aware pre-routing ──────────────────────────────
+    normalized_reason = (reason or "other").lower().strip()
+    special_assessment = apply_reason_routing(
+        reason=normalized_reason,
+        photo_bytes=photo_bytes,
+        product_name=product_name,
+        product_category=category,
     )
-    assessment = apply_damaged_product_rules(assessment)
-    assessment = apply_confidence_gate(assessment)
+
+    if special_assessment is not None:
+        assessment = special_assessment
+        logger.info(
+            "[Reason: %s] Pre-routed → %s | hub_note: %s",
+            normalized_reason,
+            assessment["recommended_action"],
+            assessment.get("hub_review_note", ""),
+        )
+    else:
+        # ── Step 2: Standard Nova Pro assessment ─────────────────────
+        product_meta = {"name": product_name, "category": category}
+        assessment = assess_return_condition(
+            return_photo_bytes=photo_bytes,
+            product_metadata=product_meta,
+            return_reason=reason or "customer return",
+        )
+        assessment = apply_damaged_product_rules(assessment)
+        assessment = apply_confidence_gate(assessment)
 
     action = assessment["recommended_action"]
     condition_score = assessment.get("condition_score", 90)
@@ -658,27 +817,35 @@ async def create_return_with_photo(
     assessment_source = assessment.get("assessment_source", "fallback")
     gate_override = assessment.get("gate_override", False)
     original_recommended_action = assessment.get("original_recommended_action")
+    hub_review_note = assessment.get("hub_review_note")
 
-    # ── Persist Return row first to get DB-assigned ID ───────────────
+    # pending_hub_review keeps order "in review" — not fully returned yet
+    is_hub_review = action == "pending_hub_review"
+    order_status = "return_pending" if is_hub_review else "returned"
+    return_status = "pending_hub_review" if is_hub_review else "completed"
+
+    # ── Step 3: Persist Return row ─────────────────────────────────────
     return_item = Return(
         order_id=order_id,
-        image_urls=None,               # set after S3 upload below
+        image_urls=None,
         condition_score=condition_score,
         defects=raw_defects,
         remaining_life_pct=remaining_life_pct,
         recommended_action=action,
         condition_note=raw_defects if action == "refurbish" else None,
-        status="completed",
+        status=return_status,
         confidence=confidence,
         assessment_source=assessment_source,
         original_recommended_action=original_recommended_action,
         gate_override=gate_override,
+        return_reason=normalized_reason,
+        hub_review_note=hub_review_note,
     )
     db.add(return_item)
     db.commit()
     db.refresh(return_item)
 
-    # ── Upload photo to S3 now that we have a real return_id ─────────
+    # ── Upload photo to S3 ─────────────────────────────────────────────
     if photo_bytes:
         photo_url = _upload_return_photo_to_s3(
             photo_bytes[0],
@@ -689,14 +856,38 @@ async def create_return_with_photo(
             return_item.image_urls = photo_url
             db.commit()
 
-
-    order.status = "returned"
-    if order.no_return_credits_status == "pending":
+    order.status = order_status
+    if order.no_return_credits_status == "pending" and not is_hub_review:
         order.no_return_credits_status = "forfeited"
     db.commit()
 
+    # ── Step 4: Circular action routing ───────────────────────────────
     listing_id = None
-    if action == "exchange":
+    if is_hub_review:
+        # For hub-review cases, run NearDrop proactively so wishlist users
+        # get notified early. Listing stays "available" pending hub confirmation.
+        try:
+            temp_listing = Listing(
+                return_id=return_item.id,
+                product_id=order.product_id,
+                price=round(product.price * 0.7, 2) if product else 0.0,
+                status="available",
+                condition_note=f"Pending hub review ({normalized_reason}). {raw_defects}",
+            )
+            db.add(temp_listing)
+            db.commit()
+            db.refresh(temp_listing)
+            listing_id = temp_listing.id
+            # Run NearDrop wishlist matching
+            find_wishlist_matches(return_item, temp_listing, db)
+            matched_id = find_best_match(temp_listing, db)
+            if matched_id:
+                temp_listing.matched_user_id = matched_id
+                db.commit()
+            logger.info("NearDrop ran for hub-review return %d", return_item.id)
+        except Exception as exc:
+            logger.warning("NearDrop setup failed for hub-review return: %s", exc)
+    elif action == "exchange":
         listing_id = _route_exchange(return_item, order, db)
     elif action == "resell":
         _, listing_id = _create_listing(return_item, order, "resell", None, db)
@@ -707,46 +898,51 @@ async def create_return_with_photo(
     elif action == "recycle":
         _route_recycle(return_item, category, gate_override, db)
 
-    credits = calculate_credits(action, category)
-    impact = calculate_action_impact(action, category)
-    return_item.green_credits_earned = credits
-    db.commit()
-
-    user = db.query(User).filter(User.id == order.user_id).first()
-    if user:
-        user.green_credits += credits
-        user.lifetime_credits += credits
-        user.co2_saved += impact["co2_saved"]
-        user.ewaste_prevented += impact["ewaste_prevented"]
-        user.water_saved += impact["water_saved"]
-        if action in ("resell", "refurbish", "exchange"):
-            user.products_resold += 1
-        elif action == "donate":
-            user.products_reused += 1
-        level_info = get_level(user.lifetime_credits)
-        user.level = level_info["name"]
-        db.add(GreenCreditTx(
-            user_id=order.user_id,
-            amount=credits,
-            type="earned",
-            action_type=action,
-            description=f"Return ({action}): {product.name if product else 'Product'}",
-        ))
+    # ── Step 5: Green Credits (not awarded for hub-review; awarded on hub confirmation) ──
+    credits = 0
+    impact = {"co2_saved": 0.0, "ewaste_prevented": 0.0, "water_saved": 0.0}
+    if not is_hub_review:
+        credits = calculate_credits(action, category)
+        impact = calculate_action_impact(action, category)
+        return_item.green_credits_earned = credits
         db.commit()
 
+        user = db.query(User).filter(User.id == order.user_id).first()
+        if user:
+            user.green_credits += credits
+            user.lifetime_credits += credits
+            user.co2_saved += impact["co2_saved"]
+            user.ewaste_prevented += impact["ewaste_prevented"]
+            user.water_saved += impact["water_saved"]
+            if action in ("resell", "refurbish", "exchange"):
+                user.products_resold += 1
+            elif action == "donate":
+                user.products_reused += 1
+            level_info = get_level(user.lifetime_credits)
+            user.level = level_info["name"]
+            db.add(GreenCreditTx(
+                user_id=order.user_id,
+                amount=credits,
+                type="earned",
+                action_type=action,
+                description=f"Return ({action}): {product_name}",
+            ))
+            db.commit()
+
     logger.info(
-        "Return (photo) %d: action=%s, source=%s, gate_override=%s, credits=%d",
-        return_item.id, action, assessment_source, gate_override, credits,
+        "Return (photo) %d: reason=%s, action=%s, source=%s, hub_review=%s, credits=%d",
+        return_item.id, normalized_reason, action, assessment_source, is_hub_review, credits,
     )
 
-    # ── Customer sees only what they need ────────────────────────────
+    # ── Customer response ──────────────────────────────────────────────
     action_label = {
-        "resell":    "Second Life",
-        "refurbish": "Refurbish",
-        "exchange":  "Exchange",
-        "donate":    "Donate",
-        "recycle":   "Recycle",
-    }.get(action, action.title())
+        "resell":             "Second Life",
+        "refurbish":          "Certified Refurbish",
+        "exchange":           "Exchange",
+        "donate":             "Donate",
+        "recycle":            "Recycle",
+        "pending_hub_review": "Under Review",
+    }.get(action, action.replace("_", " ").title())
 
     return {
         "return_id": return_item.id,
@@ -754,8 +950,10 @@ async def create_return_with_photo(
         "action_label": action_label,
         "co2_saved": impact["co2_saved"],
         "order_id": order_id,
+        "is_hub_review": is_hub_review,
+        "hub_review_note": hub_review_note,
+        "return_reason": normalized_reason,
     }
-
 
 # ── Hub: list all circular returns (with zone filtering if employee_id provided) ──
 
