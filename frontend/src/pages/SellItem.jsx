@@ -8,6 +8,7 @@ import {
   getOrders,
   getProduct,
   verifyInvoice,
+  getApiBaseUrl,
 } from "../api/client";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -23,8 +24,8 @@ const LABEL  = "block text-[13px] font-semibold text-[#0f1111] mb-1.5";
 
 // ── Step map: path → ordered step keys ────────────────────────────────────
 const STEPS = {
-  amazon:     ["path", "pick",    "details", "photo", "done"],
-  non_amazon: ["path", "invoice", "details", "photo", "done"],
+  amazon:     ["path", "pick",    "photo", "details", "done"],
+  non_amazon: ["path", "invoice", "photo", "details", "done"],
 };
 
 // Helper: step index for progress bar
@@ -42,8 +43,8 @@ function ProgressBar({ path, step }) {
   const total = totalSteps(path);
   const pct   = total > 0 ? Math.round((idx / total) * 100) : 0;
   const stepLabels = path === "amazon"
-    ? ["Source", "Order", "Details", "Photo"]
-    : ["Source", "Invoice", "Details", "Photo"];
+    ? ["Source", "Order", "Photo", "Details"]
+    : ["Source", "Invoice", "Photo", "Details"];
 
   return (
     <div className="px-5 pt-4 pb-3 bg-white border-b border-[#e3e6ea]">
@@ -205,7 +206,7 @@ export default function SellItem() {
       setF("category", p.category.charAt(0).toUpperCase() + p.category.slice(1));
       setF("brand",    p.brand || "");
     }
-    go("details");
+    go("photo");
   };
 
   // ── Invoice upload handler ──
@@ -298,10 +299,15 @@ export default function SellItem() {
       fd.append("image", file);
       fd.append("category", form.category);
       fd.append("title", form.title || prod?.name || "");
-      const res = await fetch(`http://${window.location.hostname}:8000/api/community/verify-image`, { method: "POST", body: fd });
+      fd.append("brand", form.brand || prod?.brand || "");
+      const res = await fetch(`${getApiBaseUrl()}/community/verify-image`, { method: "POST", body: fd });
       if (!res.ok) { const d = await res.json(); throw new Error(d.detail || "Photo rejected"); }
       const data = await res.json();
       setPhotoVerified(data.condition_summary || "Verified.");
+      if (data.condition) {
+        setF("condition", data.condition);
+        setF("condition_locked", true);
+      }
       setImageFile(file);
     } catch(err) { setPhotoError(err.message); }
     finally { setVerifyingPhoto(false); }
@@ -682,9 +688,9 @@ export default function SellItem() {
 
             <button
               disabled={!invoiceResult?.verified || !form.title || invoiceResult?.price_flag_severity === "block"}
-              onClick={() => go("details")}
+              onClick={() => go("photo")}
               className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#1a73e8] hover:bg-[#1558c0] disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.99]">
-              Next: Pricing & Details →
+              Next: Add Photo →
             </button>
           </div>
         )}
@@ -727,16 +733,25 @@ export default function SellItem() {
             )}
 
             {/* Condition */}
-            <div className="bg-white rounded-2xl border border-[#d5d9d9] p-5 space-y-3">
-              <label className="text-[14px] font-bold text-[#0f1111] block">Condition *</label>
+            <div className="bg-white rounded-2xl border border-[#d5d9d9] p-5 space-y-3 relative">
+              <div className="flex items-center justify-between">
+                <label className="text-[14px] font-bold text-[#0f1111] block">Condition *</label>
+                {form.condition_locked && (
+                  <span className="text-[11px] font-semibold text-[#067d62] bg-[#f0f9f4] px-2 py-0.5 rounded flex items-center gap-1">
+                    <CheckCircle size={12} /> Auto-verified
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2.5">
                 {CONDITIONS.map(c => (
                   <button key={c.value} type="button"
-                    onClick={() => setF("condition", c.value)}
+                    disabled={form.condition_locked && form.condition !== c.value}
+                    onClick={() => !form.condition_locked && setF("condition", c.value)}
                     className={`p-3 rounded-xl border-2 text-left transition-all active:scale-[0.98]
                       ${form.condition === c.value
                         ? "border-[#e77600] bg-[#fff8ef]"
-                        : "border-[#d5d9d9] hover:border-[#e77600]/50"}`}>
+                        : "border-[#d5d9d9] hover:border-[#e77600]/50"}
+                      ${form.condition_locked && form.condition !== c.value ? "opacity-40 cursor-not-allowed bg-gray-50" : ""}`}>
                     <p className="text-[13px] font-bold text-[#0f1111]">{c.label}</p>
                     <p className="text-[11px] text-[#6c7480] mt-0.5">{c.desc}</p>
                   </button>
@@ -829,10 +844,18 @@ export default function SellItem() {
             </div>
 
             <button
-              disabled={!form.asking_price || !form.condition}
-              onClick={() => go("photo")}
-              className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#e77600] hover:bg-[#d56e0c] disabled:opacity-40 transition-all active:scale-[0.99]">
-              Next: Add Photo →
+              disabled={!form.asking_price || !form.condition || submitting}
+              onClick={handleSubmit}
+              className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#067d62] hover:bg-[#055d49] disabled:opacity-40 transition-all active:scale-[0.99]">
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  Publishing your listing…
+                </span>
+              ) : "Publish Listing & Earn +5 Credits 🌱"}
             </button>
           </div>
         )}
@@ -938,18 +961,10 @@ export default function SellItem() {
             </div>
 
             <button
-              disabled={!imageFile || submitting}
-              onClick={handleSubmit}
-              className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#067d62] hover:bg-[#055d49] disabled:opacity-40 transition-all active:scale-[0.99]">
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                  </svg>
-                  Publishing your listing…
-                </span>
-              ) : "Publish Listing & Earn +5 Credits 🌱"}
+              disabled={!imageFile || !photoVerified}
+              onClick={() => go("details")}
+              className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#e77600] hover:bg-[#d56e0c] disabled:opacity-40 transition-all active:scale-[0.99]">
+              Next: Details →
             </button>
           </div>
         )}

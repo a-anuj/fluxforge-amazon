@@ -102,8 +102,8 @@ The user switcher in `Header.jsx` is **click-based** (not hover-only) so it work
 ### SellItem (`/community/sell`)
 - Full dedicated page — **not a modal**.
 - Sticky dark top bar with step name + back chevron.
-- Animated progress bar (4 dot-nodes: Source → Order/Invoice → Details → Photo).
-- Two paths: `STEPS.amazon = ["path","pick","details","photo","done"]` and `STEPS.non_amazon = ["path","invoice","details","photo","done"]`.
+- Animated progress bar (4 dot-nodes: Source → Order/Invoice → Photo → Details).
+- Two paths: `STEPS.amazon = ["path","pick","photo","details","done"]` and `STEPS.non_amazon = ["path","invoice","photo","details","done"]`.
 - `go(step)` / `back()` navigation helpers.
 - Invoice drop zone and photo drop zone both support drag-and-drop (`onDragOver` + `onDrop`) with `dragActive` visual state. No `capture="environment"` on file inputs — allows gallery picker.
 - Photo zone shows a thumbnail preview using `URL.createObjectURL(imageFile)`.
