@@ -2,17 +2,18 @@ import { useRef, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getOrders, getProduct, createReturnWithPhoto, checkHubInventory, requestReplacement } from "../api/client";
 import { useUser } from "../context/UserContext";
+import ProductCameraCapture from "../components/ProductCameraCapture";
 
 const RETURN_REASONS = [
-  { value: "size_mismatch", label: "Doesn't fit / wrong size",  icon: "📐", requiresPhoto: true },
-  { value: "quality",       label: "Quality not as expected",   icon: "⚠️", requiresPhoto: true },
-  { value: "wrong_item",    label: "Wrong item received",       icon: "📦", requiresPhoto: true },
+  { value: "size_mismatch", label: "Doesn't fit / wrong size",  icon: "ðŸ“", requiresPhoto: true },
+  { value: "quality",       label: "Quality not as expected",   icon: "âš ï¸", requiresPhoto: true },
+  { value: "wrong_item",    label: "Wrong item received",       icon: "ðŸ“¦", requiresPhoto: true },
 ];
 
 const REASON_HINTS = {
-  size_mismatch: "📸 We'll check the photo for any damage. If the item is undamaged, a hub manager will decide whether to resell or exchange it — and we'll also check NearDrop for nearby buyers!",
-  quality:       "📸 Our AI will assess the quality issue. Based on refurbishment viability it may be relisted as Certified Second Life, donated, or recycled.",
-  wrong_item:    "📸 We'll verify the photo against your order. If it's a different product, it goes to the hub and we'll also check NearDrop for nearby buyers who want it.",
+  size_mismatch: "ðŸ“¸ We'll check the photo for any damage. If the item is undamaged, a hub manager will decide whether to resell or exchange it â€” and we'll also check NearDrop for nearby buyers!",
+  quality:       "ðŸ“¸ Our AI will assess the quality issue. Based on refurbishment viability it may be relisted as Certified Second Life, donated, or recycled.",
+  wrong_item:    "ðŸ“¸ We'll verify the photo against your order. If it's a different product, it goes to the hub and we'll also check NearDrop for nearby buyers who want it.",
 };
 
 function Steps({ current }) {
@@ -43,41 +44,6 @@ function Steps({ current }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function PhotoZone({ file, preview, onFile, required }) {
-  const inputRef = useRef();
-  const [dragging, setDragging] = useState(false);
-  return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) onFile(f); }}
-      onClick={() => inputRef.current?.click()}
-      className={`relative border-2 border-dashed rounded-2xl cursor-pointer transition-all flex flex-col items-center justify-center text-center overflow-hidden
-        ${dragging ? "border-[#e47911] bg-[#fff8f0]" : preview ? "border-[#067d62]/50 bg-[#f2fbf7]" : "border-[#c8cdd3] hover:border-[#0f1923]"}
-        ${preview ? "h-[200px]" : "h-[140px]"}`}
-    >
-      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-        onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-      {preview ? (
-        <>
-          <img src={preview} alt="Your photo" className="h-full w-full object-contain p-2" />
-          <div className="absolute inset-0 bg-black/0 hover:bg-black/50 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
-            <span className="text-white text-[12px] font-semibold bg-black/60 px-3 py-1.5 rounded-full">📷 Change photo</span>
-          </div>
-          <div className="absolute top-2 right-2 bg-[#067d62] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">✓ Photo added</div>
-        </>
-      ) : (
-        <>
-          <div className="w-12 h-12 rounded-full bg-[#f0f0f0] flex items-center justify-center text-2xl mb-2">📷</div>
-          <p className="text-[13px] font-semibold text-[#0f1923]">{required ? "Upload a photo (required)" : "Take or upload a photo"}</p>
-          <p className="text-[11px] text-[#6c7480] mt-0.5">{required ? "Needed to process this return" : "Optional — helps us process faster"}</p>
-          <p className="text-[10px] text-[#adb1b8] mt-1">JPEG · PNG · WebP</p>
-        </>
-      )}
     </div>
   );
 }
@@ -142,7 +108,7 @@ function SuccessScreen({ productName, actionLabel }) {
         <h1 className="text-[28px] font-bold text-[#0f1923] mb-2">Return Confirmed!</h1>
         <p className="text-[15px] text-[#6c7480] leading-relaxed mb-6">
           Your return for <strong className="text-[#0f1923]">{productName || "your item"}</strong> has been submitted.
-          Pickup will be arranged within <strong className="text-[#0f1923]">2–3 business days</strong>.
+          Pickup will be arranged within <strong className="text-[#0f1923]">2â€“3 business days</strong>.
         </p>
 
         {/* What happens to this product */}
@@ -161,8 +127,8 @@ function SuccessScreen({ productName, actionLabel }) {
         <div className="border border-[#e3e6ea] rounded-2xl px-5 py-5 mb-6 text-left space-y-4">
           <p className="text-[11px] text-[#6c7480] uppercase font-bold tracking-widest">What happens next</p>
           {[
-            { icon: "🚚", text: "Our delivery partner will schedule a pickup from your address." },
-            { icon: "💚", text: "Any applicable Green Credits will be added to your account after pickup." },
+            { icon: "ðŸšš", text: "Our delivery partner will schedule a pickup from your address." },
+            { icon: "ðŸ’š", text: "Any applicable Green Credits will be added to your account after pickup." },
           ].map(({ icon, text }) => (
             <div key={text} className="flex items-start gap-3">
               <span className="text-lg leading-none mt-0.5">{icon}</span>
@@ -196,8 +162,8 @@ export default function NewReturn() {
   const [loading, setLoading]             = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(preselectedOrderId);
   const [reason, setReason]               = useState("size_mismatch");
-  const [photoFile, setPhotoFile]         = useState(null);
-  const [photoPreview, setPhotoPreview]   = useState(null);
+  const [photos, setPhotos]               = useState(null);  // { front: File, back: File }
+  const [showCamera, setShowCamera]       = useState(false);
   const [step, setStep]                   = useState(1);
   const [submitting, setSubmitting]       = useState(false);
   const [result, setResult]               = useState(null);
@@ -239,9 +205,12 @@ export default function NewReturn() {
     reader.readAsDataURL(file);
   };
 
+  // Resolve the active photo: single-file upload or dual-camera front shot
+  const activePhoto = photoFile || (typeof photos !== "undefined" && photos?.front) || null;
+
   // Step 2 → 3: check inventory then show disposition choice
   const handleContinueToChoice = async () => {
-    if (photoRequired && !photoFile) { setError("A photo is required for this return reason."); return; }
+    if (photoRequired && !activePhoto) { setError("A photo is required for this return reason."); return; }
     setError("");
     setCheckingInventory(true);
     try {
@@ -265,13 +234,13 @@ export default function NewReturn() {
     setError("");
     try {
       if (disposition === "replacement") {
-        const res = await requestReplacement(Number(selectedOrder), "replacement", reason, photoFile || null);
+        const res = await requestReplacement(Number(selectedOrder), "replacement", reason, activePhoto);
         setReplacementResult(res);
         refreshUser();
         setStep("replacement_done");
       } else {
         // Refund: proceed with normal photo return
-        const res = await createReturnWithPhoto(Number(selectedOrder), photoFile || null, reason);
+        const res = await createReturnWithPhoto(Number(selectedOrder), activePhoto, reason);
         setResult(res);
         refreshUser();
         setStep("done");
@@ -291,7 +260,7 @@ export default function NewReturn() {
       <div className="max-w-[520px] mx-auto px-4 py-8">
         <div className="text-[12px] text-[#6c7480] mb-5">
           <Link to="/orders" className="text-[#1a6bb5] hover:underline">Your Orders</Link>
-          <span className="mx-1.5">›</span><span>Return an Item</span>
+          <span className="mx-1.5">â€º</span><span>Return an Item</span>
         </div>
         <h1 className="text-[26px] font-bold text-[#0f1923] mb-1">Return an Item</h1>
         <p className="text-[14px] text-[#6c7480] mb-7">Quick and simple. We'll take care of the rest.</p>
@@ -304,10 +273,10 @@ export default function NewReturn() {
               <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-20 rounded-2xl bg-[#f0f2f5] animate-pulse" />)}</div>
             ) : orders.length === 0 ? (
               <div className="text-center py-12 border border-[#e3e6ea] rounded-2xl">
-                <div className="text-4xl mb-3">🚚</div>
+                <div className="text-4xl mb-3">ðŸšš</div>
                 <p className="text-[15px] font-semibold text-[#0f1923] mb-1">No orders ready for return</p>
                 <p className="text-[13px] text-[#6c7480]">Only delivered orders can be returned.</p>
-                <Link to="/orders" className="mt-4 inline-block text-[#1a6bb5] text-[13px] font-semibold hover:underline">View your orders →</Link>
+                <Link to="/orders" className="mt-4 inline-block text-[#1a6bb5] text-[13px] font-semibold hover:underline">View your orders â†’</Link>
               </div>
             ) : (
               <>
@@ -320,7 +289,7 @@ export default function NewReturn() {
                         className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl border-2 text-left transition-all
                           ${isSel ? "border-[#0f1923] bg-[#f5f6f8]" : "border-[#e3e6ea] hover:border-[#c8cdd3] bg-white"}`}>
                         <div className="w-12 h-12 rounded-xl bg-[#f0f2f5] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {prod?.image_url ? <img src={prod.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-xl">📦</span>}
+                          {prod?.image_url ? <img src={prod.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-xl">ðŸ“¦</span>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[14px] font-semibold text-[#0f1923] truncate">{prod?.name || `Order #${order.id}`}</p>
@@ -335,7 +304,7 @@ export default function NewReturn() {
                 </div>
                 <button type="button" disabled={!selectedOrder} onClick={() => setStep(2)}
                   className="w-full bg-[#e47911] hover:bg-[#d56e0c] disabled:opacity-40 text-white font-bold text-[15px] py-3.5 rounded-xl transition-colors shadow-sm">
-                  Continue →
+                  Continue â†’
                 </button>
               </>
             )}
@@ -349,7 +318,7 @@ export default function NewReturn() {
             {selectedProductObj && (
               <div className="flex items-center gap-3 bg-[#f5f6f8] rounded-2xl px-4 py-3">
                 <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 border border-[#e3e6ea] overflow-hidden">
-                  {selectedProductObj.image_url ? <img src={selectedProductObj.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-lg">📦</span>}
+                  {selectedProductObj.image_url ? <img src={selectedProductObj.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-lg">ðŸ“¦</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-semibold text-[#0f1923] truncate">{selectedProductObj.name}</p>
@@ -364,7 +333,7 @@ export default function NewReturn() {
               <label className="block text-[12px] font-semibold text-[#0f1923] mb-2">Why are you returning?</label>
               <div className="grid grid-cols-1 gap-2">
                 {RETURN_REASONS.map(r => (
-                  <button key={r.value} type="button" onClick={() => { setReason(r.value); setPhotoFile(null); setPhotoPreview(null); }}
+                  <button key={r.value} type="button" onClick={() => { setReason(r.value); setPhotos(null); }}
                     className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-[12px] font-semibold
                       ${reason === r.value ? "border-[#0f1923] bg-[#f5f6f8] text-[#0f1923]" : "border-[#e3e6ea] text-[#6c7480] hover:border-[#c8cdd3]"}`}>
                     <span className="text-base">{r.icon}</span>
@@ -381,15 +350,55 @@ export default function NewReturn() {
               </div>
             )}
 
-            {/* Photo upload */}
+            {/* Guided camera capture */}
             <div>
               <p className="text-[13px] font-semibold text-[#0f1923] mb-1.5">
-                Add a photo {photoRequired ? <span className="text-[#b12704]">*</span> : <span className="text-[#9aa0aa] font-normal">(optional)</span>}
+                Product photos {photoRequired ? <span className="text-[#b12704]">*</span> : <span className="text-[#9aa0aa] font-normal">(optional but recommended)</span>}
               </p>
-              <PhotoZone file={photoFile} preview={photoPreview} onFile={handlePhotoFile} required={photoRequired} />
-              {photoFile && (
-                <button type="button" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
-                  className="mt-2 text-[11px] text-[#6c7480] hover:text-[#b12704] font-semibold">Remove photo</button>
+
+              {photos ? (
+                /* Both shots captured — show thumbnails + retake */
+                <div className="border border-[#067d62]/30 rounded-2xl bg-[#f2fbf7] p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4 text-[#067d62]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    <p className="text-[13px] font-bold text-[#067d62]">Both photos captured</p>
+                  </div>
+                  <div className="flex gap-3">
+                    {[
+                      { label: "Front", url: URL.createObjectURL(photos.front) },
+                      { label: "Back",  url: URL.createObjectURL(photos.back) },
+                    ].map(({ label, url }) => (
+                      <div key={label} className="flex-1 flex flex-col items-center gap-1">
+                        <img src={url} alt={label}
+                          className="w-full aspect-square object-cover rounded-xl border border-[#067d62]/20 shadow-sm" />
+                        <span className="text-[11px] font-semibold text-[#067d62]">{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" onClick={() => setPhotos(null)}
+                    className="w-full text-[12px] font-semibold text-[#6c7480] hover:text-[#b12704] transition-colors py-1">
+                    Retake photos
+                  </button>
+                </div>
+              ) : (
+                /* Prompt to open guided camera */
+                <button
+                  type="button"
+                  onClick={() => setShowCamera(true)}
+                  className="w-full border-2 border-dashed border-[#c8cdd3] hover:border-[#0f1923] rounded-2xl py-7 flex flex-col items-center gap-2 transition-colors active:scale-[0.99]"
+                >
+                  <div className="w-14 h-14 rounded-full bg-[#0f1923] flex items-center justify-center shadow-md">
+                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                    </svg>
+                  </div>
+                  <p className="text-[14px] font-bold text-[#0f1923]">Open Guided Camera</p>
+                  <p className="text-[12px] text-[#6c7480]">2 guided shots — front &amp; back</p>
+                  <p className="text-[11px] text-[#adb1b8]">Frame guide · Auto-detect · Works on mobile &amp; desktop</p>
+                </button>
               )}
             </div>
 
@@ -407,7 +416,8 @@ export default function NewReturn() {
               ) : "Continue →"}
             </button>
 
-            <button type="button" onClick={() => setStep(1)} className="w-full text-[13px] text-[#6c7480] hover:text-[#0f1923] font-semibold py-2 transition-colors">← Back</button>
+
+            <button type="button" onClick={() => setStep(1)} className="w-full text-[13px] text-[#6c7480] hover:text-[#0f1923] font-semibold py-2 transition-colors">â† Back</button>
           </div>
         )}
 
