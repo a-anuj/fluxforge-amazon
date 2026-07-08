@@ -37,6 +37,7 @@ export default function ListingDetail() {
   const prod = listing.product;
   const discount = prod ? Math.round((1 - listing.price / prod.price) * 100) : 0;
   const circularSavings = impact?.circular_savings;
+  const isElectronics = prod && ["electronics", "laptops"].includes((prod.category || "").toLowerCase());
 
   return (
     <div className="bg-white min-h-screen animate-fade-in">
@@ -140,13 +141,19 @@ export default function ListingDetail() {
                     </div>
                     <div className="border border-amazon-border rounded p-3">
                       <p className="text-[11px] text-amazon-text-secondary uppercase font-bold">Remaining Lifespan</p>
-                      <div className="flex items-end gap-1 mt-1">
-                        <span className="text-[28px] font-bold text-amazon-text leading-none">{ret.remaining_life_pct}</span>
-                        <span className="text-[13px] text-amazon-text-secondary mb-0.5">%</span>
-                      </div>
-                      <div className="h-[5px] bg-[#e8e8e8] rounded-full mt-2 overflow-hidden">
-                        <div className="h-full rounded-full bg-[#1a73e8]" style={{ width: `${ret.remaining_life_pct}%` }} />
-                      </div>
+                      {isElectronics ? (
+                        <p className="text-[11px] text-amazon-text mt-1 leading-tight py-1">Remaining life cannot be accurately determined from physical appearance, as it depends on internal hardware health.</p>
+                      ) : (
+                        <>
+                          <div className="flex items-end gap-1 mt-1">
+                            <span className="text-[28px] font-bold text-amazon-text leading-none">{ret.remaining_life_pct}</span>
+                            <span className="text-[13px] text-amazon-text-secondary mb-0.5">%</span>
+                          </div>
+                          <div className="h-[5px] bg-[#e8e8e8] rounded-full mt-2 overflow-hidden">
+                            <div className="h-full rounded-full bg-[#1a73e8]" style={{ width: `${ret.remaining_life_pct}%` }} />
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 border border-[#d4edda] bg-[#f0f9f4] rounded p-3">

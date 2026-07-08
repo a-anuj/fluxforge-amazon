@@ -194,8 +194,24 @@ export default function NewReturn() {
     ? products[orders.find(o => String(o.id) === String(selectedOrder))?.product_id]
     : null;
 
-  const reasonMeta = RETURN_REASONS.find(r => r.value === reason) || RETURN_REASONS[0];
-  const photoRequired = reasonMeta.requiresPhoto;
+  const availableReasons = RETURN_REASONS.filter(r => {
+    if (r.value === "size_mismatch") {
+      if (!selectedProductObj) return true;
+      const cat = (selectedProductObj.category || "").toLowerCase();
+      return ["clothing", "footwear", "running", "apparel"].includes(cat);
+    }
+    return true;
+  });
+
+  // If the currently selected reason is no longer available, default to the first available reason
+  useEffect(() => {
+    if (selectedProductObj && !availableReasons.find(r => r.value === reason)) {
+      setReason(availableReasons[0].value);
+    }
+  }, [selectedProductObj, availableReasons, reason]);
+
+  const reasonMeta = availableReasons.find(r => r.value === reason) || availableReasons[0];
+  const photoRequired = reasonMeta?.requiresPhoto;
 
   // Device detection: mobile = has touch + small screen or explicit mobile UA
   const isMobile = typeof window !== "undefined" &&
@@ -363,7 +379,7 @@ export default function NewReturn() {
             <div>
               <label className="block text-[12px] font-semibold text-[#0f1923] mb-2">Why are you returning?</label>
               <div className="grid grid-cols-1 gap-2">
-                {RETURN_REASONS.map(r => (
+                {availableReasons.map(r => (
                   <button key={r.value} type="button" onClick={() => { setReason(r.value); setPhotos(null); }}
                     className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-[12px] font-semibold
                       ${reason === r.value ? "border-[#0f1923] bg-[#f5f6f8] text-[#0f1923]" : "border-[#e3e6ea] text-[#6c7480] hover:border-[#c8cdd3]"}`}>

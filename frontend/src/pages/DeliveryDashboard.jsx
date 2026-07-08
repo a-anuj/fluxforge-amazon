@@ -230,11 +230,19 @@ function ReturnCard({ r, onVerify, onOverride, processingId }) {
 
             <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
               <p className="text-[9px] text-slate-400 font-black uppercase tracking-wider">Remaining Life</p>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-slate-800">{r.remaining_life_pct ?? "—"}</span>
-                <span className="text-[10px] text-slate-400">%</span>
-              </div>
-              <ConditionBar value={r.remaining_life_pct ?? 0} />
+              {["electronics", "laptops"].includes((r.product_category || "").toLowerCase()) ? (
+                <p className="text-xs text-slate-700 mt-1 leading-tight font-semibold">
+                  Remaining life cannot be accurately determined from physical appearance, as it depends on internal hardware health.
+                </p>
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="text-xl font-black text-slate-800">{r.remaining_life_pct ?? "—"}</span>
+                    <span className="text-[10px] text-slate-400">%</span>
+                  </div>
+                  <ConditionBar value={r.remaining_life_pct ?? 0} />
+                </>
+              )}
             </div>
           </div>
 
