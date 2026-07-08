@@ -816,11 +816,10 @@ async def create_return_with_photo(
     db.commit()
     db.refresh(return_item)
 
-    # ── Upload photo to S3 ─────────────────────────────────────────────
     if photo_bytes:
         photo_url = _upload_return_photo_to_s3(
             photo_bytes[0],
-            photo.content_type if photo and photo.content_type else "image/jpeg",
+            photos[0].content_type if photos and photos[0].content_type else "image/jpeg",
             return_item.id,
         )
         if photo_url:
@@ -1111,11 +1110,10 @@ async def request_replacement(
     db.commit()
     db.refresh(return_item)
 
-    # ── Upload photo to S3 ────────────────────────────────────────────
     if photo_bytes:
         photo_url = _upload_return_photo_to_s3(
             photo_bytes[0],
-            photo.content_type if photo and photo.content_type else "image/jpeg",
+            photos[0].content_type if photos and photos[0].content_type else "image/jpeg",
             return_item.id,
         )
         if photo_url:
