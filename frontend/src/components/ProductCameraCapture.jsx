@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { checkIdentity } from "../api/client";
 
 // Variance thresholds — tune if needed
 const VARIANCE_GREEN  = 1200;   // product clearly in frame
@@ -35,7 +36,6 @@ function useCameraStream() {
 
     async function start() {
       try {
-        // Prefer the back camera on mobile; fall back to any
         const constraints = [
           { video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
           { video: true },
@@ -48,20 +48,25 @@ function useCameraStream() {
         if (!stream) throw new Error("Camera not available.");
         if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => { if (active) setReady(true); };
-        }
+        
+        const checkRef = setInterval(() => {
+            if (videoRef.current && videoRef.current.srcObject !== stream) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.onloadedmetadata = () => { if (active) setReady(true); };
+            }
+        }, 100);
+        
+        return () => {
+          clearInterval(checkRef);
+          active = false;
+          streamRef.current?.getTracks().forEach(t => t.stop());
+        };
       } catch (e) {
         if (active) setError(e.message || "Could not access camera.");
       }
     }
 
     start();
-    return () => {
-      active = false;
-      streamRef.current?.getTracks().forEach(t => t.stop());
-    };
   }, []);
 
   return { videoRef, ready, error };
@@ -99,7 +104,7 @@ const SHOT_META = [
   { key: "back",  label: "Back",   hint: "Now flip the product and show the back" },
 ];
 
-export default function ProductCameraCapture({ onCapture, onClose, title = "Capture Product Photos" }) {
+export default function ProductCameraCapture({ onCapture, onClose, title = "Capture Product Photos", orderId, reason }) {
   const { videoRef, ready, error } = useCameraStream();
   const canvasRef     = useRef(null);   // hidden canvas for sampling + capture
   const samplerRef    = useRef(null);   // interval handle
@@ -111,6 +116,9 @@ export default function ProductCameraCapture({ onCapture, onClose, title = "Capt
   const [countdown,    setCountdown]    = useState(null); // 2,1 or null
   const [capturing,    setCapturing]    = useState(false);
   const [showPreview,  setShowPreview]  = useState(false); // between shots
+  
+  const [isCheckingIdentity, setIsCheckingIdentity] = useState(false);
+  const [identityError, setIdentityError] = useState(null);
 
   const meta = SHOT_META[shotIndex];
 
@@ -199,8 +207,25 @@ export default function ProductCameraCapture({ onCapture, onClose, title = "Capt
   }, [capturing, captureFrame, meta.key]);
 
   // ── Advance after approving a shot ───────────────────────────────────
-  const confirmShot = () => {
+  const confirmShot = async () => {
     if (shotIndex === 0) {
+      if (reason !== "wrong_item" && orderId) {
+        setIsCheckingIdentity(true);
+        setIdentityError(null);
+        try {
+          const res = await checkIdentity(orderId, shots.front.file);
+          if (!res.matches) {
+            setIdentityError(res.note || "Product does not match order.");
+            setIsCheckingIdentity(false);
+            return; // block advancing to back shot
+          }
+        } catch (e) {
+          console.warn("Identity check error:", e);
+          // fall through if network fails, or we can choose to block
+        }
+        setIsCheckingIdentity(false);
+      }
+      
       setShowPreview(false);
       setShotIndex(1);
       setFrameState("red");
@@ -279,11 +304,6 @@ export default function ProductCameraCapture({ onCapture, onClose, title = "Capt
             style={{ transform: "scaleX(1)" }}
           />
 
-          {/* Dark overlay with guide frame cutout */}
-          <div className="absolute inset-0 z-10 pointer-events-none">
-            <GuideMask frameState={frameState} />
-          </div>
-
           {/* Frame border glow */}
           <div
             className="absolute z-10 pointer-events-none transition-all duration-300"
@@ -359,17 +379,27 @@ export default function ProductCameraCapture({ onCapture, onClose, title = "Capt
           <div className="flex gap-3 w-full max-w-[320px]">
             <button
               onClick={retakeShot}
-              className="flex-1 py-3 rounded-xl border-2 border-white/30 text-white font-semibold text-[14px] hover:bg-white/10 active:bg-white/20 transition-colors"
+              disabled={isCheckingIdentity}
+              className="flex-1 py-3 rounded-xl border-2 border-white/30 text-white font-semibold text-[14px] hover:bg-white/10 active:bg-white/20 transition-colors disabled:opacity-50"
             >
               Retake
             </button>
             <button
               onClick={confirmShot}
-              className="flex-[2] py-3 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-white font-bold text-[14px] shadow-lg active:scale-[0.98] transition-all"
+              disabled={isCheckingIdentity}
+              className="flex-[2] py-3 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-white font-bold text-[14px] shadow-lg active:scale-[0.98] transition-all disabled:opacity-50"
             >
-              {shotIndex === 0 ? "Next: Back →" : "Use these photos ✓"}
+              {isCheckingIdentity ? "Checking..." : (shotIndex === 0 ? "Next: Back →" : "Use these photos ✓")}
             </button>
           </div>
+          
+          {identityError && (
+            <div className="mt-6 bg-red-500/20 text-red-100 border border-red-500/50 p-4 rounded-xl text-[14px] max-w-[320px]">
+              <p className="font-bold mb-1">Identity Check Failed</p>
+              <p>{identityError}</p>
+              <p className="mt-2 text-[12px] opacity-80">Please tap Retake and ensure you are capturing the correct product.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -387,26 +417,7 @@ function getFramePos() {
   };
 }
 
-// ── Guide mask overlay ────────────────────────────────────────────────────
-function GuideMask({ frameState }) {
-  const c = FRAME_COLOR_STYLES[frameState].border;
-  return (
-    <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Dark overlay with rectangular hole */}
-      <defs>
-        <mask id="hole">
-          <rect width="100" height="100" fill="white" />
-          {/* The cutout — 62% wide, 72% tall, centred at 50,50 */}
-          <rect x="19" y="14" width="62" height="72" rx="2" ry="2" fill="black" />
-        </mask>
-      </defs>
-      <rect width="100" height="100" fill="rgba(0,0,0,0.55)" mask="url(#hole)" />
-      {/* Frame border line */}
-      <rect x="19" y="14" width="62" height="72" rx="2" ry="2"
-        fill="none" stroke={c} strokeWidth="0.4" opacity="0.8" />
-    </svg>
-  );
-}
+
 
 // ── Corner brackets ───────────────────────────────────────────────────────
 function CornerBrackets({ color }) {

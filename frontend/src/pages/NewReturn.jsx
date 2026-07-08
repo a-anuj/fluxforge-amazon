@@ -282,6 +282,8 @@ export default function NewReturn() {
       {showCamera && (
         <ProductCameraCapture
           title="Capture Product Photos"
+          orderId={selectedOrder}
+          reason={reason}
           onCapture={(files) => { setPhotos(files); setShowCamera(false); }}
           onClose={() => setShowCamera(false)}
         />
