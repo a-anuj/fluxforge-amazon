@@ -83,7 +83,7 @@ function PhotoZone({ file, preview, onFile, required }) {
 }
 
 const ACTION_INFO = {
-  "Second Life":           { icon: "🏷️", text: "Your item is in good shape — it will be listed for resale as a Second Life product." },
+  "Restocked":             { icon: "📦", text: "Your item is in good shape — it will be restocked into inventory for future replacements." },
   "Certified Refurbish":   { icon: "🔧", text: "Your item will be refurbished by our team and relisted as Amazon Certified Refurbished." },
   "Exchange":              { icon: "🔄", text: "Your item will be exchanged for the correct product." },
   "Donate":                { icon: "🤝", text: "Your item will be donated to a partner NGO for good use." },

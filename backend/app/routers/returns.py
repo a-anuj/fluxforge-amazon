@@ -139,18 +139,21 @@ def apply_damaged_product_rules(assessment: dict) -> dict:
     we check if it can be donated (must be usable).
     """
     if assessment.get("is_damaged"):
-        # Assume logistics cost is a fixed 15% for simplicity
+        # Trust the AI's explicitly recommended action if it provided one
+        ai_action = assessment.get("recommended_action")
+        if ai_action in ["refurbish", "donate", "recycle", "resell"]:
+            return assessment
+            
+        # Fallback rules if AI didn't provide a clear action
         logistics_cost_pct = 15
-        
         repair_cost_pct = assessment.get("refurb_cost_estimate_pct") or 0
         total_cost_pct = logistics_cost_pct + repair_cost_pct
         
-        # If total cost is within margin, item is refurbishable, and has >85% life
-        if total_cost_pct <= 40 and assessment.get("refurbishable") and assessment.get("remaining_life_pct", 0) > 85:
+        if total_cost_pct <= 40 and assessment.get("refurbishable"):
             assessment["recommended_action"] = "refurbish"
         else:
-            # If refurbishment not possible, donate only if remaining life > 70%
-            if assessment.get("remaining_life_pct", 0) > 70:
+            # If refurbishment not possible, donate if remaining life > 20%
+            if assessment.get("remaining_life_pct", 0) > 20:
                 assessment["recommended_action"] = "donate"
             else:
                 assessment["recommended_action"] = "recycle"
@@ -536,7 +539,8 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
         listing_id = _route_exchange(return_item, order, db)
 
     elif action == "resell":
-        _, listing_id = _create_listing(return_item, order, "resell", None, db)
+        # Restock into inventory for future replacement feature. No listing created.
+        pass
 
     elif action == "refurbish":
         condition_note = raw_defects if raw_defects else "Minor defects — certified refurbished."
@@ -890,7 +894,8 @@ async def create_return_with_photo(
     elif action == "exchange":
         listing_id = _route_exchange(return_item, order, db)
     elif action == "resell":
-        _, listing_id = _create_listing(return_item, order, "resell", None, db)
+        # Restock into inventory. No community listing.
+        pass
     elif action == "refurbish":
         _, listing_id = _create_listing(return_item, order, "refurbish", raw_defects, db)
     elif action == "donate":
@@ -936,7 +941,7 @@ async def create_return_with_photo(
 
     # ── Customer response ──────────────────────────────────────────────
     action_label = {
-        "resell":             "Second Life",
+        "resell":             "Restocked",
         "refurbish":          "Certified Refurbish",
         "exchange":           "Exchange",
         "donate":             "Donate",
@@ -1075,7 +1080,8 @@ def override_return_disposition(return_id: int, body: OverrideRequest, db: Sessi
 
     # Apply new outcome
     if new_action == "resell":
-        _create_listing(return_item, order, "resell", None, db)
+        # Restock into inventory. No community listing.
+        pass
     elif new_action == "refurbish":
         _create_listing(return_item, order, "refurbish", return_item.defects, db)
     elif new_action == "donate":

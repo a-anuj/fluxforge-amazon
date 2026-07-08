@@ -28,8 +28,8 @@ import {
 const ACTION_STYLE = {
   resell: {
     bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    label: "RESELL — Second Life",
-    icon: <Award className="w-3.5 h-3.5 text-emerald-600" />
+    label: "RESTOCKED (AS NEW)",
+    icon: <Package className="w-3.5 h-3.5 text-emerald-600" />
   },
   refurbish: {
     bg: "bg-blue-50 text-blue-700 border-blue-200",
@@ -285,7 +285,7 @@ function ReturnCard({ r, onVerify, onOverride, processingId }) {
                       onChange={(e) => setNewAction(e.target.value)}
                       className="w-full text-xs font-bold border border-slate-200 bg-white rounded-lg p-2.5 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                     >
-                      <option value="resell">Resell (Second Life)</option>
+                      <option value="resell">Restock (As New)</option>
                       <option value="refurbish">Refurbish (Certified Refurbished)</option>
                       <option value="donate">Donate</option>
                       <option value="recycle">Recycle</option>
@@ -332,11 +332,54 @@ function ReturnCard({ r, onVerify, onOverride, processingId }) {
             )}
           </>
         ) : (
-          <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-100/50 pt-2.5 mt-0.5">
-            <span>Disposition validated and logged.</span>
-            <span className="font-extrabold text-emerald-700 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> RECOVERY LOOP ENGAGED
-            </span>
+          <div className="flex flex-col gap-3 pt-1">
+            <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 pb-3">
+              <span>Disposition validated and logged.</span>
+              <span className="font-extrabold text-emerald-700 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> RECOVERY LOOP ENGAGED
+              </span>
+            </div>
+            
+            {/* Timeline */}
+            <div className="pl-2 relative">
+              <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-slate-200"></div>
+              
+              <div className="relative flex items-start gap-4 mb-3">
+                <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center relative z-10 flex-shrink-0 mt-0.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-400"></div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Received</p>
+                  <p className="text-xs text-slate-700 mt-0.5">Customer requested return ({r.reason})</p>
+                </div>
+              </div>
+
+              <div className="relative flex items-start gap-4 mb-3">
+                <div className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center relative z-10 flex-shrink-0 mt-0.5">
+                  <div className="w-2 h-2 rounded-full bg-indigo-500"></div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Hub Approval</p>
+                  <p className="text-xs text-slate-700 mt-0.5">Validated by Hub Operator</p>
+                </div>
+              </div>
+
+              <div className="relative flex items-start gap-4">
+                <div className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center relative z-10 flex-shrink-0 mt-0.5">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Future Action</p>
+                  <p className="text-xs font-semibold text-slate-800 mt-0.5">
+                    {r.recommended_action === "resell" && "Will be restocked into inventory for replacements"}
+                    {r.recommended_action === "refurbish" && "Pending shipment to refurbishment partner"}
+                    {r.recommended_action === "donate" && "Scheduled for charity donation batch"}
+                    {r.recommended_action === "recycle" && "Awaiting recycling facility pickup"}
+                    {r.recommended_action === "exchange" && "Product exchange processing"}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -357,6 +400,7 @@ export default function DeliveryDashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("operations"); // 'operations' | 'restocked'
 
   const isEmployee = currentUser?.role === "employee" || currentUser?.role === "admin";
 
@@ -449,6 +493,11 @@ export default function DeliveryDashboard() {
 
   // Filtering returns
   const filteredReturns = returns.filter((r) => {
+    // Tab logic
+    if (activeTab === "restocked" && r.status !== "verified") return false;
+    if (activeTab === "operations" && r.status === "verified") return false;
+
+    // Filters logic
     if (statusFilter === "pending" && r.status === "verified") return false;
     if (statusFilter === "verified" && r.status !== "verified") return false;
     if (actionFilter !== "all" && r.recommended_action !== actionFilter) return false;
@@ -463,6 +512,8 @@ export default function DeliveryDashboard() {
     }
     return true;
   });
+
+  const verifiedCount = totalVerified;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
@@ -577,7 +628,7 @@ export default function DeliveryDashboard() {
                 className="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700"
               >
                 <option value="all">All Actions</option>
-                <option value="resell">Resell</option>
+                <option value="resell">Restock</option>
                 <option value="refurbish">Refurbish</option>
                 <option value="donate">Donate</option>
                 <option value="recycle">Recycle</option>
@@ -585,6 +636,35 @@ export default function DeliveryDashboard() {
               </select>
             </div>
           </div>
+        </div>
+
+        {/* ── Tabs ────────────────────────────────────────── */}
+        <div className="flex items-center gap-6 border-b border-slate-200">
+          <button
+            onClick={() => setActiveTab("operations")}
+            className={`pb-3 text-sm font-bold border-b-2 transition-colors ${
+              activeTab === "operations"
+                ? "border-indigo-600 text-indigo-700"
+                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            Processing & Processing Outcomes
+          </button>
+          <button
+            onClick={() => setActiveTab("restocked")}
+            className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
+              activeTab === "restocked"
+                ? "border-emerald-600 text-emerald-700"
+                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+            }`}
+          >
+            Processed Hub Inventory
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+              activeTab === "restocked" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+            }`}>
+              {verifiedCount}
+            </span>
+          </button>
         </div>
 
         {/* ── Main Returns List ──────────────────────────── */}
