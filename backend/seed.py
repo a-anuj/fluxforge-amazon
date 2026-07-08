@@ -317,6 +317,16 @@ def seed():
             return_period_days=7, has_no_return_policy=False,
         ),
         Product(
+            name="Asus Vivobook 15", category="laptops", brand="Asus",
+            size="One Size", price=45000,
+            description='15.6" FHD display, Intel Core i3, 8GB RAM, 512GB SSD. A sleek and lightweight laptop perfect for daily tasks, student work, and entertainment.',
+            image_url=imgs("laptops/asus-zenbook-pro-dual-screen-laptop", 2)[0],
+            image_urls=imgs("laptops/asus-zenbook-pro-dual-screen-laptop", 2)[1],
+            co2_impact=200.0, ewaste_impact=1.8, water_impact=600.0,
+            repair_cost_estimate=5000, avg_lifespan_months=48,
+            return_period_days=10, has_no_return_policy=False,
+        ),
+        Product(
             name="Nike Air Force 1 '07", category="footwear", brand="Nike",
             size="9", price=7495,
             description="Classic low-top sneaker with leather upper and cushioned Air sole unit. White colorway shows scuffs, sole yellowing, and crease lines clearly for AI damage scans.",
