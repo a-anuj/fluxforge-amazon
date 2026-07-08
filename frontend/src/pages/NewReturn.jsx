@@ -5,15 +5,15 @@ import { useUser } from "../context/UserContext";
 import ProductCameraCapture from "../components/ProductCameraCapture";
 
 const RETURN_REASONS = [
-  { value: "size_mismatch", label: "Doesn't fit / wrong size",  icon: "ðŸ“", requiresPhoto: true },
-  { value: "quality",       label: "Quality not as expected",   icon: "âš ï¸", requiresPhoto: true },
-  { value: "wrong_item",    label: "Wrong item received",       icon: "ðŸ“¦", requiresPhoto: true },
+  { value: "size_mismatch", label: "Doesn't fit / wrong size",  icon: "👔", requiresPhoto: true },
+  { value: "quality",       label: "Quality not as expected",   icon: "⚠️", requiresPhoto: true },
+  { value: "wrong_item",    label: "Wrong item received",       icon: "📦", requiresPhoto: true },
 ];
 
 const REASON_HINTS = {
-  size_mismatch: "ðŸ“¸ We'll check the photo for any damage. If the item is undamaged, a hub manager will decide whether to resell or exchange it â€” and we'll also check NearDrop for nearby buyers!",
-  quality:       "ðŸ“¸ Our AI will assess the quality issue. Based on refurbishment viability it may be relisted as Certified Second Life, donated, or recycled.",
-  wrong_item:    "ðŸ“¸ We'll verify the photo against your order. If it's a different product, it goes to the hub and we'll also check NearDrop for nearby buyers who want it.",
+  size_mismatch: "📸 We'll check the photo for any damage. If the item is undamaged, a hub manager will decide whether to resell or exchange it — and we'll also check NearDrop for nearby buyers!",
+  quality:       "📸 Our AI will assess the quality issue. Based on refurbishment viability it may be relisted as Certified Second Life, donated, or recycled.",
+  wrong_item:    "📸 We'll verify the photo against your order. If it's a different product, it goes to the hub and we'll also check NearDrop for nearby buyers who want it.",
 };
 
 function Steps({ current }) {
@@ -127,8 +127,8 @@ function SuccessScreen({ productName, actionLabel }) {
         <div className="border border-[#e3e6ea] rounded-2xl px-5 py-5 mb-6 text-left space-y-4">
           <p className="text-[11px] text-[#6c7480] uppercase font-bold tracking-widest">What happens next</p>
           {[
-            { icon: "ðŸšš", text: "Our delivery partner will schedule a pickup from your address." },
-            { icon: "ðŸ’š", text: "Any applicable Green Credits will be added to your account after pickup." },
+            { icon: "🚚", text: "Our delivery partner will schedule a pickup from your address." },
+            { icon: "💚", text: "Any applicable Green Credits will be added to your account after pickup." },
           ].map(({ icon, text }) => (
             <div key={text} className="flex items-start gap-3">
               <span className="text-lg leading-none mt-0.5">{icon}</span>
@@ -197,16 +197,37 @@ export default function NewReturn() {
   const reasonMeta = RETURN_REASONS.find(r => r.value === reason) || RETURN_REASONS[0];
   const photoRequired = reasonMeta.requiresPhoto;
 
-  const handlePhotoFile = (file) => {
-    if (!file) return;
-    setPhotoFile(file);
-    const reader = new FileReader();
-    reader.onload = (e) => setPhotoPreview(e.target.result);
-    reader.readAsDataURL(file);
-  };
+  // Device detection: mobile = has touch + small screen or explicit mobile UA
+  const isMobile = typeof window !== "undefined" &&
+    (navigator.maxTouchPoints > 1 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent));
+  const fileInputRef  = useRef(null);
+  const dropZoneRef   = useRef(null);
+  const [pastedFlash, setPastedFlash] = useState(false); // brief green flash on paste
+  const [dragOver,    setDragOver]    = useState(false);
 
-  // Resolve the active photo: single-file upload or dual-camera front shot
-  const activePhoto = photoFile || (typeof photos !== "undefined" && photos?.front) || null;
+  // Global paste listener — only active on desktop step 2
+  useEffect(() => {
+    if (isMobile || step !== 2 || photos) return;
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items || [];
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            setPhotos({ front: file, back: file });
+            setPastedFlash(true);
+            setTimeout(() => setPastedFlash(false), 1200);
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [isMobile, step, photos]);
+
+  // Resolve the active photo: use front shot from guided camera
+  const activePhoto = photos?.front || null;
 
   // Step 2 → 3: check inventory then show disposition choice
   const handleContinueToChoice = async () => {
@@ -234,13 +255,13 @@ export default function NewReturn() {
     setError("");
     try {
       if (disposition === "replacement") {
-        const res = await requestReplacement(Number(selectedOrder), "replacement", reason, activePhoto);
+        const res = await requestReplacement(Number(selectedOrder), "replacement", reason, photos);
         setReplacementResult(res);
         refreshUser();
         setStep("replacement_done");
       } else {
         // Refund: proceed with normal photo return
-        const res = await createReturnWithPhoto(Number(selectedOrder), activePhoto, reason);
+        const res = await createReturnWithPhoto(Number(selectedOrder), photos, reason);
         setResult(res);
         refreshUser();
         setStep("done");
@@ -257,10 +278,18 @@ export default function NewReturn() {
 
   return (
     <div className="bg-white min-h-screen">
+      {/* Camera overlay — shown when user taps Open Camera on mobile */}
+      {showCamera && (
+        <ProductCameraCapture
+          title="Capture Product Photos"
+          onCapture={(files) => { setPhotos(files); setShowCamera(false); }}
+          onClose={() => setShowCamera(false)}
+        />
+      )}
       <div className="max-w-[520px] mx-auto px-4 py-8">
         <div className="text-[12px] text-[#6c7480] mb-5">
           <Link to="/orders" className="text-[#1a6bb5] hover:underline">Your Orders</Link>
-          <span className="mx-1.5">â€º</span><span>Return an Item</span>
+          <span className="mx-1.5">›</span><span>Return an Item</span>
         </div>
         <h1 className="text-[26px] font-bold text-[#0f1923] mb-1">Return an Item</h1>
         <p className="text-[14px] text-[#6c7480] mb-7">Quick and simple. We'll take care of the rest.</p>
@@ -273,7 +302,7 @@ export default function NewReturn() {
               <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-20 rounded-2xl bg-[#f0f2f5] animate-pulse" />)}</div>
             ) : orders.length === 0 ? (
               <div className="text-center py-12 border border-[#e3e6ea] rounded-2xl">
-                <div className="text-4xl mb-3">ðŸšš</div>
+                <div className="text-4xl mb-3">🚚</div>
                 <p className="text-[15px] font-semibold text-[#0f1923] mb-1">No orders ready for return</p>
                 <p className="text-[13px] text-[#6c7480]">Only delivered orders can be returned.</p>
                 <Link to="/orders" className="mt-4 inline-block text-[#1a6bb5] text-[13px] font-semibold hover:underline">View your orders â†’</Link>
@@ -289,7 +318,7 @@ export default function NewReturn() {
                         className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl border-2 text-left transition-all
                           ${isSel ? "border-[#0f1923] bg-[#f5f6f8]" : "border-[#e3e6ea] hover:border-[#c8cdd3] bg-white"}`}>
                         <div className="w-12 h-12 rounded-xl bg-[#f0f2f5] flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {prod?.image_url ? <img src={prod.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-xl">ðŸ“¦</span>}
+                          {prod?.image_url ? <img src={prod.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-xl">📦</span>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[14px] font-semibold text-[#0f1923] truncate">{prod?.name || `Order #${order.id}`}</p>
@@ -318,7 +347,7 @@ export default function NewReturn() {
             {selectedProductObj && (
               <div className="flex items-center gap-3 bg-[#f5f6f8] rounded-2xl px-4 py-3">
                 <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 border border-[#e3e6ea] overflow-hidden">
-                  {selectedProductObj.image_url ? <img src={selectedProductObj.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-lg">ðŸ“¦</span>}
+                  {selectedProductObj.image_url ? <img src={selectedProductObj.image_url} alt="" className="w-full h-full object-contain mix-blend-multiply" /> : <span className="text-lg">📦</span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-semibold text-[#0f1923] truncate">{selectedProductObj.name}</p>
@@ -350,40 +379,33 @@ export default function NewReturn() {
               </div>
             )}
 
-            {/* Guided camera capture */}
+            {/* Photo upload / camera */}
             <div>
               <p className="text-[13px] font-semibold text-[#0f1923] mb-1.5">
-                Product photos {photoRequired ? <span className="text-[#b12704]">*</span> : <span className="text-[#9aa0aa] font-normal">(optional but recommended)</span>}
+                Product photo {photoRequired ? <span className="text-[#b12704]">*</span> : <span className="text-[#9aa0aa] font-normal">(optional but recommended)</span>}
               </p>
 
               {photos ? (
-                /* Both shots captured — show thumbnails + retake */
+                /* Photo captured — show thumbnail + retake */
                 <div className="border border-[#067d62]/30 rounded-2xl bg-[#f2fbf7] p-4 space-y-3">
                   <div className="flex items-center gap-2 mb-1">
                     <svg className="w-4 h-4 text-[#067d62]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
-                    <p className="text-[13px] font-bold text-[#067d62]">Both photos captured</p>
+                    <p className="text-[13px] font-bold text-[#067d62]">Photo captured</p>
                   </div>
-                  <div className="flex gap-3">
-                    {[
-                      { label: "Front", url: URL.createObjectURL(photos.front) },
-                      { label: "Back",  url: URL.createObjectURL(photos.back) },
-                    ].map(({ label, url }) => (
-                      <div key={label} className="flex-1 flex flex-col items-center gap-1">
-                        <img src={url} alt={label}
-                          className="w-full aspect-square object-cover rounded-xl border border-[#067d62]/20 shadow-sm" />
-                        <span className="text-[11px] font-semibold text-[#067d62]">{label}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <img
+                    src={URL.createObjectURL(photos.front)}
+                    alt="Product"
+                    className="w-full max-h-48 object-cover rounded-xl border border-[#067d62]/20 shadow-sm"
+                  />
                   <button type="button" onClick={() => setPhotos(null)}
                     className="w-full text-[12px] font-semibold text-[#6c7480] hover:text-[#b12704] transition-colors py-1">
-                    Retake photos
+                    {isMobile ? "Retake photo" : "Remove & re-upload"}
                   </button>
                 </div>
-              ) : (
-                /* Prompt to open guided camera */
+              ) : isMobile ? (
+                /* Mobile: open guided camera */
                 <button
                   type="button"
                   onClick={() => setShowCamera(true)}
@@ -396,9 +418,57 @@ export default function NewReturn() {
                     </svg>
                   </div>
                   <p className="text-[14px] font-bold text-[#0f1923]">Open Guided Camera</p>
-                  <p className="text-[12px] text-[#6c7480]">2 guided shots — front &amp; back</p>
-                  <p className="text-[11px] text-[#adb1b8]">Frame guide · Auto-detect · Works on mobile &amp; desktop</p>
+                  <p className="text-[12px] text-[#6c7480]">Frame guide · Auto-detect · 2 guided shots</p>
                 </button>
+              ) : (
+                /* Desktop: upload / paste / drag-drop */
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setPhotos({ front: file, back: file });
+                    }}
+                  />
+                  <div
+                    ref={dropZoneRef}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOver(false);
+                      const file = e.dataTransfer.files?.[0];
+                      if (file && file.type.startsWith("image/")) setPhotos({ front: file, back: file });
+                    }}
+                    className={`w-full border-2 border-dashed rounded-2xl py-7 flex flex-col items-center gap-2 transition-all cursor-pointer select-none
+                      ${ pastedFlash
+                          ? "border-[#067d62] bg-[#f2fbf7] scale-[1.01]"
+                          : dragOver
+                            ? "border-[#0f1923] bg-[#f5f6f8] scale-[1.01]"
+                            : "border-[#c8cdd3] hover:border-[#0f1923] bg-white"
+                      }`}
+                  >
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${ pastedFlash ? "bg-[#e6f4ea]" : "bg-[#f0f2f5]" }`}>
+                      {pastedFlash ? (
+                        <svg className="w-7 h-7 text-[#067d62]" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      ) : (
+                        <svg className="w-7 h-7 text-[#6c7480]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                      )}
+                    </div>
+                    <p className={`text-[14px] font-bold transition-colors ${ pastedFlash ? "text-[#067d62]" : "text-[#0f1923]" }`}>
+                      {pastedFlash ? "Image pasted ✓" : dragOver ? "Drop image here" : "Upload a photo"}
+                    </p>
+                    <p className="text-[12px] text-[#6c7480]">Click to browse · Drag &amp; drop · <kbd className="bg-[#f0f2f5] px-1.5 py-0.5 rounded text-[11px] font-mono border border-[#e3e6ea]">Ctrl+V</kbd> to paste</p>
+                  </div>
+                </>
               )}
             </div>
 
@@ -409,7 +479,7 @@ export default function NewReturn() {
               </div>
             )}
 
-            <button type="button" disabled={checkingInventory || (photoRequired && !photoFile)} onClick={handleContinueToChoice}
+            <button type="button" disabled={checkingInventory || (photoRequired && !activePhoto)} onClick={handleContinueToChoice}
               className="w-full bg-[#067d62] hover:bg-[#055e4a] disabled:opacity-50 text-white font-bold text-[15px] py-3.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2">
               {checkingInventory ? (
                 <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Checking availability…</>

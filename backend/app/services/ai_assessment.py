@@ -96,14 +96,13 @@ Inspect the photo(s) of the returned item and return exactly this JSON schema:
   "is_damaged": <true|false>,
   "refurbishable": <true|false>,
   "refurb_cost_estimate_pct": <integer 0-100, estimated repair cost as % of resale value, null if not damaged>,
-  "recommended_action": "<exchange|resell|refurbish|donate|recycle>",
+  "recommended_action": "<resell|refurbish|donate|recycle>",
   "confidence": <float 0.0-1.0, your confidence in the recommended_action specifically>,
   "reasoning": "<one sentence explaining the recommended_action>"
 }}
 
 Decision guidance for recommended_action:
-- "exchange": not damaged, reason suggests wrong variant (size/color) not defect
-- "resell": not damaged, no exchange context, safe to send to another buyer as-is
+- "resell": not damaged, safe to send to another buyer as-is
 - "refurbish": damaged but refurb_cost_estimate_pct < 40 and defects look repairable
 - "donate": damaged, not economical to refurbish, but clearly safe and usable as-is
 - "recycle": damaged beyond safe use, or you are not confident enough to certify it safe\
@@ -191,7 +190,9 @@ def _normalize_result(raw: dict) -> dict:
     defects_summary = "; ".join(defects_summary_parts) if defects_summary_parts else "No visible defects."
 
     action = str(raw.get("recommended_action", "recycle")).lower().strip()
-    if action not in ("exchange", "resell", "refurbish", "donate", "recycle"):
+    if action == "exchange":
+        action = "resell"
+    if action not in ("resell", "refurbish", "donate", "recycle"):
         action = "recycle"
 
     confidence = float(raw.get("confidence", 0.0))
