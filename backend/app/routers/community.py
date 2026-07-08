@@ -129,35 +129,85 @@ def _notify_nearby_users(db: Session, listing: CommunityListing):
 
 def _bedrock_price_suggest(category: str, brand: Optional[str], condition: str,
                             description: Optional[str], original_price: Optional[float]) -> dict:
-    """Call Bedrock Nova Lite to get AI price suggestion."""
-    prompt = f"""You are a pricing expert for second-hand goods in India.
+    """
+    Call Bedrock Nova Lite to get AI price suggestion.
+    The suggested_price is hard-capped server-side at original_price — the model
+    is explicitly told it cannot suggest above the purchase price, and we enforce
+    it numerically after parsing.
+    """
+    CONDITION_DEPRECIATION = {
+        "like_new": (0.70, 0.85),   # 70–85% of original
+        "good":     (0.50, 0.70),   # 50–70% of original
+        "fair":     (0.30, 0.50),   # 30–50% of original
+        "poor":     (0.10, 0.30),   # 10–30% of original
+    }
+    cond_low_pct, cond_high_pct = CONDITION_DEPRECIATION.get(condition, (0.40, 0.60))
 
-Suggest a fair resale price for:
+    # Pre-calculate the bounds so we can embed them in the prompt as concrete numbers.
+    # This removes ambiguity — the model gets exact rupee targets, not percentages to interpret.
+    if original_price and original_price > 0:
+        price_floor = round(original_price * cond_low_pct)
+        price_ceil  = round(original_price * cond_high_pct)
+        midpoint    = round((price_floor + price_ceil) / 2)
+        price_context = (
+            f"The item was originally purchased for ₹{int(original_price)}.\n"
+            f"For a {CONDITION_LABELS.get(condition, condition).lower()} condition item in this "
+            f"category, the acceptable resale range is ₹{price_floor} – ₹{price_ceil} "
+            f"({int(cond_low_pct*100)}–{int(cond_high_pct*100)}% of purchase price).\n"
+            f"The suggested price MUST be between ₹{price_floor} and ₹{price_ceil}. "
+            f"It MUST NOT exceed ₹{int(original_price)} under any circumstances."
+        )
+    else:
+        price_floor = None
+        price_ceil  = None
+        midpoint    = None
+        price_context = "Original purchase price is unknown. Estimate based on Indian market rates."
+
+    prompt = f"""You are a pricing assistant for a second-hand goods marketplace in India.
+Your job is to suggest a fair resale price that is STRICTLY below the original purchase price.
+
+Item details:
 - Category: {category}
 - Brand: {brand or 'Unknown'}
 - Condition: {condition} ({CONDITION_LABELS.get(condition, condition)})
-- Description: {description or 'No description provided'}
-- Original/MRP Price: {'₹' + str(int(original_price)) if original_price else 'Unknown'}
+- Description: {description or 'No additional description'}
 
-Return ONLY valid JSON (no markdown):
+Pricing constraint:
+{price_context}
+
+Return ONLY valid JSON (no markdown, no extra text):
 {{
-  "suggested_price": 0,
-  "price_range_low": 0,
-  "price_range_high": 0,
-  "depreciation_pct": 0,
-  "reasoning": ""
+  "suggested_price": {midpoint or 0},
+  "price_range_low": {price_floor or 0},
+  "price_range_high": {price_ceil or 0},
+  "depreciation_pct": {round((1 - (midpoint / original_price) * 100)) if original_price and midpoint else 40},
+  "reasoning": "One sentence explaining the price based on condition and original cost."
 }}"""
 
     client = _get_bedrock_client()
     response = client.converse(
         modelId=MODEL_ID,
         messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"maxTokens": 300, "temperature": 0.3},
+        inferenceConfig={"maxTokens": 300, "temperature": 0.1},
     )
     raw = response["output"]["message"]["content"][0]["text"].strip()
-    # Strip any markdown fences
     raw = re.sub(r"```(?:json)?", "", raw).strip().strip("`")
-    return json.loads(raw)
+    result = json.loads(raw)
+
+    # ── Hard server-side cap — never suggest above original price ──────
+    if original_price and original_price > 0:
+        cap = float(original_price)
+        if result.get("suggested_price", 0) > cap:
+            result["suggested_price"] = round(cap * ((cond_low_pct + cond_high_pct) / 2))
+        if result.get("price_range_high", 0) > cap:
+            result["price_range_high"] = round(cap * cond_high_pct)
+        if result.get("price_range_low", 0) > result.get("price_range_high", cap):
+            result["price_range_low"] = round(cap * cond_low_pct)
+        # Recalculate depreciation_pct from final numbers
+        sp = result.get("suggested_price", 0)
+        result["depreciation_pct"] = round((1 - sp / cap) * 100) if sp < cap else 0
+
+    return result
 
 
 def _bedrock_image_check(image_bytes: bytes, content_type: str, category: str, title: str) -> dict:

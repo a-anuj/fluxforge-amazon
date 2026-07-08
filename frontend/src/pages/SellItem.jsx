@@ -247,16 +247,35 @@ export default function SellItem() {
     finally { setVerifyingInv(false); }
   };
 
-  // ── AI price suggestion ──
+  // ── AI price suggestion — grounded in invoice total (non-Amazon) or product price (Amazon) ──
   const handleSuggestPrice = async () => {
     setSuggesting(true);
     try {
+      // For non-Amazon: invoice_total_numeric is the verified purchase price — use it as anchor.
+      // For Amazon: prod.price is the original retail price.
+      // We never fall back to a pure prediction without a known price anchor.
+      const knownPrice =
+        path === "non_amazon" && invoiceResult?.invoice_total_numeric
+          ? invoiceResult.invoice_total_numeric
+          : prod?.price || null;
+
+      if (!knownPrice) {
+        // No price anchor available — don't call the API, tell the user why.
+        setAiSuggestion({ _no_anchor: true });
+        setSuggesting(false);
+        return;
+      }
+
       const res = await suggestPrice({
-        category: form.category, brand: form.brand || null,
-        condition: form.condition,
-        description: form.description || null,
-        original_price: prod?.price || (form.asking_price ? parseFloat(form.asking_price) : null),
+        category:      form.category,
+        brand:         form.brand || prod?.brand || null,
+        condition:     form.condition,
+        description:   form.description || null,
+        original_price: knownPrice,
       });
+      // Attach the anchor so we can explain the suggestion in the UI
+      res._anchor_price  = knownPrice;
+      res._anchor_source = path === "non_amazon" ? "invoice" : "amazon_order";
       setAiSuggestion(res);
       if (!form.asking_price) setF("asking_price", String(Math.round(res.suggested_price)));
     } catch(e) { console.error(e); }
@@ -490,6 +509,11 @@ export default function SellItem() {
 
             {/* Product basics first */}
             <div className="bg-white rounded-2xl border border-[#d5d9d9] p-5 space-y-4">
+              <div className="flex items-center gap-2 mb-1">
+                <button onClick={back} className="flex items-center gap-1 text-[12px] text-amazon-link hover:underline font-medium">
+                  <ChevronLeft size={14} /> Back to source selection
+                </button>
+              </div>
               <p className="text-[14px] font-bold text-[#0f1111]">What are you selling?</p>
               <div>
                 <label className={LABEL}>Product Title *</label>
@@ -669,7 +693,23 @@ export default function SellItem() {
         {step === "details" && (
           <div className="p-4 space-y-4 animate-fade-in">
 
-            {/* Product summary card (Amazon path shows selected product) */}
+            {/* Non-Amazon: show invoice summary + option to go back */}
+            {path === "non_amazon" && invoiceResult && (
+              <div className="bg-white rounded-2xl border border-[#d5d9d9] p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#e8f0fe] flex items-center justify-center flex-shrink-0 text-[20px]">📄</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-[#0f1111] line-clamp-1">{invoiceResult.product_name || form.title}</p>
+                  <p className="text-[11px] text-[#1a73e8] font-bold">
+                    Invoice Verified · {invoiceResult.invoice_total || "—"}
+                    {invoiceResult.invoice_total_numeric ? ` (₹${Math.floor(invoiceResult.invoice_total_numeric).toLocaleString("en-IN")})` : ""}
+                  </p>
+                </div>
+                <button onClick={back} className="text-[11px] text-amazon-link hover:underline flex-shrink-0">
+                  Edit invoice
+                </button>
+              </div>
+            )}
+            {/* Amazon: product summary card */}
             {path === "amazon" && prod && (
               <div className="bg-white rounded-2xl border border-[#d5d9d9] p-4 flex items-center gap-3">
                 {prod.image_url && (
@@ -718,7 +758,19 @@ export default function SellItem() {
               <input type="number" min="1" value={form.asking_price}
                 onChange={e => setF("asking_price", e.target.value)}
                 placeholder="Enter your price in ₹" className={INPUT} />
-              {aiSuggestion && (
+
+              {/* No price anchor available */}
+              {aiSuggestion?._no_anchor && (
+                <div className="bg-[#fff8ef] border border-[#e77600]/30 rounded-xl p-3.5 text-[12px] text-[#8a6d3b]">
+                  <p className="font-bold text-[#c45500] mb-0.5">Can't suggest a price yet</p>
+                  {path === "non_amazon"
+                    ? "Complete the invoice verification first — the AI uses your verified purchase price as the anchor."
+                    : "Select your Amazon order first — the AI uses the original purchase price as the anchor."}
+                </div>
+              )}
+
+              {/* Normal suggestion card */}
+              {aiSuggestion && !aiSuggestion._no_anchor && (
                 <div className="bg-[#f0fff8] border border-[#00a86b]/25 rounded-xl p-3.5">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-[13px] font-bold text-[#067d62]">
@@ -729,9 +781,16 @@ export default function SellItem() {
                       Use this
                     </button>
                   </div>
+                  {/* Anchor explanation */}
+                  <p className="text-[10px] text-[#adb1b8] mb-1.5 flex items-center gap-1">
+                    {aiSuggestion._anchor_source === "invoice"
+                      ? <><span className="text-[#1a73e8] font-semibold">📄 Based on your verified invoice</span> — original price ₹{Math.floor(aiSuggestion._anchor_price).toLocaleString("en-IN")}</>
+                      : <><span className="text-[#e77600] font-semibold">🛒 Based on Amazon purchase price</span> — original ₹{Math.floor(aiSuggestion._anchor_price).toLocaleString("en-IN")}</>}
+                  </p>
                   <p className="text-[11px] text-[#6c7480]">{aiSuggestion.reasoning}</p>
                   <p className="text-[10px] text-[#adb1b8] mt-1">
                     Range: ₹{Math.floor(aiSuggestion.price_range_low).toLocaleString("en-IN")} – ₹{Math.floor(aiSuggestion.price_range_high).toLocaleString("en-IN")}
+                    {aiSuggestion.depreciation_pct > 0 && ` · ${Math.round(aiSuggestion.depreciation_pct)}% depreciation`}
                   </p>
                 </div>
               )}
