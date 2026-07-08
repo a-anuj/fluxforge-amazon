@@ -20,7 +20,8 @@ import {
   Recycle, 
   ArrowRightLeft, 
   Edit, 
-  CheckSquare
+  CheckSquare,
+  Filter
 } from "lucide-react";
 
 /* ─── AI details badge colours ──────────────────────────────── */
