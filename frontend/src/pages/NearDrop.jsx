@@ -74,9 +74,13 @@ function JourneyModal({ listingId, onClose }) {
                   <p className="text-[13px] font-bold text-amazon-text">{step.title}</p>
                   <p className="text-[11px] text-amazon-text-secondary mt-0.5">{step.description}</p>
                   {step.condition_score && (
-                    <div className="mt-1 flex items-center gap-2">
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
                       <span className="text-[11px] bg-[#f0f9f4] text-[#067d62] px-2 py-0.5 rounded font-bold">Score: {step.condition_score}/100</span>
-                      <span className="text-[11px] bg-[#e8f4fd] text-[#1a73e8] px-2 py-0.5 rounded font-bold">Life: {step.remaining_life_pct}%</span>
+                      {["electronics", "laptops"].includes((journey.product.category || "").toLowerCase()) ? (
+                         <span className="text-[11px] bg-[#e8f4fd] text-[#1a73e8] px-2 py-0.5 rounded font-bold" title="Remaining life cannot be accurately determined from physical appearance, as it depends on internal hardware health.">Life: N/A*</span>
+                      ) : (
+                         <span className="text-[11px] bg-[#e8f4fd] text-[#1a73e8] px-2 py-0.5 rounded font-bold">Life: {step.remaining_life_pct}%</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -104,15 +108,19 @@ function JourneyModal({ listingId, onClose }) {
           </div>
 
           {/* Trust Metrics */}
-          <div className="border border-amazon-border rounded-lg p-3">
-            <p className="text-[11px] text-amazon-text-secondary uppercase font-bold mb-2">Trust Metrics</p>
-            <div className="grid grid-cols-2 gap-2 text-[12px]">
-              <div className="flex justify-between"><span className="text-amazon-text-secondary">AI Verified</span><span className="text-[#067d62] font-bold">✓ Yes</span></div>
-              <div className="flex justify-between"><span className="text-amazon-text-secondary">Condition</span><span className="font-bold">{journey.trust_metrics.condition_score}/100</span></div>
-              <div className="flex justify-between"><span className="text-amazon-text-secondary">Remaining Life</span><span className="font-bold">{journey.trust_metrics.remaining_life_pct}%</span></div>
-              <div className="flex justify-between"><span className="text-amazon-text-secondary">Discount</span><span className="text-amazon-red font-bold">{journey.trust_metrics.discount_pct}% off</span></div>
+            <div className="border border-amazon-border rounded-lg p-3">
+              <p className="text-[11px] text-amazon-text-secondary uppercase font-bold mb-2">Trust Metrics</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
+                <div className="flex justify-between"><span className="text-amazon-text-secondary">AI Verified</span><span className="text-[#067d62] font-bold">✓ Yes</span></div>
+                <div className="flex justify-between"><span className="text-amazon-text-secondary">Condition</span><span className="font-bold">{journey.trust_metrics.condition_score}/100</span></div>
+                {["electronics", "laptops"].includes((journey.product.category || "").toLowerCase()) ? (
+                  <div className="flex justify-between col-span-1 sm:col-span-2"><span className="text-amazon-text-secondary">Remaining Life</span><span className="font-bold text-right text-[10px] leading-tight max-w-[150px]">Remaining life cannot be accurately determined from physical appearance, as it depends on internal hardware health.</span></div>
+                ) : (
+                  <div className="flex justify-between"><span className="text-amazon-text-secondary">Remaining Life</span><span className="font-bold">{journey.trust_metrics.remaining_life_pct}%</span></div>
+                )}
+                <div className="flex justify-between"><span className="text-amazon-text-secondary">Discount</span><span className="text-amazon-red font-bold">{journey.trust_metrics.discount_pct}% off</span></div>
+              </div>
             </div>
-          </div>
         </div>
       </div>
     </div>
