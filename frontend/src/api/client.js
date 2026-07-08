@@ -100,10 +100,13 @@ export const createReturn = (
   });
 
 /** Customer simplified flow — POST multipart with optional photo file */
-export const createReturnWithPhoto = (orderId, photoFile, reason) => {
+export const createReturnWithPhoto = (orderId, photosObj, reason) => {
   const form = new FormData();
   form.append("order_id", orderId);
-  if (photoFile) form.append("photo", photoFile);
+  if (photosObj) {
+    if (photosObj.front) form.append("photos", photosObj.front);
+    if (photosObj.back && photosObj.back !== photosObj.front) form.append("photos", photosObj.back);
+  }
   if (reason) form.append("reason", reason);
   const url = `${BASE_URL}/returns/with-photo`;
   return fetch(url, { method: "POST", body: form }).then(async (res) => {
@@ -142,12 +145,15 @@ export const checkHubInventory = (productId, city) =>
   request(`/returns/check-inventory?product_id=${productId}&city=${encodeURIComponent(city)}`);
 
 /** Replacement flow: choose refund or replacement (places new order; runs AI assessment if photo provided) */
-export const requestReplacement = (orderId, mode, reason, photoFile) => {
+export const requestReplacement = (orderId, mode, reason, photosObj) => {
   const form = new FormData();
   form.append("order_id", orderId);
   form.append("mode", mode);
   if (reason) form.append("reason", reason);
-  if (photoFile) form.append("photo", photoFile);
+  if (photosObj) {
+    if (photosObj.front) form.append("photos", photosObj.front);
+    if (photosObj.back && photosObj.back !== photosObj.front) form.append("photos", photosObj.back);
+  }
   const url = `${BASE_URL}/returns/request-replacement`;
   return fetch(url, { method: "POST", body: form }).then(async (res) => {
     if (!res.ok) {

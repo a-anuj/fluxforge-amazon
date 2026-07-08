@@ -231,41 +231,7 @@ def apply_reason_routing(
     - wrong_item    → Identity-check: photo vs order title. If mismatch →
                        pending_hub_review; NearDrop runs regardless.
     """
-    if reason == "size_mismatch":
-        if not photo_bytes:
-            # No photo → can't confirm damage-free; send to hub for manual check
-            return {
-                "recommended_action": "pending_hub_review",
-                "hub_review_note": "No photo provided for size-mismatch return. Hub manager must verify condition before resell.",
-                "confidence": 1.0,
-                "assessment_source": "rule_based",
-                "condition_score": 80,
-                "remaining_life_pct": 85,
-                "defects_summary": "No photo — assumed undamaged based on stated reason.",
-                "is_damaged": False,
-                "gate_override": False,
-                "original_recommended_action": None,
-            }
-        # Run identity check to detect damage
-        id_result = _bedrock_identity_check(photo_bytes[0], product_name, product_category)
-        logger.info("[Reason: size_mismatch] Identity/damage check → %s", id_result)
-        return {
-            "recommended_action": "pending_hub_review",
-            "hub_review_note": (
-                f"Size mismatch return. AI photo note: {id_result['note']} "
-                "Hub manager should verify condition and decide resell/exchange."
-            ),
-            "confidence": 1.0,
-            "assessment_source": "rule_based",
-            "condition_score": 85,
-            "remaining_life_pct": 90,
-            "defects_summary": id_result["note"],
-            "is_damaged": False,
-            "gate_override": False,
-            "original_recommended_action": None,
-        }
-
-    elif reason == "wrong_item":
+    if reason == "wrong_item":
         if not photo_bytes:
             return {
                 "recommended_action": "pending_hub_review",
@@ -758,7 +724,7 @@ def get_return_by_order(order_id: int, db: Session = Depends(get_db)):
 async def create_return_with_photo(
     order_id: int = Form(...),
     reason: str = Form(None),
-    photo: UploadFile = File(None),
+    photos: list[UploadFile] = File([]),
     db: Session = Depends(get_db),
 ):
     """
@@ -780,10 +746,11 @@ async def create_return_with_photo(
 
     # Read photo bytes if supplied
     photo_bytes: list[bytes] = []
-    if photo and photo.content_type and photo.content_type.startswith("image/"):
-        data = await photo.read()
-        if data:
-            photo_bytes.append(data)
+    for p in photos:
+        if p.filename and p.content_type and p.content_type.startswith("image/"):
+            data = await p.read()
+            if data:
+                photo_bytes.append(data)
 
     # ── Step 1: Reason-aware pre-routing ──────────────────────────────
     normalized_reason = (reason or "other").lower().strip()
@@ -1045,7 +1012,7 @@ async def request_replacement(
     order_id: int = Form(...),
     mode: str = Form(...),           # "refund" | "replacement"
     reason: str = Form(None),
-    photo: UploadFile = File(None),
+    photos: list[UploadFile] = File([]),
     db: Session = Depends(get_db),
 ):
     """
@@ -1088,10 +1055,11 @@ async def request_replacement(
 
     # ── Read photo bytes ──────────────────────────────────────────────
     photo_bytes: list[bytes] = []
-    if photo and photo.content_type and photo.content_type.startswith("image/"):
-        data = await photo.read()
-        if data:
-            photo_bytes.append(data)
+    for p in photos:
+        if p.filename and p.content_type and p.content_type.startswith("image/"):
+            data = await p.read()
+            if data:
+                photo_bytes.append(data)
 
     # ── Run AI assessment on the returned item ────────────────────────
     normalized_reason = (reason or "replacement_request").lower().strip()
