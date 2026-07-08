@@ -20,7 +20,7 @@ The end-to-end return journey:
 
 1. **Purchase** — a customer places an `Order`. The order status starts as `"placed"` and is shown to the customer as "Order Received".
 2. **Return** — the customer clicks "Return or Replace" directly on the Orders page. This calls `POST /api/returns/` and immediately sets `Order.status = "returned"` and `Return.status = "completed"`. No delivery scan or employee action is required.
-3. **Outcome** — the `create_return` endpoint assigns a disposition action (`resell`, `refurbish`, `recycle`, `donate`, etc.) either from the caller or via the `assess_condition()` stub fallback, awards Green Credits, and forfeits any pending no-return loyalty credits.
+3. **Outcome** — the `create_return` endpoint assigns a disposition action (`resell` (which restocks as new for future replacements), `refurbish`, `recycle`, `donate`, etc.) either from the caller or via the `assess_condition()` stub fallback, awards Green Credits, and forfeits any pending no-return loyalty credits.
 
 **Video scan feature — removed, pending rebuild.**
 The pre-packaging baseline scan and the return-phase live video assessment have been **removed from the active return flow**. The underlying code is preserved — `backend/app/routers/baseline.py`, `backend/app/services/ai_assessment.py`, `frontend/src/pages/EmployeeScan.jsx`, `frontend/src/pages/NewReturn.jsx`, and `frontend/src/components/LiveVideoScanner` — but none of it is gating returns. When this feature is rebuilt from scratch, the gate (`order.status == "delivered"` check in `create_return`) and the pickup-scan finalization step will be reintroduced.

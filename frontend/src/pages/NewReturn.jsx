@@ -1,6 +1,6 @@
-﻿import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { getOrders, getProduct, createReturnWithPhoto, getApiBaseUrl } from "../api/client";
+import { getOrders, getProduct, createReturnWithPhoto, checkHubInventory, requestReplacement } from "../api/client";
 import { useUser } from "../context/UserContext";
 import ProductCameraCapture from "../components/ProductCameraCapture";
 
@@ -17,7 +17,7 @@ const REASON_HINTS = {
 };
 
 function Steps({ current }) {
-  const labels = ["Select Item", "Reason & Photo", "Done"];
+  const labels = ["Select Item", "Reason & Photo", "Choose Action", "Done"];
   return (
     <div className="flex items-center gap-0 mb-8">
       {labels.map((label, i) => {
@@ -49,13 +49,49 @@ function Steps({ current }) {
 }
 
 const ACTION_INFO = {
-  "Second Life":           { icon: "ðŸ·ï¸", text: "Your item is in good shape â€” it will be listed for resale as a Second Life product." },
-  "Certified Refurbish":   { icon: "ðŸ”§", text: "Your item will be refurbished by our team and relisted as Amazon Certified Refurbished." },
-  "Exchange":              { icon: "ðŸ”„", text: "Your item will be exchanged for the correct product." },
-  "Donate":                { icon: "ðŸ¤", text: "Your item will be donated to a partner NGO for good use." },
-  "Recycle":               { icon: "â™»ï¸", text: "Your item will be responsibly recycled to recover raw materials." },
-  "Under Review":          { icon: "ðŸ”", text: "A hub manager will inspect your item and assign the best circular outcome." },
+  "Restocked":             { icon: "📦", text: "Your item is in good shape — it will be restocked into inventory for future replacements." },
+  "Certified Refurbish":   { icon: "🔧", text: "Your item will be refurbished by our team and relisted as Amazon Certified Refurbished." },
+  "Exchange":              { icon: "🔄", text: "Your item will be exchanged for the correct product." },
+  "Donate":                { icon: "🤝", text: "Your item will be donated to a partner NGO for good use." },
+  "Recycle":               { icon: "♻️", text: "Your item will be responsibly recycled to recover raw materials." },
+  "Under Review":          { icon: "🔍", text: "A hub manager will inspect your item and assign the best circular outcome." },
 };
+
+function ReplacementSuccess({ result, productName }) {
+  const fromHub = result?.source === "hub";
+  return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center px-4 py-12">
+      <div className="max-w-[440px] w-full text-center">
+        <div className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm" style={{background: fromHub ? "#e6f4ea" : "#e8f0fe"}}>
+          <span className="text-5xl">{fromHub ? "♻️" : "📦"}</span>
+        </div>
+        <h1 className="text-[28px] font-bold text-[#0f1923] mb-2">Replacement Confirmed!</h1>
+        <p className="text-[15px] text-[#6c7480] leading-relaxed mb-6">
+          A replacement for <strong className="text-[#0f1923]">{productName || "your item"}</strong> has been placed.
+        </p>
+        <div className="rounded-2xl border px-5 py-5 mb-6 text-left space-y-3" style={{borderColor: fromHub ? "#c3e6cb" : "#c6d9f7", background: fromHub ? "#f2fbf7" : "#f0f5ff"}}>
+          <p className="text-[11px] font-bold uppercase tracking-widest" style={{color: fromHub ? "#067d62" : "#1a6bb5"}}>
+            {fromHub ? "🏭 Fulfilled from Hub Inventory" : "📦 Ordered from Amazon"}
+          </p>
+          <p className="text-[13px] text-[#1a1f27] leading-relaxed">{result?.message}</p>
+          {fromHub && result?.green_credits_earned > 0 && (
+            <div className="flex items-center gap-2 mt-2 bg-white rounded-xl px-3 py-2 border border-[#c3e6cb]">
+              <span className="text-lg">💚</span>
+              <span className="text-[13px] font-bold text-[#067d62]">+{result.green_credits_earned} Green Credits earned!</span>
+            </div>
+          )}
+          {!fromHub && (
+            <p className="text-[12px] text-[#6c7480] mt-1">No hub stock was available in your area — we've placed a fresh order for you.</p>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <Link to="/orders" className="w-full bg-[#0f1923] hover:bg-[#1a2b3c] text-white font-semibold text-[14px] py-3 rounded-xl text-center transition-colors">View Orders</Link>
+          <Link to="/profile" className="w-full border border-[#d0d4d9] hover:bg-[#fafbfc] text-[#0f1923] font-semibold text-[14px] py-3 rounded-xl text-center transition-colors">View Profile</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SuccessScreen({ productName, actionLabel }) {
   const info = ACTION_INFO[actionLabel] || ACTION_INFO["Under Review"];
@@ -132,6 +168,11 @@ export default function NewReturn() {
   const [submitting, setSubmitting]       = useState(false);
   const [result, setResult]               = useState(null);
   const [error, setError]                 = useState("");
+  // Replacement flow state
+  const [disposition, setDisposition]     = useState(null); // "refund" | "replacement"
+  const [inventoryAvailable, setInventoryAvailable] = useState(null); // null = not checked yet
+  const [checkingInventory, setCheckingInventory]   = useState(false);
+  const [replacementResult, setReplacementResult]   = useState(null);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -156,17 +197,54 @@ export default function NewReturn() {
   const reasonMeta = RETURN_REASONS.find(r => r.value === reason) || RETURN_REASONS[0];
   const photoRequired = reasonMeta.requiresPhoto;
 
-  const handleSubmit = async () => {
-    if (!selectedOrder) return;
-    if (photoRequired && !photos?.front) { setError("Please capture product photos before submitting."); return; }
+  const handlePhotoFile = (file) => {
+    if (!file) return;
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setPhotoPreview(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  // Resolve the active photo: single-file upload or dual-camera front shot
+  const activePhoto = photoFile || (typeof photos !== "undefined" && photos?.front) || null;
+
+  // Step 2 → 3: check inventory then show disposition choice
+  const handleContinueToChoice = async () => {
+    if (photoRequired && !activePhoto) { setError("A photo is required for this return reason."); return; }
+    setError("");
+    setCheckingInventory(true);
+    try {
+      const order = orders.find(o => String(o.id) === String(selectedOrder));
+      const prod = products[order?.product_id];
+      if (prod && currentUser?.city) {
+        const inv = await checkHubInventory(prod.id, currentUser.city);
+        setInventoryAvailable(inv.available);
+      } else {
+        setInventoryAvailable(false);
+      }
+    } catch { setInventoryAvailable(false); }
+    finally { setCheckingInventory(false); }
+    setStep(3);
+  };
+
+  // Step 3: customer picks refund or replacement
+  const handleDispositionSubmit = async () => {
+    if (!disposition) return;
     setSubmitting(true);
     setError("");
     try {
-      // Send the front photo as primary; back photo can be appended for richer AI assessment
-      const res = await createReturnWithPhoto(Number(selectedOrder), photos?.front || null, reason);
-      setResult(res);
-      refreshUser();
-      setStep("done");
+      if (disposition === "replacement") {
+        const res = await requestReplacement(Number(selectedOrder), "replacement", reason, activePhoto);
+        setReplacementResult(res);
+        refreshUser();
+        setStep("replacement_done");
+      } else {
+        // Refund: proceed with normal photo return
+        const res = await createReturnWithPhoto(Number(selectedOrder), activePhoto, reason);
+        setResult(res);
+        refreshUser();
+        setStep("done");
+      }
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
     } finally {
@@ -174,6 +252,7 @@ export default function NewReturn() {
     }
   };
 
+  if (step === "replacement_done") return <ReplacementSuccess result={replacementResult} productName={selectedProductObj?.name} />;
   if (step === "done") return <SuccessScreen productName={selectedProductObj?.name} actionLabel={result?.action_label} />;
 
   return (
@@ -330,15 +409,70 @@ export default function NewReturn() {
               </div>
             )}
 
-            <button type="button" disabled={submitting || (photoRequired && !photoFile)} onClick={handleSubmit}
+            <button type="button" disabled={checkingInventory || (photoRequired && !photoFile)} onClick={handleContinueToChoice}
               className="w-full bg-[#067d62] hover:bg-[#055e4a] disabled:opacity-50 text-white font-bold text-[15px] py-3.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2">
-              {submitting ? (
-                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing your returnâ€¦</>
-              ) : "Submit Return"}
+              {checkingInventory ? (
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Checking availability…</>
+              ) : "Continue →"}
             </button>
-            {submitting && <p className="text-center text-[11px] text-[#6c7480]">Our AI is assessing your item. This usually takes a few secondsâ€¦</p>}
+
 
             <button type="button" onClick={() => setStep(1)} className="w-full text-[13px] text-[#6c7480] hover:text-[#0f1923] font-semibold py-2 transition-colors">â† Back</button>
+          </div>
+        )}
+
+        {/* Step 3: Refund or Replacement */}
+        {step === 3 && (
+          <div className="space-y-5 animate-fade-in">
+            <h2 className="text-[18px] font-bold text-[#0f1923]">What would you like?</h2>
+            <p className="text-[13px] text-[#6c7480]">Choose how you'd like us to resolve this return.</p>
+
+            {/* Replacement card */}
+            <button type="button" onClick={() => setDisposition("replacement")}
+              className={`w-full text-left rounded-2xl border-2 px-5 py-4 transition-all ${
+                disposition === "replacement" ? "border-[#067d62] bg-[#f2fbf7]" : "border-[#e3e6ea] hover:border-[#c8cdd3]"
+              }`}>
+              <div className="flex items-start gap-3">
+                <span className="text-2xl mt-0.5">🔄</span>
+                <div>
+                  <p className="text-[14px] font-bold text-[#0f1923]">Request a Replacement</p>
+                  {inventoryAvailable ? (
+                    <p className="text-[12px] text-[#067d62] font-semibold mt-0.5">✅ Hub stock available in your area — faster delivery + Green Credits!</p>
+                  ) : (
+                    <p className="text-[12px] text-[#6c7480] mt-0.5">No hub stock nearby — we'll order a fresh one from Amazon.</p>
+                  )}
+                </div>
+              </div>
+            </button>
+
+            {/* Refund card */}
+            <button type="button" onClick={() => setDisposition("refund")}
+              className={`w-full text-left rounded-2xl border-2 px-5 py-4 transition-all ${
+                disposition === "refund" ? "border-[#0f1923] bg-[#f5f6f8]" : "border-[#e3e6ea] hover:border-[#c8cdd3]"
+              }`}>
+              <div className="flex items-start gap-3">
+                <span className="text-2xl mt-0.5">💰</span>
+                <div>
+                  <p className="text-[14px] font-bold text-[#0f1923]">Get a Refund</p>
+                  <p className="text-[12px] text-[#6c7480] mt-0.5">Return the item and receive a refund to your original payment method.</p>
+                </div>
+              </div>
+            </button>
+
+            {error && (
+              <div className="bg-[#fff5f5] border border-[#ffd0d0] rounded-xl px-4 py-3">
+                <p className="text-[13px] text-[#b12704] font-semibold">{error}</p>
+              </div>
+            )}
+
+            <button type="button" disabled={!disposition || submitting} onClick={handleDispositionSubmit}
+              className="w-full bg-[#e47911] hover:bg-[#d56e0c] disabled:opacity-40 text-white font-bold text-[15px] py-3.5 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-2">
+              {submitting ? (
+                <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Processing…</>
+              ) : "Confirm →"}
+            </button>
+            {submitting && disposition === "refund" && <p className="text-center text-[11px] text-[#6c7480]">Our AI is assessing your item. This usually takes a few seconds…</p>}
+            <button type="button" onClick={() => setStep(2)} className="w-full text-[13px] text-[#6c7480] hover:text-[#0f1923] font-semibold py-2 transition-colors">← Back</button>
           </div>
         )}
       </div>

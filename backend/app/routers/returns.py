@@ -139,18 +139,21 @@ def apply_damaged_product_rules(assessment: dict) -> dict:
     we check if it can be donated (must be usable).
     """
     if assessment.get("is_damaged"):
-        # Assume logistics cost is a fixed 15% for simplicity
+        # Trust the AI's explicitly recommended action if it provided one
+        ai_action = assessment.get("recommended_action")
+        if ai_action in ["refurbish", "donate", "recycle", "resell"]:
+            return assessment
+            
+        # Fallback rules if AI didn't provide a clear action
         logistics_cost_pct = 15
-        
         repair_cost_pct = assessment.get("refurb_cost_estimate_pct") or 0
         total_cost_pct = logistics_cost_pct + repair_cost_pct
         
-        # If total cost is within margin, item is refurbishable, and has >85% life
-        if total_cost_pct <= 40 and assessment.get("refurbishable") and assessment.get("remaining_life_pct", 0) > 85:
+        if total_cost_pct <= 40 and assessment.get("refurbishable"):
             assessment["recommended_action"] = "refurbish"
         else:
-            # If refurbishment not possible, donate only if remaining life > 70%
-            if assessment.get("remaining_life_pct", 0) > 70:
+            # If refurbishment not possible, donate if remaining life > 20%
+            if assessment.get("remaining_life_pct", 0) > 20:
                 assessment["recommended_action"] = "donate"
             else:
                 assessment["recommended_action"] = "recycle"
@@ -536,7 +539,8 @@ def create_return(body: ReturnCreate, db: Session = Depends(get_db)):
         listing_id = _route_exchange(return_item, order, db)
 
     elif action == "resell":
-        _, listing_id = _create_listing(return_item, order, "resell", None, db)
+        # Restock into inventory for future replacement feature. No listing created.
+        pass
 
     elif action == "refurbish":
         condition_note = raw_defects if raw_defects else "Minor defects — certified refurbished."
@@ -890,7 +894,8 @@ async def create_return_with_photo(
     elif action == "exchange":
         listing_id = _route_exchange(return_item, order, db)
     elif action == "resell":
-        _, listing_id = _create_listing(return_item, order, "resell", None, db)
+        # Restock into inventory. No community listing.
+        pass
     elif action == "refurbish":
         _, listing_id = _create_listing(return_item, order, "refurbish", raw_defects, db)
     elif action == "donate":
@@ -936,7 +941,7 @@ async def create_return_with_photo(
 
     # ── Customer response ──────────────────────────────────────────────
     action_label = {
-        "resell":             "Second Life",
+        "resell":             "Restocked",
         "refurbish":          "Certified Refurbish",
         "exchange":           "Exchange",
         "donate":             "Donate",
@@ -1004,6 +1009,249 @@ def list_returns(employee_id: int = None, db: Session = Depends(get_db)):
             "image_url": _presign_return_photo(r.image_urls.split(",")[0] if r.image_urls else None),
         })
     return result
+
+
+# ── Replacement flow: check hub inventory ─────────────────────────────
+
+@router.get("/check-inventory")
+def check_hub_inventory(product_id: int, city: str, db: Session = Depends(get_db)):
+    """
+    Check if there is a verified, restocked (resell-action) return for a given
+    product in the same city. Used before customer chooses replacement vs refund.
+    """
+    # Find any verified return for this product whose customer is in the same city
+    restocked = (
+        db.query(Return)
+        .join(Order, Return.order_id == Order.id)
+        .join(User, Order.user_id == User.id)
+        .filter(
+            Order.product_id == product_id,
+            Return.recommended_action == "resell",
+            Return.status == "verified",
+            User.city.ilike(city),
+        )
+        .first()
+    )
+
+    return {
+        "available": restocked is not None,
+        "return_id": restocked.id if restocked else None,
+    }
+
+
+
+@router.post("/request-replacement", status_code=200)
+async def request_replacement(
+    order_id: int = Form(...),
+    mode: str = Form(...),           # "refund" | "replacement"
+    reason: str = Form(None),
+    photo: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Called after the customer picks Return vs Replace.
+
+    mode='refund'      → behaves like the standard return submission; no special logic here
+                         (the /with-photo endpoint already handles refund returns).
+    mode='replacement' →
+        1. Check hub inventory (same city).
+           FOUND  → place a new Order from hub stock, mark source return as 'replacement_fulfilled',
+                    award Green Credits to the customer.
+           NOT FOUND → place a new Order from Amazon (root seller, non-refurbished),
+                       no Green Credits.
+        2. Return enough context for the frontend to show the correct confirmation screen.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    user = db.query(User).filter(User.id == order.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    product = order.product
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if mode == "refund":
+        # Nothing special — caller will proceed to /with-photo for the return.
+        return {"mode": "refund", "message": "Proceed with standard return flow."}
+
+    # ── Replacement mode ──────────────────────────────────────────────
+    # Guard: don't allow duplicate replacements
+    if order.status == "returned":
+        raise HTTPException(status_code=409, detail="This order has already been returned or replaced.")
+
+    customer_city = user.city or ""
+    product_name = product.name if product else "Unknown"
+    category = product.category.lower() if product and product.category else "other"
+
+    # ── Read photo bytes ──────────────────────────────────────────────
+    photo_bytes: list[bytes] = []
+    if photo and photo.content_type and photo.content_type.startswith("image/"):
+        data = await photo.read()
+        if data:
+            photo_bytes.append(data)
+
+    # ── Run AI assessment on the returned item ────────────────────────
+    normalized_reason = (reason or "replacement_request").lower().strip()
+    if photo_bytes:
+        product_meta = {"name": product_name, "category": category}
+        assessment = assess_return_condition(
+            return_photo_bytes=photo_bytes,
+            product_metadata=product_meta,
+            return_reason=normalized_reason,
+        )
+        assessment = apply_damaged_product_rules(assessment)
+        assessment = apply_confidence_gate(assessment)
+    else:
+        assessment = {
+            "condition_score": None,
+            "defects_summary": None,
+            "remaining_life_pct": None,
+            "recommended_action": "resell",
+            "confidence": None,
+            "assessment_source": "no_photo",
+            "gate_override": False,
+            "original_recommended_action": None,
+        }
+
+    ai_action = assessment.get("recommended_action", "resell")
+
+    # Mark original order as returned
+    order.status = "returned"
+    if order.no_return_credits_status == "pending":
+        order.no_return_credits_status = "forfeited"
+
+    # Create a Return record so the returned item appears in the Hub
+    return_item = Return(
+        order_id=order.id,
+        recommended_action=ai_action,
+        status="completed",
+        return_reason=normalized_reason,
+        condition_score=assessment.get("condition_score"),
+        defects=assessment.get("defects_summary"),
+        remaining_life_pct=assessment.get("remaining_life_pct"),
+        condition_note=assessment.get("defects_summary") if ai_action == "refurbish" else
+                       "Returned for replacement — awaiting hub assessment.",
+        assessment_source=assessment.get("assessment_source", "replacement_flow"),
+        confidence=assessment.get("confidence"),
+        gate_override=assessment.get("gate_override", False),
+        original_recommended_action=assessment.get("original_recommended_action"),
+    )
+    db.add(return_item)
+    db.commit()
+    db.refresh(return_item)
+
+    # ── Upload photo to S3 ────────────────────────────────────────────
+    if photo_bytes:
+        photo_url = _upload_return_photo_to_s3(
+            photo_bytes[0],
+            photo.content_type if photo and photo.content_type else "image/jpeg",
+            return_item.id,
+        )
+        if photo_url:
+            return_item.image_urls = photo_url
+            db.commit()
+
+    logger.info(
+        "Replacement return created: order=%d, return=%d, ai_action=%s, source=%s, photo=%s",
+        order.id, return_item.id, ai_action,
+        assessment.get("assessment_source"), bool(photo_bytes),
+    )
+
+    restocked_return = (
+        db.query(Return)
+        .join(Order, Return.order_id == Order.id)
+        .join(User, Order.user_id == User.id)
+        .filter(
+            Order.product_id == product.id,
+            Return.recommended_action == "resell",
+            Return.status == "verified",
+            User.city.ilike(customer_city),
+            Return.id != return_item.id,   # exclude the one we just created
+        )
+        .first()
+    )
+
+    from app.services.credit_engine import calculate_credits, get_level
+
+    if restocked_return:
+        # ── Hub-stock path: place order from inventory ────────────────
+        new_order = Order(
+            user_id=order.user_id,
+            product_id=product.id,
+            status="placed",
+            is_refurbished=True,   # it is a returned/restocked item
+            delivery_type="standard",
+            return_period_days=product.return_period_days,
+        )
+        db.add(new_order)
+
+        # Mark the source return as fulfilled so it can't be used again
+        restocked_return.status = "replacement_fulfilled"
+        db.commit()
+        db.refresh(new_order)
+
+        # Award Green Credits for circular replacement
+        credits = calculate_credits("resell", product.category.lower() if product.category else "other")
+        user.green_credits += credits
+        user.lifetime_credits += credits
+        user.products_resold += 1
+        level_info = get_level(user.lifetime_credits)
+        user.level = level_info["name"]
+
+        db.add(GreenCreditTx(
+            user_id=order.user_id,
+            amount=credits,
+            type="earned",
+            action_type="replacement_hub",
+            description=f"Replacement from hub inventory: {product.name}",
+        ))
+        db.commit()
+
+        logger.info(
+            "Replacement (hub) for order %d → new order %d, credits=%d",
+            order.id, new_order.id, credits,
+        )
+
+        return {
+            "mode": "replacement",
+            "source": "hub",
+            "new_order_id": new_order.id,
+            "product_name": product.name,
+            "green_credits_earned": credits,
+            "message": "Replacement placed from hub inventory. Green Credits awarded!",
+        }
+
+    else:
+        # ── Amazon-root path: place fresh order ────────────────────────
+        new_order = Order(
+            user_id=order.user_id,
+            product_id=product.id,
+            status="placed",
+            is_refurbished=False,
+            delivery_type="standard",
+            return_period_days=product.return_period_days,
+        )
+        db.add(new_order)
+        db.commit()
+        db.refresh(new_order)
+
+        logger.info(
+            "Replacement (Amazon root) for order %d → new order %d",
+            order.id, new_order.id,
+        )
+
+        return {
+            "mode": "replacement",
+            "source": "amazon",
+            "new_order_id": new_order.id,
+            "product_name": product.name,
+            "green_credits_earned": 0,
+            "message": "No hub stock available. Replacement ordered fresh from Amazon.",
+        }
+
 
 
 def _presign_return_photo(raw_url: str | None) -> str | None:
@@ -1075,7 +1323,8 @@ def override_return_disposition(return_id: int, body: OverrideRequest, db: Sessi
 
     # Apply new outcome
     if new_action == "resell":
-        _create_listing(return_item, order, "resell", None, db)
+        # Restock into inventory. No community listing.
+        pass
     elif new_action == "refurbish":
         _create_listing(return_item, order, "refurbish", return_item.defects, db)
     elif new_action == "donate":
