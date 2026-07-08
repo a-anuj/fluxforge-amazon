@@ -140,6 +140,18 @@ export const overrideReturnDisposition = (returnId, recommendedAction, justifica
 export const verifyReturnDisposition = (returnId) =>
   request(`/returns/${returnId}/verify`, { method: "POST" });
 
+/** Identity check for mobile camera between shots */
+export const checkIdentity = (orderId, photoFile) => {
+  const form = new FormData();
+  form.append("order_id", orderId);
+  form.append("photo", photoFile);
+  return fetch(`${BASE_URL}/returns/check-identity`, { method: "POST", body: form })
+    .then(async (res) => {
+      if (!res.ok) throw new Error("Identity check failed");
+      return res.json();
+    });
+};
+
 /** Replacement flow: check if a restocked hub item is available in the customer's city */
 export const checkHubInventory = (productId, city) =>
   request(`/returns/check-inventory?product_id=${productId}&city=${encodeURIComponent(city)}`);

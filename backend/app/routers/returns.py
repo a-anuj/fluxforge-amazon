@@ -718,6 +718,34 @@ def get_return_by_order(order_id: int, db: Session = Depends(get_db)):
     }
 
 
+# ── Customer: Identity check between photos ────────────────────────────
+
+@router.post("/check-identity")
+async def check_identity(
+    order_id: int = Form(...),
+    photo: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Check if the provided photo matches the product ordered.
+    Used between mobile front-side and back-side scans.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    product = order.product
+    product_name = product.name if product else "Unknown"
+    category = product.category.lower() if product and product.category else "electronics"
+    
+    data = await photo.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty photo")
+        
+    result = _bedrock_identity_check(data, product_name, category)
+    return result
+
+
 # ── Customer: submit return with a single photo upload ─────────────────
 
 @router.post("/with-photo", status_code=201)
