@@ -265,7 +265,7 @@ export default function NewReturn() {
     setError("");
     try {
       if (disposition === "replacement") {
-        const res = await requestReplacement(Number(selectedOrder), "replacement");
+        const res = await requestReplacement(Number(selectedOrder), "replacement", reason, photoFile || null);
         setReplacementResult(res);
         refreshUser();
         setStep("replacement_done");

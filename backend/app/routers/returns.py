@@ -1039,13 +1039,15 @@ def check_hub_inventory(product_id: int, city: str, db: Session = Depends(get_db
     }
 
 
-class ReplacementRequest(BaseModel):
-    order_id: int
-    mode: str   # "refund" | "replacement"
 
-
-@router.post("/request-replacement")
-def request_replacement(body: ReplacementRequest, db: Session = Depends(get_db)):
+@router.post("/request-replacement", status_code=200)
+async def request_replacement(
+    order_id: int = Form(...),
+    mode: str = Form(...),           # "refund" | "replacement"
+    reason: str = Form(None),
+    photo: UploadFile = File(None),
+    db: Session = Depends(get_db),
+):
     """
     Called after the customer picks Return vs Replace.
 
@@ -1059,7 +1061,7 @@ def request_replacement(body: ReplacementRequest, db: Session = Depends(get_db))
                        no Green Credits.
         2. Return enough context for the frontend to show the correct confirmation screen.
     """
-    order = db.query(Order).filter(Order.id == body.order_id).first()
+    order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -1071,7 +1073,7 @@ def request_replacement(body: ReplacementRequest, db: Session = Depends(get_db))
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    if body.mode == "refund":
+    if mode == "refund":
         # Nothing special — caller will proceed to /with-photo for the return.
         return {"mode": "refund", "message": "Proceed with standard return flow."}
 
@@ -1081,6 +1083,40 @@ def request_replacement(body: ReplacementRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=409, detail="This order has already been returned or replaced.")
 
     customer_city = user.city or ""
+    product_name = product.name if product else "Unknown"
+    category = product.category.lower() if product and product.category else "other"
+
+    # ── Read photo bytes ──────────────────────────────────────────────
+    photo_bytes: list[bytes] = []
+    if photo and photo.content_type and photo.content_type.startswith("image/"):
+        data = await photo.read()
+        if data:
+            photo_bytes.append(data)
+
+    # ── Run AI assessment on the returned item ────────────────────────
+    normalized_reason = (reason or "replacement_request").lower().strip()
+    if photo_bytes:
+        product_meta = {"name": product_name, "category": category}
+        assessment = assess_return_condition(
+            return_photo_bytes=photo_bytes,
+            product_metadata=product_meta,
+            return_reason=normalized_reason,
+        )
+        assessment = apply_damaged_product_rules(assessment)
+        assessment = apply_confidence_gate(assessment)
+    else:
+        assessment = {
+            "condition_score": None,
+            "defects_summary": None,
+            "remaining_life_pct": None,
+            "recommended_action": "resell",
+            "confidence": None,
+            "assessment_source": "no_photo",
+            "gate_override": False,
+            "original_recommended_action": None,
+        }
+
+    ai_action = assessment.get("recommended_action", "resell")
 
     # Mark original order as returned
     order.status = "returned"
@@ -1090,17 +1126,39 @@ def request_replacement(body: ReplacementRequest, db: Session = Depends(get_db))
     # Create a Return record so the returned item appears in the Hub
     return_item = Return(
         order_id=order.id,
-        recommended_action="resell",   # good-condition item back into stock
+        recommended_action=ai_action,
         status="completed",
-        return_reason="replacement_request",
-        condition_note="Returned for replacement — item condition not yet assessed.",
-        assessment_source="replacement_flow",
-        confidence=None,
-        gate_override=False,
+        return_reason=normalized_reason,
+        condition_score=assessment.get("condition_score"),
+        defects=assessment.get("defects_summary"),
+        remaining_life_pct=assessment.get("remaining_life_pct"),
+        condition_note=assessment.get("defects_summary") if ai_action == "refurbish" else
+                       "Returned for replacement — awaiting hub assessment.",
+        assessment_source=assessment.get("assessment_source", "replacement_flow"),
+        confidence=assessment.get("confidence"),
+        gate_override=assessment.get("gate_override", False),
+        original_recommended_action=assessment.get("original_recommended_action"),
     )
     db.add(return_item)
     db.commit()
     db.refresh(return_item)
+
+    # ── Upload photo to S3 ────────────────────────────────────────────
+    if photo_bytes:
+        photo_url = _upload_return_photo_to_s3(
+            photo_bytes[0],
+            photo.content_type if photo and photo.content_type else "image/jpeg",
+            return_item.id,
+        )
+        if photo_url:
+            return_item.image_urls = photo_url
+            db.commit()
+
+    logger.info(
+        "Replacement return created: order=%d, return=%d, ai_action=%s, source=%s, photo=%s",
+        order.id, return_item.id, ai_action,
+        assessment.get("assessment_source"), bool(photo_bytes),
+    )
 
     restocked_return = (
         db.query(Return)

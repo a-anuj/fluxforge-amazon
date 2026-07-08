@@ -141,13 +141,23 @@ export const verifyReturnDisposition = (returnId) =>
 export const checkHubInventory = (productId, city) =>
   request(`/returns/check-inventory?product_id=${productId}&city=${encodeURIComponent(city)}`);
 
-/** Replacement flow: choose refund or replacement (places new order if replacement) */
-export const requestReplacement = (orderId, mode) =>
-  request("/returns/request-replacement", {
-    method: "POST",
-    body: JSON.stringify({ order_id: orderId, mode }),
+/** Replacement flow: choose refund or replacement (places new order; runs AI assessment if photo provided) */
+export const requestReplacement = (orderId, mode, reason, photoFile) => {
+  const form = new FormData();
+  form.append("order_id", orderId);
+  form.append("mode", mode);
+  if (reason) form.append("reason", reason);
+  if (photoFile) form.append("photo", photoFile);
+  const url = `${BASE_URL}/returns/request-replacement`;
+  return fetch(url, { method: "POST", body: form }).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const msg = typeof err.detail === "string" ? err.detail : err.message || `Error ${res.status}`;
+      throw Object.assign(new Error(msg), { status: res.status });
+    }
+    return res.json();
   });
-
+};
 
 
 
