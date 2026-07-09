@@ -85,7 +85,7 @@ Values exposed by `useUser()`:
 - `loading`
 - `isAdminMode`, `setIsAdminMode`
 
-The user switcher in `Header.jsx` is **click-based** (not hover-only) so it works on mobile. It uses `useState` + outside-click detection (`mousedown` + `touchstart`).
+The header uses a **responsive layout**. On mobile, navigation links and the user switcher are moved inside a **hamburger menu drawer** (`showMobileMenu` state) to preserve space. The user switcher itself is **click-based** (not hover-only) and uses outside-click detection (`mousedown` + `touchstart`) along with body scroll locking when the mobile menu is open.
 
 ## Key UI patterns
 

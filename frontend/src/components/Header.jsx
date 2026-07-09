@@ -4,11 +4,11 @@ import { getUsers } from "../api/client";
 import { useUser } from "../context/UserContext";
 
 const LEVEL_EMOJIS = {
-  "Seed": "",
+  "Seed": "🌱",
   "Sapling": "🌿",
   "Green Hero": "🌎",
-  "Planet Protector": "",
-  "Circular Champion": "",
+  "Planet Protector": "🛡️",
+  "Circular Champion": "🏆",
 };
 
 export default function Header() {
@@ -20,7 +20,9 @@ export default function Header() {
   const [showLocModal, setShowLocModal] = useState(false);
   const [locForm, setLocForm] = useState({ city: "", pincode: "" });
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const userMenuRef = useRef(null);
+  const mobileMenuRef = useRef(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -76,6 +78,29 @@ export default function Header() {
     };
   }, [showUserMenu]);
 
+  // Close mobile menu on outside click or Escape
+  useEffect(() => {
+    if (!showMobileMenu) return;
+    function handleOutside(e) {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) {
+        setShowMobileMenu(false);
+      }
+    }
+    function handleKey(e) {
+      if (e.key === "Escape") setShowMobileMenu(false);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside);
+    document.addEventListener("keydown", handleKey);
+    document.body.style.overflow = "hidden"; // lock scroll
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = "auto"; // unlock scroll
+    };
+  }, [showMobileMenu]);
+
   const handleProfileSwitch = async (userId) => {
     const switched = users.find((u) => u.id === userId);
     await switchUser(userId);
@@ -95,14 +120,27 @@ export default function Header() {
     <header className="bg-amazon-navy text-white">
       {/* Top Nav */}
       <div className="flex items-center justify-between px-4 py-2 gap-4">
-        {/* Logo */}
-        <Link to="/" className="flex flex-col items-start pt-1 pb-1 px-2 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
-          <svg viewBox="0 0 90 20" className="h-5" xmlns="http://www.w3.org/2000/svg">
-            <text x="0" y="15" fill="white" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="16" letterSpacing="-0.03em">amazon</text>
-            <text x="59" y="15" fill="#febd69" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15">.in</text>
-          </svg>
-          <span className="text-[9px] text-[#febd69] font-bold leading-none mt-1 ml-0.5 tracking-wide">PROTOTYPE FOR HACKON 6.0</span>
-        </Link>
+        {/* Left Section: Hamburger + Logo */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          {/* Hamburger Menu Icon (Mobile Only) */}
+          <button 
+            onClick={() => setShowMobileMenu(true)}
+            className="md:hidden flex flex-col justify-center gap-[4px] p-2 hover:bg-white/10 rounded"
+          >
+            <div className="w-5 h-[2px] bg-white"></div>
+            <div className="w-5 h-[2px] bg-white"></div>
+            <div className="w-5 h-[2px] bg-white"></div>
+          </button>
+
+          {/* Logo */}
+          <Link to="/" className="flex flex-col items-start pt-1 pb-1 px-1 sm:px-2 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
+            <svg viewBox="0 0 90 20" className="h-4 sm:h-5" xmlns="http://www.w3.org/2000/svg">
+              <text x="0" y="15" fill="white" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="16" letterSpacing="-0.03em">amazon</text>
+              <text x="59" y="15" fill="#febd69" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="bold" fontSize="15">.in</text>
+            </svg>
+            <span className="text-[7px] sm:text-[9px] text-[#febd69] font-bold leading-none mt-1 ml-0.5 tracking-wide">PROTOTYPE FOR HACKON 6.0</span>
+          </Link>
+        </div>
 
         {/* Location (Desktop) */}
         {!isAdminMode && !isEmployee && (
@@ -162,9 +200,9 @@ export default function Header() {
             </div>
           </div>
 
-          {/* User Switcher — always visible (employees need to switch back to customer) */}
+          {/* User Switcher — hidden on mobile (available in drawer), visible on desktop */}
           {!isAdminMode && (
-          <div ref={userMenuRef} className="relative px-3 py-1.5 pb-2 rounded-md cursor-pointer transition-colors hover:bg-white/5">
+          <div ref={userMenuRef} className="hidden md:block relative px-3 py-1.5 pb-2 rounded-md cursor-pointer transition-colors hover:bg-white/5">
               <button
                 onClick={() => setShowUserMenu(o => !o)}
                 className="flex flex-col text-left w-full focus:outline-none"
@@ -232,7 +270,7 @@ export default function Header() {
 
               {/* Green Credits Wallet Icon */}
               {currentUser && (
-                <Link to="/profile" className="flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
+                <Link to="/profile" className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors hover:bg-white/5 no-underline hover:no-underline">
                   <div className="flex flex-col items-center">
                     <span className="text-[18px] leading-none mb-[1px]">{levelEmoji}</span>
                   </div>
@@ -341,6 +379,117 @@ export default function Header() {
                   Apply
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Sidebar Menu */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          {/* Overlay */}
+          <div 
+            className="fixed inset-0 bg-black/70 transition-opacity"
+            onClick={() => setShowMobileMenu(false)}
+          />
+          {/* Drawer */}
+          <div 
+            ref={mobileMenuRef}
+            className="relative w-[80%] max-w-[320px] bg-white h-full overflow-y-auto flex flex-col shadow-2xl animate-slide-right text-amazon-text"
+          >
+            <div className="bg-amazon-navy px-5 py-4 flex items-center justify-between text-white sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <div className="bg-white/20 p-1.5 rounded-full">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                </div>
+                <h2 className="font-bold text-[18px]">
+                  Hello, {currentUser?.name?.split(" ")[0] || "Sign in"}
+                </h2>
+              </div>
+              <button onClick={() => setShowMobileMenu(false)} className="text-white hover:text-gray-300 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            
+            <div className="py-2">
+              <div className="px-5 py-2 border-b border-gray-200">
+                <p className="font-bold text-[16px] mb-2">My Account</p>
+                {!isAdminMode && !isEmployee && (
+                  <>
+                    <Link to="/orders" onClick={() => setShowMobileMenu(false)} className="block py-2 text-[14px] text-amazon-text hover:text-amazon-orange transition-colors">Returns & Orders</Link>
+                    {currentUser && (
+                      <Link to="/profile" onClick={() => setShowMobileMenu(false)} className="block py-2 text-[14px] text-amazon-text hover:text-amazon-orange transition-colors">
+                        Green Credits Balance: <span className="font-bold text-amazon-orange">{currentUser.green_credits}</span> {levelEmoji}
+                      </Link>
+                    )}
+                    <button onClick={() => { setShowMobileMenu(false); setShowLocModal(true); }} className="block w-full text-left py-2 text-[14px] text-amazon-text hover:text-amazon-orange transition-colors">
+                      Location: {currentUser?.city || "Select"} {currentUser?.pincode || ""}
+                    </button>
+                  </>
+                )}
+                {isEmployee && (
+                  <Link to="/delivery" onClick={() => setShowMobileMenu(false)} className="block py-2 text-[14px] text-amazon-text hover:text-amazon-orange transition-colors">My Deliveries</Link>
+                )}
+              </div>
+
+              {!isAdminMode && !isEmployee && (
+                <div className="px-5 py-2 border-b border-gray-200">
+                  <p className="font-bold text-[16px] mb-2">Explore</p>
+                  <Link to="/" onClick={() => setShowMobileMenu(false)} className="block py-2 text-[14px] text-amazon-text hover:text-amazon-orange transition-colors">All Products</Link>
+                  <Link to="/feed" onClick={() => setShowMobileMenu(false)} className="block py-2 text-[14px] text-[#00e5a0] font-bold hover:text-amazon-green transition-colors">Circular Commerce</Link>
+                  <Link to="/neardrop" onClick={() => setShowMobileMenu(false)} className="block py-2 text-[14px] text-amazon-text hover:text-amazon-orange transition-colors">📍 NearDrop</Link>
+                </div>
+              )}
+
+              {/* Admin Toggle */}
+              <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+                <span className="font-bold text-[14px]">Admin Mode</span>
+                <div 
+                  className={`w-10 h-5 rounded-full p-0.5 cursor-pointer flex items-center transition-colors ${isAdminMode ? 'bg-[#00e5a0]' : 'bg-gray-400'}`}
+                  onClick={() => {
+                     setIsAdminMode(!isAdminMode);
+                     navigate(!isAdminMode ? "/dashboard" : "/");
+                     setShowMobileMenu(false);
+                  }}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white transition-transform ${isAdminMode ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </div>
+
+              {/* User Switcher (Mobile) */}
+              {!isAdminMode && (
+                <div className="px-5 py-2 mb-4">
+                  <p className="font-bold text-[16px] mb-2 mt-2">Switch Profile</p>
+                  
+                  <p className="pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-amazon-text-secondary">Customers</p>
+                  <div className="flex flex-col gap-1">
+                    {users.filter(u => u.role === "customer" || (!u.role && !u.is_admin)).map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => { handleProfileSwitch(u.id); setShowMobileMenu(false); }}
+                        className={`text-left px-3 py-2 rounded text-[14px] flex items-center justify-between transition-colors ${currentUser?.id === u.id ? 'bg-[#f5faff] border border-[#007185] text-[#007185] font-bold' : 'border border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        {u.name}
+                        {currentUser?.id === u.id && <span>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="pt-4 pb-1 text-[11px] font-bold uppercase tracking-wider text-[#c7511f]">🚚 Delivery</p>
+                  <div className="flex flex-col gap-1">
+                    {users.filter(u => u.role === "employee").map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => { handleProfileSwitch(u.id); setShowMobileMenu(false); }}
+                        className={`text-left px-3 py-2 rounded text-[14px] flex items-center justify-between transition-colors ${currentUser?.id === u.id ? 'bg-[#fff8f0] border border-[#c7511f] text-[#c7511f] font-bold' : 'border border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        {u.name}
+                        {currentUser?.id === u.id && <span>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
