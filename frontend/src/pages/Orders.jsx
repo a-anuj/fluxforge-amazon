@@ -155,7 +155,7 @@ export default function Orders() {
                 image_url: o.community_data.image_urls
                   ? (o.community_data.image_urls.startsWith("http")
                     ? o.community_data.image_urls.split(",")[0]
-                    : `http://${window.location.hostname}:8000/api/community/image/${o.community_data.image_urls.split(",")[0]}`)
+                    : `${import.meta.env.PROD ? "" : `http://${window.location.hostname}:8000`}/api/community/image/${o.community_data.image_urls.split(",")[0]}`)
                   : null,
                 price: o.community_data.asking_price,
                 brand: o.community_data.brand || o.community_data.category,

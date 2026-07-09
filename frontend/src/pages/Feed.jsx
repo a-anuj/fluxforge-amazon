@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import {
@@ -307,7 +307,7 @@ export default function Feed() {
                         <div className="h-[220px] bg-[#f5f5f5] flex items-center justify-center relative border-b border-[#f0f0f0] p-4">
                           {listing.image_urls ? (
                             <img
-                              src={listing.image_urls.startsWith("http") ? listing.image_urls.split(",")[0] : `http://${window.location.hostname}:8000/api/community/image/${listing.image_urls.split(",")[0]}`}
+                              src={listing.image_urls.startsWith("http") ? listing.image_urls.split(",")[0] : `${import.meta.env.PROD ? "" : `http://${window.location.hostname}:8000`}/api/community/image/${listing.image_urls.split(",")[0]}`}
                               alt={listing.title}
                               className="max-h-full max-w-full object-contain"
                               onError={e => { e.target.style.display = "none"; }}

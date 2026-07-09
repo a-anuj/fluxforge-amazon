@@ -357,7 +357,7 @@ export default function SellItem() {
       if (listing?.id) {
         const fd = new FormData();
         fd.append("image", imageFile);
-        await fetch(`http://${window.location.hostname}:8000/api/community/listings/${listing.id}/image`, { method: "POST", body: fd });
+        await fetch(`${getApiBaseUrl()}/community/listings/${listing.id}/image`, { method: "POST", body: fd });
       }
       setResult(listing);
       go("done");

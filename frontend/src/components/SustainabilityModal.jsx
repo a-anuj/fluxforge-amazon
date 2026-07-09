@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-const BASE_URL = `http://${window.location.hostname}:8000/api`;
+const BASE_URL = import.meta.env.PROD ? "/api" : `http://${window.location.hostname}:8000/api`;
 
 // ── Classification badge config ───────────────────────────────────────────────
 const BADGE = {
