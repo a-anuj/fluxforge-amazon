@@ -561,7 +561,7 @@ export default function SellItem() {
                 <p className="text-[12px] text-[#6c7480] mt-0.5">Required to verify ownership. Nova Pro AI reads and validates it.</p>
               </div>
 
-              <input ref={invoiceRef} type="file" accept="image/*" onChange={handleInvoiceUpload} className="hidden" />
+              <input ref={invoiceRef} type="file" accept="image/jpeg, image/png, image/webp, application/pdf" onChange={handleInvoiceUpload} className="hidden" />
               {/* Drop zone */}
               <div
                 onClick={() => invoiceRef.current?.click()}
