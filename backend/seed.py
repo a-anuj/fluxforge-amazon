@@ -396,6 +396,17 @@ def seed():
             repair_cost_estimate=2500, avg_lifespan_months=120,
             return_period_days=30, has_no_return_policy=False,
         ),
+
+        Product(
+            name="Plain Blue T-Shirt", category="clothing", brand="Uniblu",
+            size="M", price=499,
+            description="A classic plain blue t-shirt with a regular fit. Comfortable, breathable, and perfect for everyday casual wear.",
+            image_url="https://www.uniblu.in/cdn/shop/files/nbregular.jpg?v=1715410814",
+            image_urls=None,
+            co2_impact=3.5, ewaste_impact=0.0, water_impact=35.0,
+            repair_cost_estimate=None, avg_lifespan_months=18,
+            return_period_days=15, has_no_return_policy=False,
+        ),
     ]
     db.add_all(products)
     db.commit()
