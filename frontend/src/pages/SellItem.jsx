@@ -986,18 +986,10 @@ export default function SellItem() {
             </div>
 
             <button
-              disabled={!imageFile || !photoVerified || verifyingPhoto || submitting}
-              onClick={handleSubmit}
+              disabled={!imageFile || !photoVerified || verifyingPhoto}
+              onClick={() => go("details")}
               className="w-full py-3.5 rounded-xl text-[15px] font-bold text-white bg-[#067d62] hover:bg-[#055d49] disabled:opacity-40 transition-all active:scale-[0.99]">
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                  </svg>
-                  Publishing your listing…
-                </span>
-              ) : "Publish Listing & Earn +5 Credits 🌱"}
+              Next: Set Price & Publish →
             </button>
           </div>
         )}
